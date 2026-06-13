@@ -30,6 +30,9 @@ AdForge MCP - hosted MCP-сервис. Клиент не скачивает GitH
 - Demo script: [BETA_DEMO_SCRIPT_RU.md](BETA_DEMO_SCRIPT_RU.md).
 - Beta capabilities endpoint: [BETA_CAPABILITIES_RU.md](BETA_CAPABILITIES_RU.md).
 - Go/no-go: [GO_NO_GO_RU.md](GO_NO_GO_RU.md).
+- Live VPS recovery: [VPS_RECOVERY_RU.md](VPS_RECOVERY_RU.md).
+- OAuth credentials setup: [OAUTH_CREDENTIALS_SETUP_RU.md](OAUTH_CREDENTIALS_SETUP_RU.md).
+- Legacy credentials cleanup: [LEGACY_CREDENTIALS_CLEANUP_RU.md](LEGACY_CREDENTIALS_CLEANUP_RU.md).
 - Dashboard/OAuth: [DASHBOARD_CONNECTIONS_RU.md](DASHBOARD_CONNECTIONS_RU.md).
 - Codex: [CODEX_MCP_SETUP_RU.md](CODEX_MCP_SETUP_RU.md).
 - Claude: [CLAUDE_CONNECTOR_SETUP_RU.md](CLAUDE_CONNECTOR_SETUP_RU.md).

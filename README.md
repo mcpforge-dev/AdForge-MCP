@@ -66,6 +66,9 @@ Dashboard состоит из трёх разделов: `Overview` (стату�
 - [docs/beta/GO_NO_GO_RU.md](docs/beta/GO_NO_GO_RU.md) - go/no-go criteria for hosted beta.
 - [docs/beta/LIVE_VPS_RUNBOOK_RU.md](docs/beta/LIVE_VPS_RUNBOOK_RU.md) - live VPS/WPS deployment runbook.
 - [docs/beta/LIVE_VPS_COMMANDS_RU.md](docs/beta/LIVE_VPS_COMMANDS_RU.md) - copy-paste live deployment commands.
+- [docs/beta/VPS_RECOVERY_RU.md](docs/beta/VPS_RECOVERY_RU.md) - recovery checklist when the live VPS/WPS is unavailable.
+- [docs/beta/OAUTH_CREDENTIALS_SETUP_RU.md](docs/beta/OAUTH_CREDENTIALS_SETUP_RU.md) - hosted OAuth credentials setup for Meta/Google/TikTok/Yandex.
+- [docs/beta/LEGACY_CREDENTIALS_CLEANUP_RU.md](docs/beta/LEGACY_CREDENTIALS_CLEANUP_RU.md) - cleanup plan for old tokens and compromised legacy credentials.
 - [docs/beta/BETA_READY_MVP_RU.md](docs/beta/BETA_READY_MVP_RU.md) - главный scope beta-ready MVP.
 - [docs/beta/DASHBOARD_CONNECTIONS_RU.md](docs/beta/DASHBOARD_CONNECTIONS_RU.md) - подключение рекламных платформ через dashboard/OAuth.
 - [docs/beta/CODEX_MCP_SETUP_RU.md](docs/beta/CODEX_MCP_SETUP_RU.md) - подключение hosted MCP в Codex.
@@ -81,6 +84,7 @@ Dashboard состоит из трёх разделов: `Overview` (стату�
 - [docs/beta/SYSTEMD_SERVICE_RU.md](docs/beta/SYSTEMD_SERVICE_RU.md) - systemd unit setup.
 - [docs/beta/STORAGE_AND_BACKUP_RU.md](docs/beta/STORAGE_AND_BACKUP_RU.md) - storage, backup и restore.
 - [deploy/adforge-mcp.env.example](deploy/adforge-mcp.env.example) - VPS env template without real secrets.
+- [scripts/deploy_live_dashboard.sh](scripts/deploy_live_dashboard.sh) - safe one-command dashboard update script for the recovered VPS.
 - [docs/beta/HOSTED_MCP_TRANSPORT_RU.md](docs/beta/HOSTED_MCP_TRANSPORT_RU.md) - hosted MCP transport.
 - [docs/beta/DIAGNOSTICS_RU.md](docs/beta/DIAGNOSTICS_RU.md) - backend/dashboard/MCP diagnostics.
 - [docs/beta/PARTNER_OAUTH_FLOWS_RU.md](docs/beta/PARTNER_OAUTH_FLOWS_RU.md) - OAuth flows Google/TikTok/Yandex.
