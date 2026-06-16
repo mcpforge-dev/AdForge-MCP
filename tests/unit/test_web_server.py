@@ -96,6 +96,18 @@ def _get_json(base_url: str, path: str, token: str | None = None) -> tuple[int, 
         return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
+def _head(base_url: str, path: str, token: str | None = None) -> tuple[int, bytes]:
+    headers = {"Accept": "*/*"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = Request(f"{base_url}{path}", headers=headers, method="HEAD")
+    try:
+        with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            return response.status, response.read()
+    except HTTPError as exc:
+        return exc.code, exc.read()
+
+
 def test_sensitive_endpoints_require_beta_token_and_health_is_public(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
@@ -136,3 +148,26 @@ def test_sensitive_endpoints_require_beta_token_and_health_is_public(tmp_path) -
     assert "secret-token" not in str(capabilities)
     assert ok_status == 200
     assert diagnostics["security"]["beta_token_configured"] is True
+
+
+def test_head_requests_return_headers_without_body(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        public_base_url="https://adforge.example",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        paths = ["/", "/health", "/ready", "/assets/app.js", "/assets/app.css"]
+        results = [_head(base_url, path) for path in paths]
+        protected_status, protected_body = _head(base_url, "/api/diagnostics")
+    finally:
+        close()
+
+    assert all(status == 200 for status, _body in results)
+    assert all(body == b"" for _status, body in results)
+    assert protected_status == 401
+    assert protected_body == b""

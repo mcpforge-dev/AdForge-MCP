@@ -50,6 +50,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     diagnostics = DiagnosticsService()
     hosted = HostedConnectionService()
     service = MetaDashboardService()
+    _omit_response_body = False
 
     def _set_default_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -74,7 +75,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             self.send_header(key, value)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if not self._omit_response_body:
+            self.wfile.write(body)
 
     def _send_file(self, path: Path, content_type: str) -> None:
         body = path.read_bytes()
@@ -83,7 +85,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
-        self.wfile.write(body)
+        if not self._omit_response_body:
+            self.wfile.write(body)
 
     def _redirect(self, location: str) -> None:
         self.send_response(HTTPStatus.FOUND)
@@ -174,6 +177,13 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         if content_length > self.settings.web_max_body_bytes:
             raise ValueError("Тело запроса слишком большое.")
         return json.loads(self.rfile.read(content_length).decode("utf-8"))
+
+    def do_HEAD(self) -> None:  # noqa: N802
+        self._omit_response_body = True
+        try:
+            self.do_GET()
+        finally:
+            self._omit_response_body = False
 
     def do_GET(self) -> None:  # noqa: N802
         parsed = urlparse(self.path)
