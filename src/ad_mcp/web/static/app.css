@@ -183,6 +183,29 @@ input[type="password"]:focus, input[type="text"]:focus { border-color: var(--acc
 .gate__title { font-size: 22px; }
 .gate__subtitle { color: var(--text-muted); font-size: 14px; }
 
+.auth-preview {
+  display: flex;
+  gap: 6px;
+  padding: 4px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+}
+
+.auth-preview__item {
+  flex: 1;
+  text-align: center;
+  color: var(--text-faint);
+  font-size: 12.5px;
+  padding: 7px 8px;
+  border-radius: 6px;
+}
+
+.auth-preview__item.is-active {
+  color: var(--text);
+  background: var(--bg-elevated);
+}
+
 .gate__form { display: flex; flex-direction: column; gap: 12px; margin-top: 6px; }
 
 .gate__error { color: var(--err); font-size: 13px; }

@@ -1,6 +1,6 @@
 /* AdForge MCP hosted beta dashboard.
-   Onboarding flow: token gate -> Overview -> Connections -> Diagnostics.
-   Uses only existing hosted/diagnostics endpoints. Never renders the beta token
+   Onboarding flow: access code gate -> onboarding -> connections -> diagnostics.
+   Uses only existing hosted/diagnostics endpoints. Never renders the access code
    or provider secrets. */
 (function () {
   "use strict";
@@ -15,10 +15,10 @@
   };
 
   const PROVIDER_DESC = {
-    meta_ads: "Read campaigns, statuses and metrics from Meta Ads accounts.",
-    google_ads: "Read campaigns, statuses and metrics from Google Ads customer accounts.",
-    tiktok_ads: "Limited beta: OAuth groundwork only. Campaigns and metrics may be not available.",
-    yandex_direct: "Limited beta: OAuth groundwork only. Campaigns and metrics may be not available.",
+    meta_ads: "Кампании, статусы, бюджеты и базовые метрики из Meta Ads.",
+    google_ads: "Кампании, статусы, бюджеты и базовые метрики из Google Ads.",
+    tiktok_ads: "Ограниченная beta-поддержка: подключение готовится, чтение кампаний может быть недоступно.",
+    yandex_direct: "Ограниченная beta-поддержка: подключение готовится, чтение кампаний может быть недоступно.",
   };
 
   const LIMITED_BETA = new Set(["tiktok_ads", "yandex_direct"]);
@@ -85,7 +85,7 @@
       event.preventDefault();
       const token = el.gateToken.value.trim();
       if (!token) {
-        showGateError("Invalid or missing beta token.");
+        showGateError("Введите код доступа.");
         return;
       }
       setLoading(el.gateSubmit, true);
@@ -96,7 +96,7 @@
         enterApp();
       } catch (error) {
         clearToken();
-        showGateError(error.status === 401 ? "Invalid or missing beta token." : humanizeError(error));
+        showGateError(error.status === 401 ? "Неверный код доступа." : humanizeError(error));
       } finally {
         setLoading(el.gateSubmit, false);
       }
@@ -138,7 +138,7 @@
       const url = el.mcpUrl.textContent.trim();
       if (!url || url === "—") return;
       await copyText(url);
-      toast("MCP URL copied.", "success");
+      toast("MCP URL скопирован.", "success");
     });
   }
 
@@ -154,7 +154,7 @@
     if (oauthError) {
       state.notice = { tone: "error", text: humanizeError(oauthError) };
     } else if (pendingId && returnedProvider) {
-      state.notice = { tone: "info", text: "OAuth completed. Select the ad accounts AdForge MCP can use." };
+      state.notice = { tone: "info", text: "Авторизация завершена. Выберите рекламные аккаунты, которые сможет использовать AdForge MCP." };
     }
     cleanUrl();
     if (pendingId && returnedProvider) {
@@ -178,13 +178,13 @@
     if (state.section === "overview") loadOverview();
     if (state.section === "connections") loadConnections();
     if (state.section === "diagnostics" && !state.diagnosticsRun) {
-      el.diagnosticsContent.innerHTML = emptyState("Run diagnostics to see the current service health.");
+      el.diagnosticsContent.innerHTML = emptyState("Запустите диагностику, чтобы увидеть состояние сервиса.");
     }
   }
 
   function applyPreviewBadge(capabilities) {
     const enabled = capabilities?.preview_only?.enabled !== false;
-    el.previewBadge.textContent = enabled ? "Preview-only: ON" : "Preview-only: OFF";
+    el.previewBadge.textContent = enabled ? "Preview-only: включено" : "Preview-only: выключено";
     el.previewBadge.className = `badge ${enabled ? "badge--ok" : "badge--err"}`;
   }
 
@@ -192,7 +192,7 @@
 
   async function loadOverview() {
     el.overviewNotice.innerHTML = "";
-    el.overviewStats.innerHTML = emptyState("Loading status…");
+    el.overviewStats.innerHTML = emptyState("Загружаем статус...");
     try {
       const [capabilities, connections] = await Promise.all([
         api("/api/beta/capabilities"),
@@ -219,11 +219,11 @@
     el.copyMcpUrl.disabled = !mcpUrl;
 
     const stats = [
-      stat("Service", badge("Hosted beta · live", "ok")),
+      stat("Сервис", badge("Hosted beta · live", "ok")),
       stat("Live URL", monoText(window.location.origin)),
-      stat("Preview-only", badge(previewOn ? "ON" : "OFF", previewOn ? "ok" : "err")),
-      stat("Connected platforms", String(connectedPlatforms.length)),
-      stat("Connected accounts", String(connectedAccounts)),
+      stat("Preview-only", badge(previewOn ? "включено" : "выключено", previewOn ? "ok" : "err")),
+      stat("Подключенные платформы", String(connectedPlatforms.length)),
+      stat("Рекламные аккаунты", String(connectedAccounts)),
       stat("MCP tools", String((capabilities?.mcp?.tools || []).length || "—")),
     ];
     el.overviewStats.innerHTML = stats.join("");
@@ -231,12 +231,12 @@
     el.overviewNotice.innerHTML = state.notice ? noticeMarkup(state.notice.text, state.notice.tone) : "";
 
     const steps = [
-      { text: "Connect Meta Ads or Google Ads", done: connectedPlatforms.length > 0 || hasPending(platforms) },
-      { text: "Select ad accounts", done: connectedAccounts > 0 },
-      { text: "Run diagnostics", done: state.diagnosticsRun },
-      { text: "Copy the MCP URL", done: false },
-      { text: "Add it to Codex / Claude as a custom MCP server", done: false },
-      { text: "Ask the AI for accounts, campaigns and metrics", done: false },
+      { text: "Подключите рекламную платформу", done: connectedPlatforms.length > 0 || hasPending(platforms) },
+      { text: "Выберите рекламные аккаунты", done: connectedAccounts > 0 },
+      { text: "Проверьте диагностику", done: state.diagnosticsRun },
+      { text: "Скопируйте MCP URL", done: false },
+      { text: "Добавьте его в Codex / Claude как внешний MCP-сервер", done: false },
+      { text: "Задайте AI первый вопрос по аккаунтам, кампаниям или метрикам", done: false },
     ];
     el.nextSteps.innerHTML = steps
       .map((s) => `<li class="${s.done ? "is-done" : ""}">${esc(s.text)}</li>`)
@@ -251,7 +251,7 @@
 
   async function loadConnections() {
     el.connectionsNotice.innerHTML = state.notice ? noticeMarkup(state.notice.text, state.notice.tone) : "";
-    if (!state.connections) el.connectionsList.innerHTML = emptyState("Loading connections…");
+    if (!state.connections) el.connectionsList.innerHTML = emptyState("Загружаем подключения...");
     try {
       const connections = await api("/api/hosted/connections");
       state.connections = connections;
@@ -268,7 +268,7 @@
     const platforms = (connections && connections.platforms) || [];
     el.connectionsList.innerHTML = platforms.length
       ? platforms.map(renderPlatformCard).join("")
-      : emptyState("No ad accounts connected yet. Connect Meta Ads or Google Ads to start.");
+      : emptyState("Пока нет подключенных рекламных аккаунтов. Начните с подключения рекламной платформы.");
     bindConnectionActions();
   }
 
@@ -276,17 +276,16 @@
     const status = resolveStatus(platform);
     const accounts = platform.accounts || [];
     const summary = platform.diagnostic_summary || {};
-    const lastError = summary.last_error;
     const limited = LIMITED_BETA.has(platform.provider);
     const canConnect = Boolean(platform.oauth_configured);
-    const connectLabel = status === "connected" ? "Reconnect" : "Connect";
+    const connectLabel = !canConnect ? "Скоро доступно" : status === "connected" ? "Переподключить" : "Подключить";
 
     const metaBits = [
-      `<span>Credentials <strong>${canConnect ? "ready" : "missing"}</strong></span>`,
-      `<span>Accounts <strong>${accounts.length}</strong></span>`,
+      `<span>Статус <strong>${canConnect ? "доступно" : "настраивается"}</strong></span>`,
+      `<span>Аккаунты <strong>${accounts.length}</strong></span>`,
     ];
     if (summary.last_successful_update) {
-      metaBits.push(`<span>Last success <strong>${esc(formatTime(summary.last_successful_update))}</strong></span>`);
+      metaBits.push(`<span>Последняя проверка <strong>${esc(formatTime(summary.last_successful_update))}</strong></span>`);
     }
 
     const accountsBlock = accounts.length
@@ -310,11 +309,10 @@
         ${accountsBlock}
         ${pending ? renderPendingCallout(platform, pending) : ""}
         ${expired && !pending ? renderExpiredCallout() : ""}
-        ${lastError ? `<div class="callout callout--warn"><strong>Last error</strong><span>${esc(lastError.message || String(lastError))}</span></div>` : ""}
         <div class="platform-card__actions">
           <button type="button" class="btn btn--primary btn--small" data-oauth="${escAttr(platform.provider)}" ${canConnect ? "" : "disabled"}>${connectLabel}</button>
-          <button type="button" class="btn btn--secondary btn--small" data-diag="${escAttr(platform.provider)}">Run diagnostics</button>
-          ${accounts.length ? `<button type="button" class="btn btn--danger btn--small" data-disconnect="${escAttr(platform.provider)}">Disconnect</button>` : ""}
+          <button type="button" class="btn btn--secondary btn--small" data-diag="${escAttr(platform.provider)}">Проверить статус</button>
+          ${accounts.length ? `<button type="button" class="btn btn--danger btn--small" data-disconnect="${escAttr(platform.provider)}">Отключить</button>` : ""}
         </div>
       </article>
     `;
@@ -324,7 +322,7 @@
     const id = account.account_id || account.customer_id || account.advertiser_id || account.direct_client_login || "";
     return `
       <div class="account-row">
-        <span>${esc(account.name || id || "Account")}</span>
+        <span>${esc(account.name || id || "Аккаунт")}</span>
         <span class="mono">${esc(id)}</span>
       </div>
     `;
@@ -334,9 +332,9 @@
     const count = (pending.accounts || []).length;
     return `
       <div class="callout">
-        <strong>Account selection required</strong>
-        <span>${count} account(s) discovered by OAuth. Select which ones AdForge MCP can use.</span>
-        <button type="button" class="btn btn--secondary btn--small" data-pending="${escAttr(platform.provider)}" data-pending-id="${escAttr(pending.pending_id)}">Select accounts</button>
+        <strong>Нужно выбрать рекламные аккаунты</strong>
+        <span>OAuth нашел аккаунты: ${count}. Выберите, какие аккаунты сможет использовать AdForge MCP.</span>
+        <button type="button" class="btn btn--secondary btn--small" data-pending="${escAttr(platform.provider)}" data-pending-id="${escAttr(pending.pending_id)}">Выбрать аккаунты</button>
       </div>
     `;
   }
@@ -344,8 +342,8 @@
   function renderExpiredCallout() {
     return `
       <div class="callout callout--warn">
-        <strong>OAuth session expired</strong>
-        <span>The selection window expired. Reconnect this platform to continue.</span>
+        <strong>Сессия OAuth истекла</strong>
+        <span>Время выбора аккаунтов истекло. Переподключите платформу, чтобы продолжить.</span>
       </div>
     `;
   }
@@ -354,16 +352,16 @@
     const accounts = pending.accounts || [];
     const options = accounts.length
       ? accounts.map(renderPendingOption).join("")
-      : emptyState("No accounts were returned by the provider.");
+      : emptyState("Провайдер не вернул рекламные аккаунты.");
     return `
       <article class="card pending-card">
-        <h3 class="card__title">Select accounts · ${esc(providerLabel(pending.provider))}</h3>
-        <p class="card__hint">Choose the ad accounts AdForge MCP can use. Secrets stay in the hosted store and are never shown here.</p>
+        <h3 class="card__title">Выберите аккаунты · ${esc(providerLabel(pending.provider))}</h3>
+        <p class="card__hint">Отметьте рекламные аккаунты, которые сможет использовать AdForge MCP. Секреты хранятся только на сервере и не показываются в интерфейсе.</p>
         <form id="pending-form" data-provider="${escAttr(pending.provider)}">
           <div class="pending-list">${options}</div>
           <div class="pending-actions">
-            <button type="submit" class="btn btn--primary btn--small" ${accounts.length ? "" : "disabled"}>Save selected accounts</button>
-            <button type="button" class="btn btn--ghost btn--small" data-cancel-pending>Cancel</button>
+            <button type="submit" class="btn btn--primary btn--small" ${accounts.length ? "" : "disabled"}>Сохранить выбранные аккаунты</button>
+            <button type="button" class="btn btn--ghost btn--small" data-cancel-pending>Отмена</button>
           </div>
         </form>
       </article>
@@ -376,7 +374,7 @@
       <label class="pending-option">
         <input type="checkbox" name="account_id" value="${escAttr(id)}" checked>
         <span>
-          <span class="pending-option__name">${esc(account.name || id || "Account")}</span>
+          <span class="pending-option__name">${esc(account.name || id || "Аккаунт")}</span>
           <span class="pending-option__id">${esc(id)}</span>
         </span>
       </label>
@@ -418,7 +416,7 @@
     setLoading(button, true);
     try {
       const payload = await api(`/api/hosted/oauth/${slug}/authorize-url`);
-      if (!payload.authorization_url) throw new Error("Authorization URL was not returned.");
+      if (!payload.authorization_url) throw new Error("Сервер не вернул ссылку авторизации.");
       window.location.assign(payload.authorization_url);
     } catch (error) {
       if (handle401(error)) return;
@@ -434,7 +432,7 @@
     if (!slug || !pendingId) return;
     try {
       state.activePending = await api(`/api/hosted/oauth/${slug}/pending?pending_id=${encodeURIComponent(pendingId)}`);
-      state.notice = { tone: "info", text: "Choose one or more accounts and save the connection." };
+      state.notice = { tone: "info", text: "Выберите один или несколько аккаунтов и сохраните подключение." };
       if (!state.connections) state.connections = await api("/api/hosted/connections");
       renderConnections(state.connections);
     } catch (error) {
@@ -450,7 +448,7 @@
     if (!slug || !state.activePending) return;
     const accountIds = Array.from(form.querySelectorAll("input[name='account_id']:checked")).map((i) => i.value);
     if (!accountIds.length) {
-      toast("Select at least one account.", "info");
+      toast("Выберите хотя бы один аккаунт.", "info");
       return;
     }
     setLoading(button, true);
@@ -460,9 +458,9 @@
         account_ids: accountIds,
       });
       state.activePending = null;
-      state.notice = { tone: "success", text: "Accounts connected. MCP tools can now use this provider." };
+      state.notice = { tone: "success", text: "Аккаунты подключены. MCP tools теперь могут использовать эту платформу." };
       await loadConnections();
-      toast("Connection saved.", "success");
+      toast("Подключение сохранено.", "success");
     } catch (error) {
       if (handle401(error)) return;
       setLoading(button, false);
@@ -472,12 +470,12 @@
   }
 
   async function disconnect(provider, button) {
-    if (!window.confirm("Disconnect this provider and remove its saved OAuth tokens from the hosted store?")) return;
+    if (!window.confirm("Отключить платформу и удалить ее сохраненное OAuth-подключение из hosted storage?")) return;
     setLoading(button, true);
     try {
       await api("/api/hosted/connections/disconnect", "POST", { provider });
       if (state.activePending?.provider === provider) state.activePending = null;
-      state.notice = { tone: "success", text: "Provider disconnected." };
+      state.notice = { tone: "success", text: "Платформа отключена." };
       await loadConnections();
     } catch (error) {
       if (handle401(error)) return;
@@ -492,7 +490,7 @@
     try {
       const result = await api(`/api/diagnostics/platforms/${encodeURIComponent(provider)}?live=1`);
       const tone = result.status === "mcp_ready" ? "success" : result.status === "api_error" ? "error" : "info";
-      state.notice = { tone, text: `${providerLabel(provider)} diagnostics: ${statusLabel(result.status)}.` };
+      state.notice = { tone, text: `${providerLabel(provider)}: ${statusLabel(result.status)}.` };
       await loadConnections();
     } catch (error) {
       if (handle401(error)) return;
@@ -507,7 +505,7 @@
   async function runDiagnostics() {
     const live = el.diagLive.checked;
     setLoading(el.diagRun, true);
-    el.diagnosticsContent.innerHTML = emptyState("Running diagnostics…");
+    el.diagnosticsContent.innerHTML = emptyState("Запускаем диагностику...");
     try {
       const [overview, security] = await Promise.all([
         api(`/api/diagnostics${live ? "?live=1" : ""}`),
@@ -530,26 +528,26 @@
     const caps = state.capabilities || {};
 
     const serviceKv = kvGrid([
-      ["Overall status", statusValue(overview.status)],
-      ["Environment", esc(overview.backend?.environment || "—")],
-      ["API auth required", boolValue(overview.backend?.web_api_auth_required)],
+      ["Общий статус", statusValue(overview.status)],
+      ["Окружение", esc(overview.backend?.environment || "—")],
+      ["Защита API", boolValue(overview.backend?.web_api_auth_required)],
       ["Preview-only", boolValue(overview.backend?.preview_only, true)],
     ]);
 
     const securityKv = kvGrid([
-      ["Beta token configured", boolValue(security.beta_token_configured, true)],
-      ["API auth required", boolValue(security.api_auth_required, true)],
+      ["Код доступа настроен", boolValue(security.beta_token_configured, true)],
+      ["Защита API", boolValue(security.api_auth_required, true)],
       ["Preview-only", boolValue(security.preview_only, true)],
-      ["Live writes enabled", boolValue(security.live_writes_enabled, false)],
-      ["Tokens returned", boolValue(security.tokens_returned, false)],
-      ["Secrets redacted", boolValue(security.secrets_redacted, true)],
+      ["Реальные изменения включены", boolValue(security.live_writes_enabled, false)],
+      ["Токены возвращаются наружу", boolValue(security.tokens_returned, false)],
+      ["Секреты скрываются", boolValue(security.secrets_redacted, true)],
     ]);
 
     const mcpKv = kvGrid([
       ["Transport", esc(transport.type || "—")],
-      ["Status", statusValue(mcp.status)],
-      ["Auth required", boolValue(transport.auth_required, true)],
-      ["Tools ready", String((mcp.tools?.ready || []).length || (caps.mcp?.tools || []).length || "—")],
+      ["Статус", statusValue(mcp.status)],
+      ["Авторизация нужна", boolValue(transport.auth_required, true)],
+      ["Tools готовы", String((mcp.tools?.ready || []).length || (caps.mcp?.tools || []).length || "—")],
     ]);
 
     const platformRows = platforms.map((p) => {
@@ -563,15 +561,15 @@
 
     el.diagnosticsContent.innerHTML = `
       <div class="diag-grid">
-        <article class="card"><h3 class="card__title">Service</h3>${serviceKv}</article>
-        <article class="card"><h3 class="card__title">Security</h3>${securityKv}</article>
+        <article class="card"><h3 class="card__title">Сервис</h3>${serviceKv}</article>
+        <article class="card"><h3 class="card__title">Безопасность</h3>${securityKv}</article>
         <article class="card"><h3 class="card__title">MCP transport</h3>${mcpKv}</article>
-        <article class="card"><h3 class="card__title">Platforms</h3><div class="kv">${platformRows.join("") || emptyState("No platforms.")}</div></article>
+        <article class="card"><h3 class="card__title">Платформы</h3><div class="kv">${platformRows.join("") || emptyState("Платформы не найдены.")}</div></article>
       </div>
-      ${nextActions.length ? `<article class="card"><h3 class="card__title">Next actions</h3><ul class="list-plain">${nextActions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></article>` : ""}
-      ${missingEnv.length || issues.length ? `<article class="card"><h3 class="card__title">Attention</h3><ul class="list-plain">${[...issues, ...missingEnv.map((e) => `Missing env: ${e}`)].map((i) => `<li>${esc(i)}</li>`).join("")}</ul></article>` : ""}
+      ${nextActions.length ? `<article class="card"><h3 class="card__title">Что сделать дальше</h3><ul class="list-plain">${nextActions.map((a) => `<li>${esc(a)}</li>`).join("")}</ul></article>` : ""}
+      ${missingEnv.length || issues.length ? `<article class="card"><h3 class="card__title">Технические детали для оператора</h3><ul class="list-plain">${[...issues, ...missingEnv.map((e) => `Не настроено: ${e}`)].map((i) => `<li>${esc(i)}</li>`).join("")}</ul></article>` : ""}
       <details class="raw-json">
-        <summary>Raw diagnostics JSON</summary>
+        <summary>Технический JSON для оператора</summary>
         <pre>${esc(JSON.stringify({ overview, security }, null, 2))}</pre>
       </details>
     `;
@@ -593,44 +591,44 @@
 
   function statusBadge(status, limited) {
     const map = {
-      connected: ["Connected", "ok"],
-      ready_to_connect: ["Ready to connect", "info"],
-      select_accounts: ["Select accounts", "warn"],
-      reconnect_required: ["Reconnect required", "warn"],
-      credentials_missing: ["Credentials missing", "muted"],
-      error: ["Error", "err"],
+      connected: ["Подключено", "ok"],
+      ready_to_connect: ["Доступно для подключения", "info"],
+      select_accounts: ["Выберите аккаунты", "warn"],
+      reconnect_required: ["Нужно переподключить", "warn"],
+      credentials_missing: ["Платформа настраивается", "muted"],
+      error: ["Ошибка подключения", "err"],
     };
-    const [label, tone] = map[status] || ["Unknown", "muted"];
-    const limitedChip = limited ? `<span class="badge badge--muted">Limited beta</span>` : "";
+    const [label, tone] = map[status] || ["Статус неизвестен", "muted"];
+    const limitedChip = limited ? `<span class="badge badge--muted">Ограниченная beta</span>` : "";
     return `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${limitedChip}<span class="badge badge--${tone}">${esc(label)}</span></div>`;
   }
 
   function statusHint(status, canConnect) {
-    if (status === "connected") return "Connected accounts are available to hosted MCP tools.";
-    if (status === "select_accounts") return "OAuth finished. Select the accounts to finish setup.";
-    if (status === "reconnect_required") return "The OAuth selection window expired. Reconnect this platform.";
+    if (status === "connected") return "Подключенные аккаунты доступны через hosted MCP tools.";
+    if (status === "select_accounts") return "OAuth завершен. Выберите аккаунты, чтобы закончить подключение.";
+    if (status === "reconnect_required") return "Время выбора аккаунтов истекло. Переподключите платформу.";
     if (status === "credentials_missing") {
-      return "Provider credentials are not configured on the server. Ask the operator to update live env.";
+      return "Подключение этой платформы временно настраивается. Если нужно ускорить доступ, обратитесь к менеджеру AdForge.";
     }
-    if (status === "ready_to_connect") return "Credentials are configured. Start OAuth to connect ad accounts.";
-    return canConnect ? "Start OAuth to connect ad accounts." : "Provider credentials are not configured on the server.";
+    if (status === "ready_to_connect") return "Платформа готова. Нажмите подключить и пройдите OAuth.";
+    return canConnect ? "Нажмите подключить и пройдите OAuth." : "Платформа временно настраивается.";
   }
 
   function statusLabel(status) {
     return {
-      mcp_ready: "MCP ready",
-      ready: "ready",
+      mcp_ready: "MCP готов",
+      ready: "готово",
       ok: "ok",
-      connected: "connected",
-      not_connected: "not connected",
-      pending_account_selection: "select accounts",
-      reconnect_required: "reconnect required",
-      token_expired: "token expired",
-      env_missing: "credentials missing",
-      api_error: "API error",
-      needs_setup: "needs setup",
-      degraded: "degraded",
-    }[status] || status || "unknown";
+      connected: "подключено",
+      not_connected: "не подключено",
+      pending_account_selection: "выберите аккаунты",
+      reconnect_required: "нужно переподключить",
+      token_expired: "токен истек",
+      env_missing: "платформа настраивается",
+      api_error: "ошибка API",
+      needs_setup: "нужна настройка",
+      degraded: "частично работает",
+    }[status] || status || "неизвестно";
   }
 
   function providerLabel(provider) {
@@ -656,7 +654,7 @@
   }
 
   function boolValue(value, expected) {
-    const text = value === true ? "yes" : value === false ? "no" : "—";
+    const text = value === true ? "да" : value === false ? "нет" : "—";
     let cls = "";
     if (expected !== undefined && value !== undefined) cls = value === expected ? "kv-ok" : "kv-err";
     return `<span class="${cls}">${text}</span>`;
@@ -714,7 +712,7 @@
       clearToken();
       state.capabilities = null;
       state.connections = null;
-      showGate("Session expired or invalid token. Enter your beta token again.");
+      showGate("Сессия истекла или код доступа неверный. Введите код доступа еще раз.");
       return true;
     }
     return false;
@@ -749,24 +747,24 @@
   function humanizeError(error) {
     const text = String(error?.message || error || "").trim();
     const lower = text.toLowerCase();
-    if (!text) return "Something went wrong. Please try again.";
+    if (!text) return "Что-то пошло не так. Попробуйте еще раз.";
     if (lower.includes("api_auth_not_configured") || lower.includes("ad_mcp_web_api_token")) {
-      return "The server has no beta token configured. Ask the operator to set AD_MCP_WEB_API_TOKEN.";
+      return "Код доступа еще не настроен на сервере. Обратитесь к менеджеру AdForge.";
     }
     if (lower.includes("api_auth_required") || lower.includes("beta token")) {
-      return "A valid beta token is required.";
+      return "Нужен корректный код доступа.";
     }
     if (lower.includes("not configured") && lower.includes("oauth")) {
-      return "Provider OAuth credentials are not configured on the server. Ask the operator to update live env.";
+      return "Платформа временно настраивается. Обратитесь к менеджеру AdForge, если подключение нужно ускорить.";
     }
     if (lower.includes("state expired") || (lower.includes("pending") && lower.includes("expired"))) {
-      return "The OAuth session expired. Reconnect the platform.";
+      return "Сессия OAuth истекла. Переподключите платформу.";
     }
     if (lower.includes("no ad accounts") || lower.includes("no accessible")) {
-      return "OAuth succeeded but the provider returned no ad accounts for this user.";
+      return "Авторизация прошла, но провайдер не вернул доступные рекламные аккаунты.";
     }
     if (lower.includes("refresh_token")) {
-      return "OAuth did not return a refresh token. Reconnect with the consent prompt.";
+      return "OAuth не вернул refresh token. Переподключите платформу с подтверждением доступа.";
     }
     if (text.length > 240) return `${text.slice(0, 237)}…`;
     return text;

@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="ru">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -9,25 +9,29 @@
 <body>
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
-  <!-- Token gate -->
+  <!-- Access code gate -->
   <section id="gate" class="gate" hidden>
     <div class="gate__card">
       <div class="gate__brand">
         <span class="logo-dot" aria-hidden="true"></span>
         <span class="gate__brand-name">AdForge MCP</span>
-        <span class="chip chip--beta">Beta</span>
+        <span class="chip chip--beta">Бета</span>
       </div>
-      <h1 class="gate__title">AdForge MCP Beta</h1>
-      <p class="gate__subtitle">Hosted MCP dashboard for connecting ad accounts to AI clients.</p>
+      <h1 class="gate__title">Вход в AdForge MCP</h1>
+      <p class="gate__subtitle">Подключайте рекламные кабинеты к Codex, Claude и другим AI-клиентам через hosted MCP.</p>
+      <div class="auth-preview" aria-label="Будущий вход">
+        <span class="auth-preview__item is-active">Код доступа</span>
+        <span class="auth-preview__item">Email-вход скоро</span>
+      </div>
       <form id="gate-form" class="gate__form">
         <label class="field">
-          <span class="field__label">Beta access token</span>
-          <input id="gate-token" type="password" autocomplete="off" spellcheck="false" placeholder="Paste your beta token" required>
+          <span class="field__label">Код доступа</span>
+          <input id="gate-token" type="password" autocomplete="off" spellcheck="false" placeholder="Введите код доступа" required>
         </label>
-        <button id="gate-submit" class="btn btn--primary btn--block" type="submit">Enter dashboard</button>
-        <p id="gate-error" class="gate__error" hidden>Invalid or missing beta token.</p>
+        <button id="gate-submit" class="btn btn--primary btn--block" type="submit">Открыть панель</button>
+        <p id="gate-error" class="gate__error" hidden>Неверный или пустой код доступа.</p>
       </form>
-      <p class="gate__footnote">Dangerous actions are previewed only and will not be applied to ad accounts.</p>
+      <p class="gate__footnote">Код доступа выдает менеджер AdForge. На beta-этапе опасные действия показываются только как preview и не применяются в рекламных кабинетах.</p>
     </div>
   </section>
 
@@ -38,16 +42,16 @@
         <div class="topbar__brand">
           <span class="logo-dot" aria-hidden="true"></span>
           <span class="topbar__name">AdForge MCP</span>
-          <span class="chip chip--beta">Beta</span>
+          <span class="chip chip--beta">Бета</span>
         </div>
-        <nav class="topbar__nav" aria-label="Sections">
-          <button type="button" class="nav-tab is-active" data-nav="overview">Overview</button>
-          <button type="button" class="nav-tab" data-nav="connections">Connections</button>
-          <button type="button" class="nav-tab" data-nav="diagnostics">Diagnostics</button>
+        <nav class="topbar__nav" aria-label="Разделы">
+          <button type="button" class="nav-tab is-active" data-nav="overview">Начало работы</button>
+          <button type="button" class="nav-tab" data-nav="connections">Подключения</button>
+          <button type="button" class="nav-tab" data-nav="diagnostics">Диагностика</button>
         </nav>
         <div class="topbar__side">
-          <span id="preview-badge" class="badge badge--ok" title="Dangerous actions are previewed only and will not be applied to ad accounts.">Preview-only: ON</span>
-          <button id="signout" type="button" class="btn btn--ghost btn--small">Sign out</button>
+          <span id="preview-badge" class="badge badge--ok" title="Опасные действия только показываются как preview и не применяются.">Preview-only: включено</span>
+          <button id="signout" type="button" class="btn btn--ghost btn--small">Выйти</button>
         </div>
       </div>
     </header>
@@ -56,26 +60,26 @@
       <!-- Overview -->
       <section id="section-overview" class="section" data-section="overview">
         <div class="section-head">
-          <h2>Overview</h2>
-          <p class="section-head__sub">Hosted beta status and the path from ad accounts to your AI client.</p>
+          <h2>Начало работы</h2>
+          <p class="section-head__sub">Путь от рекламных кабинетов до вашего AI-клиента: подключение платформ, выбор аккаунтов и MCP URL.</p>
         </div>
         <div id="overview-notice"></div>
         <div id="overview-stats" class="stats-grid">
-          <div class="empty-state"><p>Loading status…</p></div>
+          <div class="empty-state"><p>Загружаем статус...</p></div>
         </div>
         <div class="grid-2">
           <article class="card">
-            <h3 class="card__title">Next steps</h3>
+            <h3 class="card__title">Следующие шаги</h3>
             <ol id="next-steps" class="steps"></ol>
           </article>
           <article class="card mcp-card">
-            <h3 class="card__title">Connect to MCP client</h3>
-            <p class="card__hint">Use this URL in Codex / Claude / another MCP client. Pass your beta token as Bearer authorization.</p>
+            <h3 class="card__title">Подключение к AI-клиенту</h3>
+            <p class="card__hint">Скопируйте MCP URL и добавьте его в Codex, Claude или другой MCP-клиент. Для beta используйте ваш код доступа как Bearer-авторизацию.</p>
             <div class="mcp-url-row">
               <code id="mcp-url" class="mcp-url">—</code>
-              <button id="copy-mcp-url" type="button" class="btn btn--secondary btn--small">Copy MCP URL</button>
+              <button id="copy-mcp-url" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
             </div>
-            <pre class="code-block">Authorization: Bearer &lt;BETA_TOKEN&gt;</pre>
+            <pre class="code-block">Authorization: Bearer &lt;КОД_ДОСТУПА&gt;</pre>
           </article>
         </div>
       </section>
@@ -84,15 +88,15 @@
       <section id="section-connections" class="section" data-section="connections" hidden>
         <div class="section-head section-head--row">
           <div>
-            <h2>Connections</h2>
-            <p class="section-head__sub">Connect ad platforms via OAuth, then use them through hosted MCP tools.</p>
+            <h2>Подключения</h2>
+            <p class="section-head__sub">Подключите рекламные платформы через OAuth, выберите аккаунты и используйте их через MCP tools.</p>
           </div>
-          <button id="connections-refresh" type="button" class="btn btn--secondary btn--small">Refresh</button>
+          <button id="connections-refresh" type="button" class="btn btn--secondary btn--small">Обновить</button>
         </div>
         <div id="connections-notice"></div>
         <div id="pending-panel"></div>
         <div id="connections-list" class="cards-col">
-          <div class="empty-state"><p>Loading connections…</p></div>
+          <div class="empty-state"><p>Загружаем подключения...</p></div>
         </div>
       </section>
 
@@ -100,25 +104,25 @@
       <section id="section-diagnostics" class="section" data-section="diagnostics" hidden>
         <div class="section-head section-head--row">
           <div>
-            <h2>Diagnostics</h2>
-            <p class="section-head__sub">Service, security, MCP transport and platform health.</p>
+            <h2>Диагностика</h2>
+            <p class="section-head__sub">Проверка сервиса, безопасности, MCP transport и подключенных платформ.</p>
           </div>
           <div class="section-head__actions">
-            <label class="checkline" title="Also performs a safe read call against each connected provider API.">
+            <label class="checkline" title="Также выполнит безопасную read-проверку подключенных provider API.">
               <input id="diag-live" type="checkbox">
-              <span>Include live provider checks</span>
+              <span>Проверить live API</span>
             </label>
-            <button id="diag-run" type="button" class="btn btn--primary btn--small">Run full diagnostics</button>
+            <button id="diag-run" type="button" class="btn btn--primary btn--small">Запустить диагностику</button>
           </div>
         </div>
         <div id="diagnostics-content">
-          <div class="empty-state"><p>Run diagnostics to see the current service health.</p></div>
+          <div class="empty-state"><p>Запустите диагностику, чтобы увидеть состояние сервиса.</p></div>
         </div>
       </section>
     </main>
 
     <footer class="footer">
-      <p>AdForge MCP hosted beta · Preview-only mode: dangerous actions are previewed, never applied.</p>
+      <p>AdForge MCP hosted beta · preview-only mode: опасные действия только показываются и не применяются.</p>
     </footer>
   </div>
 

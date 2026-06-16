@@ -69,6 +69,7 @@ Dashboard состоит из трёх разделов: `Overview` (стату�
 - [docs/beta/VPS_RECOVERY_RU.md](docs/beta/VPS_RECOVERY_RU.md) - recovery checklist when the live VPS/WPS is unavailable.
 - [docs/beta/OAUTH_CREDENTIALS_SETUP_RU.md](docs/beta/OAUTH_CREDENTIALS_SETUP_RU.md) - hosted OAuth credentials setup for Meta/Google/TikTok/Yandex.
 - [docs/beta/LEGACY_CREDENTIALS_CLEANUP_RU.md](docs/beta/LEGACY_CREDENTIALS_CLEANUP_RU.md) - cleanup plan for old tokens and compromised legacy credentials.
+- [docs/beta/USER_AUTH_ADMIN_ROADMAP_RU.md](docs/beta/USER_AUTH_ADMIN_ROADMAP_RU.md) - roadmap for Russian UI, user auth, admin panel, roles and database.
 - [docs/beta/BETA_READY_MVP_RU.md](docs/beta/BETA_READY_MVP_RU.md) - главный scope beta-ready MVP.
 - [docs/beta/DASHBOARD_CONNECTIONS_RU.md](docs/beta/DASHBOARD_CONNECTIONS_RU.md) - подключение рекламных платформ через dashboard/OAuth.
 - [docs/beta/CODEX_MCP_SETUP_RU.md](docs/beta/CODEX_MCP_SETUP_RU.md) - подключение hosted MCP в Codex.

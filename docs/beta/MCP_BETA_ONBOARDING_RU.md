@@ -33,6 +33,7 @@ AdForge MCP - hosted MCP-сервис. Клиент не скачивает GitH
 - Live VPS recovery: [VPS_RECOVERY_RU.md](VPS_RECOVERY_RU.md).
 - OAuth credentials setup: [OAUTH_CREDENTIALS_SETUP_RU.md](OAUTH_CREDENTIALS_SETUP_RU.md).
 - Legacy credentials cleanup: [LEGACY_CREDENTIALS_CLEANUP_RU.md](LEGACY_CREDENTIALS_CLEANUP_RU.md).
+- User auth/admin roadmap: [USER_AUTH_ADMIN_ROADMAP_RU.md](USER_AUTH_ADMIN_ROADMAP_RU.md).
 - Dashboard/OAuth: [DASHBOARD_CONNECTIONS_RU.md](DASHBOARD_CONNECTIONS_RU.md).
 - Codex: [CODEX_MCP_SETUP_RU.md](CODEX_MCP_SETUP_RU.md).
 - Claude: [CLAUDE_CONNECTOR_SETUP_RU.md](CLAUDE_CONNECTOR_SETUP_RU.md).
