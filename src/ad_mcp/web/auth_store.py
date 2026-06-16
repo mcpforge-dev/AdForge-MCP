@@ -6,6 +6,7 @@ import hmac
 import os
 import secrets
 import sqlite3
+import threading
 import uuid
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -98,6 +99,8 @@ class AuthStore:
         self.settings = settings or Settings()
         self.database_url = self.settings.effective_database_url
         self.driver = self._driver_name(self.database_url)
+        self._schema_ready = False
+        self._schema_lock = threading.Lock()
 
     @staticmethod
     def _driver_name(database_url: str) -> str:
@@ -166,9 +169,15 @@ class AuthStore:
         return [dict(row) for row in cursor.fetchall()]
 
     def ensure_schema(self) -> None:
-        with self._connect() as connection:
-            for statement in _SCHEMA:
-                self._execute(connection, statement)
+        if self._schema_ready:
+            return
+        with self._schema_lock:
+            if self._schema_ready:
+                return
+            with self._connect() as connection:
+                for statement in _SCHEMA:
+                    self._execute(connection, statement)
+            self._schema_ready = True
 
     def create_user(
         self,

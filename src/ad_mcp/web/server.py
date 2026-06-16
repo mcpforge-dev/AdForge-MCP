@@ -61,7 +61,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         self.send_header("Referrer-Policy", "no-referrer")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Pragma", "no-cache")
-        self.send_header("Vary", "Authorization")
+        self.send_header("Vary", "Authorization, Cookie")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
         self.send_header(
@@ -205,6 +205,50 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             )
             return False
         return True
+
+    def _request_origin(self) -> str:
+        origin = str(self.headers.get("Origin", "") or "").strip()
+        if origin:
+            return origin.rstrip("/").lower()
+        referer = str(self.headers.get("Referer", "") or "").strip()
+        if not referer:
+            return ""
+        parsed = urlparse(referer)
+        if not parsed.scheme or not parsed.netloc:
+            return ""
+        return f"{parsed.scheme}://{parsed.netloc}".rstrip("/").lower()
+
+    def _allowed_origins(self) -> set[str]:
+        allowed: set[str] = set()
+        for base_url in (self.settings.public_base_url.strip(), self.settings.public_base_or_local_web_url):
+            if not base_url:
+                continue
+            parsed = urlparse(base_url)
+            if parsed.scheme and parsed.netloc:
+                allowed.add(f"{parsed.scheme}://{parsed.netloc}".rstrip("/").lower())
+        host = str(self.headers.get("Host", "") or "").strip().lower()
+        if host:
+            allowed.add(f"http://{host}")
+            allowed.add(f"https://{host}")
+        return allowed
+
+    def _ensure_same_origin_session_post(self, route: str) -> bool:
+        if not route.startswith("/api/"):
+            return True
+        if _extract_request_token(self.headers):
+            return True
+        if not self._session_user():
+            return True
+        if self._request_origin() in self._allowed_origins():
+            return True
+        self._send_json(
+            {
+                "error": "Для действий через браузер нужна same-origin сессия. Повторите запрос из интерфейса AdForge MCP.",
+                "code": "csrf_check_failed",
+            },
+            HTTPStatus.FORBIDDEN,
+        )
+        return False
 
     def _client_error_message(self, exc: Exception) -> str:
         if isinstance(exc, json.JSONDecodeError):
@@ -510,21 +554,29 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
                 return self._send_auth_json({"authenticated": True, "user": user.public_dict()}, session_token=token)
             if route == "/api/auth/logout":
+                if not self._ensure_same_origin_session_post(route):
+                    return
                 self.auth.revoke_session(self._session_token())
                 return self._send_auth_json({"ok": True}, clear_session=True)
             if route == "/api/admin/users/status":
+                if not self._ensure_same_origin_session_post(route):
+                    return
                 if not self._ensure_admin_user():
                     return
                 payload = self._json_body()
                 user = self.auth.set_user_status(str(payload["user_id"]), str(payload["status"]))
                 return self._send_json({"user": user})
             if route == "/api/admin/users/role":
+                if not self._ensure_same_origin_session_post(route):
+                    return
                 if not self._ensure_admin_user():
                     return
                 payload = self._json_body()
                 user = self.auth.set_user_role(str(payload["user_id"]), str(payload["role"]))
                 return self._send_json({"user": user})
             if not self._ensure_api_authorized(route):
+                return
+            if not self._ensure_same_origin_session_post(route):
                 return
             payload = self._json_body()
             if route == "/api/hosted/connections/import-local":

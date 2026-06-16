@@ -98,10 +98,22 @@ def _get_json(base_url: str, path: str, token: str | None = None) -> tuple[int, 
             return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
-def _post_json(base_url: str, path: str, payload: dict, cookie: str | None = None) -> tuple[int, dict, str]:
+def _post_json(
+    base_url: str,
+    path: str,
+    payload: dict,
+    cookie: str | None = None,
+    *,
+    origin: str | None = None,
+    token: str | None = None,
+) -> tuple[int, dict, str]:
     headers = {"Accept": "application/json", "Content-Type": "application/json"}
     if cookie:
         headers["Cookie"] = cookie
+    if origin:
+        headers["Origin"] = origin
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
     request = Request(f"{base_url}{path}", data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
     try:
         with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
@@ -257,6 +269,7 @@ def test_admin_session_can_list_users_and_toggle_status(tmp_path) -> None:
             "/api/admin/users/status",
             {"user_id": target_id, "status": "disabled"},
             cookie,
+            origin=base_url,
         )
     finally:
         close()
@@ -267,3 +280,30 @@ def test_admin_session_can_list_users_and_toggle_status(tmp_path) -> None:
     assert users["users"][0]["email"] == "admin@example.com"
     assert update_status == 200
     assert update["user"]["status"] == "disabled"
+
+
+def test_session_post_requires_same_origin_for_logout(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        _status, _payload, cookie = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "Client User", "email": "client@example.com", "password": "super-secret"},
+        )
+        blocked_status, blocked_payload, _ = _post_json(base_url, "/api/auth/logout", {}, cookie)
+        ok_status, ok_payload, _ = _post_json(base_url, "/api/auth/logout", {}, cookie, origin=base_url)
+    finally:
+        close()
+
+    assert blocked_status == 403
+    assert blocked_payload["code"] == "csrf_check_failed"
+    assert ok_status == 200
+    assert ok_payload["ok"] is True
