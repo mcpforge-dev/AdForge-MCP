@@ -57,10 +57,13 @@
     el.authName = document.getElementById("auth-name");
     el.authEmail = document.getElementById("auth-email");
     el.authPassword = document.getElementById("auth-password");
+    el.authPasswordToggle = document.getElementById("auth-password-toggle");
     el.authTitle = document.getElementById("auth-title");
     el.authSubtitle = document.getElementById("auth-subtitle");
     el.authSubmit = document.getElementById("auth-submit");
     el.authError = document.getElementById("auth-error");
+    el.authSuccess = document.getElementById("auth-success");
+    el.authSuccessApp = document.getElementById("auth-success-app");
     el.authTabs = Array.from(document.querySelectorAll("[data-auth-mode]"));
     el.gate = document.getElementById("gate");
     el.gateForm = document.getElementById("gate-form");
@@ -101,18 +104,7 @@
       enterAdmin();
       return;
     }
-    if (window.location.pathname === "/" && !getToken()) {
-      try {
-        const me = await api("/api/auth/me");
-        if (me.authenticated) {
-          state.user = me.user;
-          await loadCapabilities();
-          enterApp();
-          return;
-        }
-      } catch (error) {
-        /* public landing remains visible */
-      }
+    if (window.location.pathname === "/") {
       showLanding();
       return;
     }
@@ -158,7 +150,17 @@
     document.querySelectorAll("[data-auth-close]").forEach((node) => {
       node.addEventListener("click", () => closeAuth());
     });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !el.authModal.hidden) closeAuth();
+    });
     el.authTabs.forEach((tab) => tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode)));
+    el.authPasswordToggle.addEventListener("click", () => togglePasswordVisibility());
+    el.authSuccessApp.addEventListener("click", async () => {
+      closeAuth();
+      await loadCapabilities();
+      window.history.replaceState({}, "", "/app");
+      enterApp();
+    });
     el.authForm.addEventListener("submit", async (event) => {
       event.preventDefault();
       const payload = {
@@ -171,6 +173,10 @@
       try {
         const result = await api(`/api/auth/${state.authMode}`, "POST", payload);
         state.user = result.user || null;
+        if (state.authMode === "register") {
+          showRegistrationSuccess();
+          return;
+        }
         closeAuth();
         if (window.location.pathname === "/admin") {
           enterAdmin();
@@ -199,6 +205,9 @@
     setAuthMode(mode === "register" ? "register" : "login");
     el.authModal.hidden = false;
     hideAuthError();
+    el.authForm.hidden = false;
+    el.authSuccess.hidden = true;
+    resetPasswordVisibility();
     window.setTimeout(() => {
       const target = state.authMode === "register" ? el.authName : el.authEmail;
       target.focus();
@@ -207,6 +216,11 @@
 
   function closeAuth() {
     el.authModal.hidden = true;
+    hideAuthError();
+    el.authForm.reset();
+    el.authForm.hidden = false;
+    el.authSuccess.hidden = true;
+    resetPasswordVisibility();
   }
 
   function setAuthMode(mode) {
@@ -216,11 +230,39 @@
     el.authNameField.hidden = !isRegister;
     el.authName.required = isRegister;
     el.authPassword.autocomplete = isRegister ? "new-password" : "current-password";
+    el.authForm.dataset.mode = state.authMode;
+    el.authForm.hidden = false;
+    el.authSuccess.hidden = true;
+    resetPasswordVisibility();
     el.authTitle.textContent = isRegister ? "Создать аккаунт" : "Войти в AdForge MCP";
     el.authSubtitle.textContent = isRegister
       ? "Создайте аккаунт, чтобы подключить рекламные кабинеты и получить MCP доступ."
       : "Введите email и пароль, чтобы открыть личный кабинет.";
     el.authSubmit.textContent = isRegister ? "Зарегистрироваться" : "Войти";
+  }
+
+  function showRegistrationSuccess() {
+    hideAuthError();
+    el.authTitle.textContent = "Аккаунт создан";
+    el.authSubtitle.textContent = "Добро пожаловать в AdForge MCP.";
+    el.authForm.hidden = true;
+    el.authSuccess.hidden = false;
+    el.authSuccessApp.focus();
+  }
+
+  function togglePasswordVisibility() {
+    const shouldShow = el.authPassword.type === "password";
+    el.authPassword.type = shouldShow ? "text" : "password";
+    el.authPasswordToggle.textContent = shouldShow ? "Скрыть" : "Показать";
+    el.authPasswordToggle.setAttribute("aria-label", shouldShow ? "Скрыть пароль" : "Показать пароль");
+    el.authPasswordToggle.setAttribute("aria-pressed", shouldShow ? "true" : "false");
+  }
+
+  function resetPasswordVisibility() {
+    el.authPassword.type = "password";
+    el.authPasswordToggle.textContent = "Показать";
+    el.authPasswordToggle.setAttribute("aria-label", "Показать пароль");
+    el.authPasswordToggle.setAttribute("aria-pressed", "false");
   }
 
   function showAuthError(message) {

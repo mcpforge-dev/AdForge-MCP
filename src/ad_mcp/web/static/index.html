@@ -95,11 +95,20 @@
         </label>
         <label class="field">
           <span class="field__label">Пароль</span>
-          <input id="auth-password" type="password" autocomplete="current-password" placeholder="Минимум 8 символов" required>
+          <span class="password-field">
+            <input id="auth-password" type="password" autocomplete="current-password" placeholder="Минимум 8 символов" required>
+            <button id="auth-password-toggle" type="button" class="password-toggle" aria-label="Показать пароль" aria-pressed="false">Показать</button>
+          </span>
         </label>
         <p id="auth-error" class="gate__error" hidden></p>
         <button id="auth-submit" type="submit" class="btn btn--primary btn--block">Войти</button>
       </form>
+      <div id="auth-success" class="auth-success" hidden>
+        <div class="auth-success__mark" aria-hidden="true">✓</div>
+        <h2>Аккаунт создан</h2>
+        <p>Добро пожаловать в AdForge MCP. Теперь вы можете перейти в личный кабинет и подключить рекламные платформы.</p>
+        <button id="auth-success-app" type="button" class="btn btn--primary btn--block">Перейти в личный кабинет</button>
+      </div>
       <p class="modal__footnote">Старый код доступа пока остаётся как fallback для beta-проверок и операторских smoke-тестов.</p>
     </section>
   </div>
