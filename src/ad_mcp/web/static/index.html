@@ -9,6 +9,101 @@
 <body>
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
+  <!-- Public SaaS landing -->
+  <section id="landing" class="landing" hidden>
+    <header class="site-header">
+      <a class="site-brand" href="/" aria-label="AdForge MCP">
+        <span class="logo-dot" aria-hidden="true"></span>
+        <span>AdForge MCP</span>
+      </a>
+      <nav class="site-nav" aria-label="Навигация">
+        <a href="#features">Возможности</a>
+        <button id="landing-login" type="button" class="btn btn--ghost btn--small">Войти</button>
+        <button id="landing-register" type="button" class="btn btn--primary btn--small">Регистрация</button>
+      </nav>
+    </header>
+    <main class="landing-main">
+      <section class="hero">
+        <div class="hero__copy">
+          <span class="eyebrow">Hosted MCP для рекламных кабинетов</span>
+          <h1>Подключайте рекламные кабинеты к AI за несколько минут</h1>
+          <p>AdForge MCP безопасно передаёт данные из Meta Ads, Google Ads, TikTok Ads и Yandex Direct в Codex, Claude и другие AI-клиенты. Смотрите кампании, бюджеты, статусы и базовые метрики прямо в диалоге с AI.</p>
+          <div class="hero__actions">
+            <button type="button" class="btn btn--primary" data-auth-open="register">Зарегистрироваться</button>
+            <button type="button" class="btn btn--secondary" data-auth-open="login">Войти</button>
+          </div>
+          <div class="hero__benefits">
+            <span>OAuth-подключение</span>
+            <span>Персональный MCP token</span>
+            <span>Preview-only безопасность</span>
+            <span>Codex и Claude</span>
+          </div>
+        </div>
+        <div class="hero__visual" aria-label="Схема подключения">
+          <div class="flow-card flow-card--source">
+            <strong>Рекламные платформы</strong>
+            <span>Meta Ads · Google Ads · TikTok · Yandex</span>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-card flow-card--middle">
+            <strong>AdForge MCP</strong>
+            <span>OAuth, диагностика, preview-only</span>
+          </div>
+          <div class="flow-arrow" aria-hidden="true">→</div>
+          <div class="flow-card flow-card--target">
+            <strong>AI-клиент</strong>
+            <span>Codex · Claude · MCP clients</span>
+          </div>
+        </div>
+      </section>
+      <section id="features" class="feature-grid" aria-label="Возможности">
+        <article>
+          <h2>Подключение через сайт</h2>
+          <p>Клиент выбирает платформу, проходит OAuth и выбирает рекламные аккаунты без ручных файлов и локального запуска.</p>
+        </article>
+        <article>
+          <h2>Hosted MCP endpoint</h2>
+          <p>После входа пользователь получает URL сервера и подключает его во внешний MCP-клиент.</p>
+        </article>
+        <article>
+          <h2>Безопасные изменения</h2>
+          <p>Потенциально опасные действия показываются только как preview и не применяются в рекламных кабинетах.</p>
+        </article>
+      </section>
+    </main>
+  </section>
+
+  <!-- Email auth modal -->
+  <div id="auth-modal" class="modal" hidden>
+    <div class="modal__backdrop" data-auth-close></div>
+    <section class="modal__panel" role="dialog" aria-modal="true" aria-labelledby="auth-title">
+      <button type="button" class="modal__close" data-auth-close aria-label="Закрыть">×</button>
+      <div class="auth-tabs" role="tablist" aria-label="Вход или регистрация">
+        <button id="auth-tab-login" type="button" class="auth-tab is-active" data-auth-mode="login">Вход</button>
+        <button id="auth-tab-register" type="button" class="auth-tab" data-auth-mode="register">Регистрация</button>
+      </div>
+      <h2 id="auth-title">Войти в AdForge MCP</h2>
+      <p id="auth-subtitle" class="modal__hint">Введите email и пароль, чтобы открыть личный кабинет.</p>
+      <form id="auth-form" class="auth-form">
+        <label id="auth-name-field" class="field" hidden>
+          <span class="field__label">Имя</span>
+          <input id="auth-name" type="text" autocomplete="name" placeholder="Ваше имя">
+        </label>
+        <label class="field">
+          <span class="field__label">Email</span>
+          <input id="auth-email" type="email" autocomplete="email" placeholder="name@company.com" required>
+        </label>
+        <label class="field">
+          <span class="field__label">Пароль</span>
+          <input id="auth-password" type="password" autocomplete="current-password" placeholder="Минимум 8 символов" required>
+        </label>
+        <p id="auth-error" class="gate__error" hidden></p>
+        <button id="auth-submit" type="submit" class="btn btn--primary btn--block">Войти</button>
+      </form>
+      <p class="modal__footnote">Старый код доступа пока остаётся как fallback для beta-проверок и операторских smoke-тестов.</p>
+    </section>
+  </div>
+
   <!-- Access code gate -->
   <section id="gate" class="gate" hidden>
     <div class="gate__card">
@@ -47,10 +142,13 @@
         <nav class="topbar__nav" aria-label="Разделы">
           <button type="button" class="nav-tab is-active" data-nav="overview">Начало работы</button>
           <button type="button" class="nav-tab" data-nav="connections">Подключения</button>
+          <button type="button" class="nav-tab" data-nav="mcp">MCP</button>
           <button type="button" class="nav-tab" data-nav="diagnostics">Диагностика</button>
+          <button type="button" class="nav-tab" data-nav="profile">Профиль</button>
         </nav>
         <div class="topbar__side">
           <span id="preview-badge" class="badge badge--ok" title="Опасные действия только показываются как preview и не применяются.">Preview-only: включено</span>
+          <span id="user-pill" class="user-pill" hidden></span>
           <button id="signout" type="button" class="btn btn--ghost btn--small">Выйти</button>
         </div>
       </div>
@@ -82,6 +180,25 @@
             <pre class="code-block">Authorization: Bearer &lt;КОД_ДОСТУПА&gt;</pre>
           </article>
         </div>
+      </section>
+
+      <!-- MCP -->
+      <section id="section-mcp" class="section" data-section="mcp" hidden>
+        <div class="section-head">
+          <h2>MCP подключение</h2>
+          <p class="section-head__sub">Персональный MCP token будет добавлен следующим этапом. Пока для beta-smoke сохраняется общий серверный Bearer fallback.</p>
+        </div>
+        <article class="card mcp-card">
+          <h3 class="card__title">Hosted MCP URL</h3>
+          <div class="mcp-url-row">
+            <code id="mcp-url-panel" class="mcp-url">—</code>
+            <button id="copy-mcp-url-panel" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
+          </div>
+          <div class="token-placeholder">
+            <strong>Персональный MCP token</strong>
+            <span>Будет создан в отдельном безопасном этапе: raw token показывается один раз, в базе хранится только hash.</span>
+          </div>
+        </article>
       </section>
 
       <!-- Connections -->
@@ -119,11 +236,50 @@
           <div class="empty-state"><p>Запустите диагностику, чтобы увидеть состояние сервиса.</p></div>
         </div>
       </section>
+
+      <!-- Profile -->
+      <section id="section-profile" class="section" data-section="profile" hidden>
+        <div class="section-head">
+          <h2>Профиль</h2>
+          <p class="section-head__sub">Базовая информация аккаунта. Редактирование имени и смена пароля будут добавлены следующим этапом.</p>
+        </div>
+        <article id="profile-card" class="card">
+          <div class="empty-state"><p>Загружаем профиль...</p></div>
+        </article>
+      </section>
     </main>
 
     <footer class="footer">
       <p>AdForge MCP hosted beta · preview-only mode: опасные действия только показываются и не применяются.</p>
     </footer>
+  </div>
+
+  <!-- Admin shell -->
+  <div id="admin-app" class="app admin-app" hidden>
+    <header class="topbar">
+      <div class="topbar__inner">
+        <div class="topbar__brand">
+          <span class="logo-dot" aria-hidden="true"></span>
+          <span class="topbar__name">AdForge Admin</span>
+        </div>
+        <div class="topbar__side">
+          <span id="admin-user-pill" class="user-pill" hidden></span>
+          <button id="admin-open-app" type="button" class="btn btn--secondary btn--small">Кабинет</button>
+          <button id="admin-signout" type="button" class="btn btn--ghost btn--small">Выйти</button>
+        </div>
+      </div>
+    </header>
+    <main class="main">
+      <section class="section">
+        <div class="section-head">
+          <h2>Админ-панель</h2>
+          <p class="section-head__sub">Foundation-версия: пользователи, роли, статусы и базовая диагностика без показа секретов.</p>
+        </div>
+        <div id="admin-content">
+          <div class="empty-state"><p>Проверяем доступ администратора...</p></div>
+        </div>
+      </section>
+    </main>
   </div>
 
   <script src="/assets/app.js"></script>

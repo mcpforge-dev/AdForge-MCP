@@ -5,6 +5,7 @@ import logging
 import secrets
 import uuid
 from http import HTTPStatus
+from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, urlparse
@@ -12,6 +13,7 @@ from urllib.parse import parse_qs, urlparse
 from ad_mcp.core.errors import AdMCPError, normalize_error
 from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
+from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore, AuthUser
 from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.service import MetaDashboardService
@@ -50,6 +52,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     diagnostics = DiagnosticsService()
     hosted = HostedConnectionService()
     service = MetaDashboardService()
+    auth = AuthStore()
     _omit_response_body = False
 
     def _set_default_headers(self) -> None:
@@ -78,6 +81,27 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         if not self._omit_response_body:
             self.wfile.write(body)
 
+    def _send_auth_json(
+        self,
+        payload: dict,
+        *,
+        session_token: str | None = None,
+        clear_session: bool = False,
+        status: HTTPStatus = HTTPStatus.OK,
+    ) -> None:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        self.send_response(status)
+        self._set_default_headers()
+        self.send_header("Content-Type", "application/json; charset=utf-8")
+        if session_token:
+            self._send_session_cookie(session_token)
+        if clear_session:
+            self._clear_session_cookie()
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if not self._omit_response_body:
+            self.wfile.write(body)
+
     def _send_file(self, path: Path, content_type: str) -> None:
         body = path.read_bytes()
         self.send_response(HTTPStatus.OK)
@@ -95,12 +119,76 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
+    def _send_session_cookie(self, token: str) -> None:
+        cookie = SimpleCookie()
+        cookie[self.settings.auth_session_cookie_name] = token
+        cookie[self.settings.auth_session_cookie_name]["path"] = "/"
+        cookie[self.settings.auth_session_cookie_name]["httponly"] = True
+        cookie[self.settings.auth_session_cookie_name]["samesite"] = "Lax"
+        cookie[self.settings.auth_session_cookie_name]["max-age"] = str(self.settings.auth_session_ttl_hours * 3600)
+        if self.settings.auth_secure_cookies:
+            cookie[self.settings.auth_session_cookie_name]["secure"] = True
+        for morsel in cookie.values():
+            self.send_header("Set-Cookie", morsel.OutputString())
+
+    def _clear_session_cookie(self) -> None:
+        cookie = SimpleCookie()
+        cookie[self.settings.auth_session_cookie_name] = ""
+        cookie[self.settings.auth_session_cookie_name]["path"] = "/"
+        cookie[self.settings.auth_session_cookie_name]["httponly"] = True
+        cookie[self.settings.auth_session_cookie_name]["samesite"] = "Lax"
+        cookie[self.settings.auth_session_cookie_name]["max-age"] = "0"
+        if self.settings.auth_secure_cookies:
+            cookie[self.settings.auth_session_cookie_name]["secure"] = True
+        for morsel in cookie.values():
+            self.send_header("Set-Cookie", morsel.OutputString())
+
     def _error(self, message: str, status: HTTPStatus = HTTPStatus.BAD_REQUEST, code: str = "bad_request") -> None:
         self._send_json({"error": message, "code": code}, status)
+
+    def _session_token(self) -> str:
+        raw_cookie = str(self.headers.get("Cookie", "") or "")
+        if not raw_cookie:
+            return ""
+        cookie = SimpleCookie()
+        cookie.load(raw_cookie)
+        morsel = cookie.get(self.settings.auth_session_cookie_name)
+        return str(morsel.value) if morsel else ""
+
+    def _session_user(self) -> AuthUser | None:
+        if not self.settings.auth_enabled:
+            return None
+        try:
+            self.auth.ensure_schema()
+            return self.auth.user_for_session(self._session_token())
+        except (AuthDatabaseUnavailable, RuntimeError):
+            return None
+
+    def _ensure_session_user(self) -> AuthUser | None:
+        user = self._session_user()
+        if user:
+            return user
+        self._send_json(
+            {"error": "Нужно войти в аккаунт AdForge MCP.", "code": "session_required"},
+            HTTPStatus.UNAUTHORIZED,
+            {"WWW-Authenticate": 'Session realm="AdForge MCP"'},
+        )
+        return None
+
+    def _ensure_admin_user(self) -> AuthUser | None:
+        user = self._ensure_session_user()
+        if not user:
+            return None
+        if not user.is_admin:
+            self._error("Доступ к админ-панели есть только у администратора.", HTTPStatus.FORBIDDEN, "admin_required")
+            return None
+        return user
 
     def _ensure_api_authorized(self, route: str) -> bool:
         protected_route = route.startswith("/api/") or route == self.settings.mcp_route_path
         if not protected_route or not _api_token_required(self.settings):
+            return True
+        if route.startswith("/api/") and self._session_user():
             return True
         if not self.settings.web_api_token.strip():
             self._error(
@@ -189,7 +277,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = parsed.path
         try:
-            if route == "/":
+            if route in {"/", "/app", "/admin", "/login", "/register"}:
                 return self._send_file(STATIC_ROOT / "index.html", "text/html; charset=utf-8")
             if route in {"/health", "/healthz"}:
                 return self._send_json({"status": "ok", "service": "adforge-mcp-web"})
@@ -209,6 +297,25 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._oauth_callback_response("tiktok_ads", lambda query: self.hosted.oauth_callback("tiktok_ads", query))
             if route == self.settings.yandex_oauth_redirect_path:
                 return self._oauth_callback_response("yandex_direct", lambda query: self.hosted.oauth_callback("yandex_direct", query))
+            if route == "/api/auth/me":
+                user = self._session_user()
+                if not user:
+                    return self._send_json({"authenticated": False}, HTTPStatus.UNAUTHORIZED)
+                return self._send_json({"authenticated": True, "user": user.public_dict()})
+            if route == "/api/admin/users":
+                if not self._ensure_admin_user():
+                    return
+                return self._send_json({"users": self.auth.list_users()})
+            if route == "/api/admin/diagnostics":
+                if not self._ensure_admin_user():
+                    return
+                return self._send_json(
+                    {
+                        "database": self.auth.diagnostics(),
+                        "service": self.diagnostics.overview(live=False),
+                        "security": self.diagnostics.security(),
+                    }
+                )
 
             if not self._ensure_api_authorized(route):
                 return
@@ -366,6 +473,57 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = parsed.path
         try:
+            if route == "/api/auth/register":
+                payload = self._json_body()
+                if not self.settings.auth_enabled:
+                    return self._error("Регистрация временно отключена.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                registration_code = str(payload.get("access_code") or payload.get("registration_code") or "").strip()
+                configured_code = self.settings.auth_registration_code.strip()
+                if configured_code and not secrets.compare_digest(registration_code, configured_code):
+                    return self._error("Неверный код регистрации.", HTTPStatus.FORBIDDEN, "registration_code_required")
+                if not configured_code and not self.settings.auth_allow_public_registration:
+                    return self._error("Публичная регистрация временно закрыта.", HTTPStatus.FORBIDDEN, "registration_closed")
+                self.auth.ensure_schema()
+                user = self.auth.create_user(
+                    email=str(payload.get("email", "")),
+                    name=str(payload.get("name", "")),
+                    password=str(payload.get("password", "")),
+                    role="user",
+                    status="active",
+                )
+                token, _session_id = self.auth.create_session(
+                    user.id,
+                    user_agent=str(self.headers.get("User-Agent", "")),
+                    ip_address=str(self.client_address[0] if self.client_address else ""),
+                )
+                return self._send_auth_json({"authenticated": True, "user": user.public_dict()}, session_token=token)
+            if route == "/api/auth/login":
+                payload = self._json_body()
+                if not self.settings.auth_enabled:
+                    return self._error("Вход временно отключён.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                self.auth.ensure_schema()
+                user = self.auth.authenticate(str(payload.get("email", "")), str(payload.get("password", "")))
+                token, _session_id = self.auth.create_session(
+                    user.id,
+                    user_agent=str(self.headers.get("User-Agent", "")),
+                    ip_address=str(self.client_address[0] if self.client_address else ""),
+                )
+                return self._send_auth_json({"authenticated": True, "user": user.public_dict()}, session_token=token)
+            if route == "/api/auth/logout":
+                self.auth.revoke_session(self._session_token())
+                return self._send_auth_json({"ok": True}, clear_session=True)
+            if route == "/api/admin/users/status":
+                if not self._ensure_admin_user():
+                    return
+                payload = self._json_body()
+                user = self.auth.set_user_status(str(payload["user_id"]), str(payload["status"]))
+                return self._send_json({"user": user})
+            if route == "/api/admin/users/role":
+                if not self._ensure_admin_user():
+                    return
+                payload = self._json_body()
+                user = self.auth.set_user_role(str(payload["user_id"]), str(payload["role"]))
+                return self._send_json({"user": user})
             if not self._ensure_api_authorized(route):
                 return
             payload = self._json_body()
@@ -425,6 +583,7 @@ def main() -> None:
     AdsWebHandler.diagnostics = DiagnosticsService(settings)
     AdsWebHandler.hosted = HostedConnectionService(settings)
     AdsWebHandler.service = MetaDashboardService(settings)
+    AdsWebHandler.auth = AuthStore(settings)
     if _api_token_required(settings) and not settings.web_api_token.strip():
         LOGGER.warning("AD_MCP_WEB_API_TOKEN is required for beta/production web API access but is not configured.")
     server = ThreadingHTTPServer((host, port), AdsWebHandler)

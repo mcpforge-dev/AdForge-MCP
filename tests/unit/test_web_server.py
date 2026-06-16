@@ -7,6 +7,7 @@ from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from ad_mcp.settings import Settings
+from ad_mcp.web.auth_store import AuthStore
 from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.server import AdsWebHandler, _api_token_required, _extract_request_token, _request_token_is_valid
@@ -65,11 +66,12 @@ def test_custom_beta_token_header_authorizes_request() -> None:
 
 
 def _serve(settings: Settings):
-    previous = (AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service)
+    previous = (AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service, AdsWebHandler.auth)
     AdsWebHandler.settings = settings
     AdsWebHandler.diagnostics = DiagnosticsService(settings)
     AdsWebHandler.hosted = HostedConnectionService(settings)
     AdsWebHandler.service = MetaDashboardService(settings)
+    AdsWebHandler.auth = AuthStore(settings)
     server = ThreadingHTTPServer(("127.0.0.1", 0), AdsWebHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -79,7 +81,7 @@ def _serve(settings: Settings):
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
-        AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service = previous
+        AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service, AdsWebHandler.auth = previous
 
     return base_url, close
 
@@ -89,6 +91,28 @@ def _get_json(base_url: str, path: str, token: str | None = None) -> tuple[int, 
     if token:
         headers["Authorization"] = f"Bearer {token}"
     request = Request(f"{base_url}{path}", headers=headers)
+    try:
+        with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+            return exc.code, json.loads(exc.read().decode("utf-8"))
+
+
+def _post_json(base_url: str, path: str, payload: dict, cookie: str | None = None) -> tuple[int, dict, str]:
+    headers = {"Accept": "application/json", "Content-Type": "application/json"}
+    if cookie:
+        headers["Cookie"] = cookie
+    request = Request(f"{base_url}{path}", data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    try:
+        with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            return response.status, json.loads(response.read().decode("utf-8")), response.headers.get("Set-Cookie", "")
+    except HTTPError as exc:
+        body = exc.read().decode("utf-8")
+        return exc.code, json.loads(body or "{}"), exc.headers.get("Set-Cookie", "")
+
+
+def _get_json_with_cookie(base_url: str, path: str, cookie: str) -> tuple[int, dict]:
+    request = Request(f"{base_url}{path}", headers={"Accept": "application/json", "Cookie": cookie})
     try:
         with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
             return response.status, json.loads(response.read().decode("utf-8"))
@@ -171,3 +195,75 @@ def test_head_requests_return_headers_without_body(tmp_path) -> None:
     assert all(body == b"" for _status, body in results)
     assert protected_status == 401
     assert protected_body == b""
+
+
+def test_email_registration_creates_session_and_authorizes_dashboard_api(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        status, payload, cookie = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "Client User", "email": "client@example.com", "password": "super-secret"},
+        )
+        me_status, me = _get_json_with_cookie(base_url, "/api/auth/me", cookie)
+        capabilities_status, capabilities = _get_json_with_cookie(base_url, "/api/beta/capabilities", cookie)
+        admin_status, admin_payload = _get_json_with_cookie(base_url, "/api/admin/users", cookie)
+    finally:
+        close()
+
+    assert status == 200
+    assert payload["user"]["email"] == "client@example.com"
+    assert "adforge_session=" in cookie
+    assert "super-secret" not in str(payload)
+    assert me_status == 200
+    assert me["authenticated"] is True
+    assert capabilities_status == 200
+    assert capabilities["security"]["tokens_returned"] is False
+    assert admin_status == 403
+    assert admin_payload["code"] == "admin_required"
+
+
+def test_admin_session_can_list_users_and_toggle_status(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    store.create_user(email="admin@example.com", name="Admin", password="super-secret", role="admin")
+    base_url, close = _serve(settings)
+    try:
+        login_status, login, cookie = _post_json(
+            base_url,
+            "/api/auth/login",
+            {"email": "admin@example.com", "password": "super-secret"},
+        )
+        users_status, users = _get_json_with_cookie(base_url, "/api/admin/users", cookie)
+        target_id = users["users"][0]["id"]
+        update_status, update, _ = _post_json(
+            base_url,
+            "/api/admin/users/status",
+            {"user_id": target_id, "status": "disabled"},
+            cookie,
+        )
+    finally:
+        close()
+
+    assert login_status == 200
+    assert login["user"]["role"] == "admin"
+    assert users_status == 200
+    assert users["users"][0]["email"] == "admin@example.com"
+    assert update_status == 200
+    assert update["user"]["status"] == "disabled"

@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     web_port: int = 8765
     web_api_token: str = ""
     web_max_body_bytes: int = 65536
+    database_url: str = ""
+    auth_enabled: bool = True
+    auth_session_cookie_name: str = "adforge_session"
+    auth_session_ttl_hours: int = 720
+    auth_secure_cookies: bool = False
+    auth_allow_public_registration: bool = True
+    auth_registration_code: str = ""
+    initial_admin_email: str = ""
     preview_only: bool = True
     public_base_url: str = ""
     mcp_public_url: str = ""
@@ -98,6 +106,13 @@ class Settings(BaseSettings):
     @property
     def connection_store_file(self) -> Path:
         return self.project_root / self.connection_store_path
+
+    @property
+    def effective_database_url(self) -> str:
+        configured = self.database_url.strip()
+        if configured:
+            return configured
+        return f"sqlite:///{(self.project_root / 'tokens' / 'adforge_auth.db').as_posix()}"
 
     @property
     def mcp_route_path(self) -> str:

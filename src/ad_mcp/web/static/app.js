@@ -25,6 +25,8 @@
 
   const state = {
     section: "overview",
+    authMode: "login",
+    user: null,
     capabilities: null,
     connections: null,
     activePending: null,
@@ -38,12 +40,28 @@
 
   document.addEventListener("DOMContentLoaded", () => {
     cache();
+    bindLanding();
+    bindAuth();
     bindGate();
     bindShell();
     boot();
   });
 
   function cache() {
+    el.landing = document.getElementById("landing");
+    el.landingLogin = document.getElementById("landing-login");
+    el.landingRegister = document.getElementById("landing-register");
+    el.authModal = document.getElementById("auth-modal");
+    el.authForm = document.getElementById("auth-form");
+    el.authNameField = document.getElementById("auth-name-field");
+    el.authName = document.getElementById("auth-name");
+    el.authEmail = document.getElementById("auth-email");
+    el.authPassword = document.getElementById("auth-password");
+    el.authTitle = document.getElementById("auth-title");
+    el.authSubtitle = document.getElementById("auth-subtitle");
+    el.authSubmit = document.getElementById("auth-submit");
+    el.authError = document.getElementById("auth-error");
+    el.authTabs = Array.from(document.querySelectorAll("[data-auth-mode]"));
     el.gate = document.getElementById("gate");
     el.gateForm = document.getElementById("gate-form");
     el.gateToken = document.getElementById("gate-token");
@@ -59,6 +77,10 @@
     el.nextSteps = document.getElementById("next-steps");
     el.mcpUrl = document.getElementById("mcp-url");
     el.copyMcpUrl = document.getElementById("copy-mcp-url");
+    el.mcpUrlPanel = document.getElementById("mcp-url-panel");
+    el.copyMcpUrlPanel = document.getElementById("copy-mcp-url-panel");
+    el.profileCard = document.getElementById("profile-card");
+    el.userPill = document.getElementById("user-pill");
     el.connectionsNotice = document.getElementById("connections-notice");
     el.pendingPanel = document.getElementById("pending-panel");
     el.connectionsList = document.getElementById("connections-list");
@@ -66,16 +88,148 @@
     el.diagLive = document.getElementById("diag-live");
     el.diagRun = document.getElementById("diag-run");
     el.diagnosticsContent = document.getElementById("diagnostics-content");
+    el.adminApp = document.getElementById("admin-app");
+    el.adminContent = document.getElementById("admin-content");
+    el.adminUserPill = document.getElementById("admin-user-pill");
+    el.adminOpenApp = document.getElementById("admin-open-app");
+    el.adminSignout = document.getElementById("admin-signout");
     el.toastRoot = document.getElementById("toast-root");
   }
 
   async function boot() {
+    if (window.location.pathname === "/admin") {
+      enterAdmin();
+      return;
+    }
+    if (window.location.pathname === "/" && !getToken()) {
+      try {
+        const me = await api("/api/auth/me");
+        if (me.authenticated) {
+          state.user = me.user;
+          await loadCapabilities();
+          enterApp();
+          return;
+        }
+      } catch (error) {
+        /* public landing remains visible */
+      }
+      showLanding();
+      return;
+    }
     try {
-      state.capabilities = await api("/api/beta/capabilities");
+      await loadMeSilently();
+      await loadCapabilities();
       enterApp();
     } catch (error) {
+      if (error.status === 401 && !getToken()) {
+        showLanding();
+        openAuth("login");
+        return;
+      }
       showGate(error.status === 401 ? "" : humanizeError(error));
     }
+  }
+
+  async function loadCapabilities() {
+    state.capabilities = await api("/api/beta/capabilities");
+    return state.capabilities;
+  }
+
+  async function loadMeSilently() {
+    try {
+      const me = await api("/api/auth/me");
+      state.user = me.authenticated ? me.user : null;
+    } catch (error) {
+      state.user = null;
+    }
+  }
+
+  /* ---------- public landing and auth ---------- */
+
+  function bindLanding() {
+    document.querySelectorAll("[data-auth-open]").forEach((button) => {
+      button.addEventListener("click", () => openAuth(button.dataset.authOpen || "login"));
+    });
+    el.landingLogin.addEventListener("click", () => openAuth("login"));
+    el.landingRegister.addEventListener("click", () => openAuth("register"));
+  }
+
+  function bindAuth() {
+    document.querySelectorAll("[data-auth-close]").forEach((node) => {
+      node.addEventListener("click", () => closeAuth());
+    });
+    el.authTabs.forEach((tab) => tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode)));
+    el.authForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const payload = {
+        email: el.authEmail.value.trim(),
+        password: el.authPassword.value,
+      };
+      if (state.authMode === "register") payload.name = el.authName.value.trim();
+      setLoading(el.authSubmit, true);
+      hideAuthError();
+      try {
+        const result = await api(`/api/auth/${state.authMode}`, "POST", payload);
+        state.user = result.user || null;
+        closeAuth();
+        if (window.location.pathname === "/admin") {
+          enterAdmin();
+          return;
+        }
+        await loadCapabilities();
+        window.history.replaceState({}, "", "/app");
+        enterApp();
+      } catch (error) {
+        showAuthError(humanizeError(error));
+      } finally {
+        setLoading(el.authSubmit, false);
+      }
+    });
+  }
+
+  function showLanding() {
+    el.landing.hidden = false;
+    el.gate.hidden = true;
+    el.app.hidden = true;
+    el.adminApp.hidden = true;
+    closeAuth();
+  }
+
+  function openAuth(mode) {
+    setAuthMode(mode === "register" ? "register" : "login");
+    el.authModal.hidden = false;
+    hideAuthError();
+    window.setTimeout(() => {
+      const target = state.authMode === "register" ? el.authName : el.authEmail;
+      target.focus();
+    }, 0);
+  }
+
+  function closeAuth() {
+    el.authModal.hidden = true;
+  }
+
+  function setAuthMode(mode) {
+    state.authMode = mode === "register" ? "register" : "login";
+    el.authTabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.authMode === state.authMode));
+    const isRegister = state.authMode === "register";
+    el.authNameField.hidden = !isRegister;
+    el.authName.required = isRegister;
+    el.authPassword.autocomplete = isRegister ? "new-password" : "current-password";
+    el.authTitle.textContent = isRegister ? "Создать аккаунт" : "Войти в AdForge MCP";
+    el.authSubtitle.textContent = isRegister
+      ? "Создайте аккаунт, чтобы подключить рекламные кабинеты и получить MCP доступ."
+      : "Введите email и пароль, чтобы открыть личный кабинет.";
+    el.authSubmit.textContent = isRegister ? "Зарегистрироваться" : "Войти";
+  }
+
+  function showAuthError(message) {
+    el.authError.textContent = message;
+    el.authError.hidden = false;
+  }
+
+  function hideAuthError() {
+    el.authError.hidden = true;
   }
 
   /* ---------- token gate ---------- */
@@ -104,7 +258,10 @@
   }
 
   function showGate(message) {
+    el.landing.hidden = true;
+    el.adminApp.hidden = true;
     el.app.hidden = true;
+    closeAuth();
     el.gate.hidden = false;
     el.gateToken.value = "";
     if (message) showGateError(message);
@@ -121,16 +278,25 @@
     el.gateError.hidden = true;
   }
 
+  function renderUserPill() {
+    const label = state.user?.email || "Beta fallback";
+    el.userPill.textContent = label;
+    el.userPill.hidden = false;
+    if (el.adminUserPill) {
+      el.adminUserPill.textContent = label;
+      el.adminUserPill.hidden = false;
+    }
+  }
+
   /* ---------- app shell ---------- */
 
   function bindShell() {
     el.navTabs.forEach((tab) => tab.addEventListener("click", () => setSection(tab.dataset.nav)));
-    el.signout.addEventListener("click", () => {
-      clearToken();
-      state.capabilities = null;
-      state.connections = null;
-      state.activePending = null;
-      showGate();
+    el.signout.addEventListener("click", () => logout());
+    el.adminSignout.addEventListener("click", () => logout());
+    el.adminOpenApp.addEventListener("click", () => {
+      window.history.replaceState({}, "", "/app");
+      boot();
     });
     el.connectionsRefresh.addEventListener("click", () => loadConnections());
     el.diagRun.addEventListener("click", () => runDiagnostics());
@@ -140,11 +306,36 @@
       await copyText(url);
       toast("MCP URL скопирован.", "success");
     });
+    el.copyMcpUrlPanel.addEventListener("click", async () => {
+      const url = el.mcpUrlPanel.textContent.trim();
+      if (!url || url === "—") return;
+      await copyText(url);
+      toast("MCP URL скопирован.", "success");
+    });
+  }
+
+  async function logout() {
+    try {
+      await api("/api/auth/logout", "POST", {});
+    } catch (error) {
+      /* beta fallback may not have a web session */
+    }
+    clearToken();
+    state.user = null;
+    state.capabilities = null;
+    state.connections = null;
+    state.activePending = null;
+    window.history.replaceState({}, "", "/");
+    showLanding();
   }
 
   function enterApp() {
+    el.landing.hidden = true;
     el.gate.hidden = true;
+    el.adminApp.hidden = true;
     el.app.hidden = false;
+    closeAuth();
+    renderUserPill();
     applyPreviewBadge(state.capabilities);
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get("oauth_error");
@@ -177,15 +368,45 @@
     });
     if (state.section === "overview") loadOverview();
     if (state.section === "connections") loadConnections();
+    if (state.section === "mcp") renderMcpPanel();
     if (state.section === "diagnostics" && !state.diagnosticsRun) {
       el.diagnosticsContent.innerHTML = emptyState("Запустите диагностику, чтобы увидеть состояние сервиса.");
     }
+    if (state.section === "profile") renderProfile();
   }
 
   function applyPreviewBadge(capabilities) {
     const enabled = capabilities?.preview_only?.enabled !== false;
     el.previewBadge.textContent = enabled ? "Preview-only: включено" : "Preview-only: выключено";
     el.previewBadge.className = `badge ${enabled ? "badge--ok" : "badge--err"}`;
+  }
+
+  function renderMcpPanel() {
+    const mcpUrl = state.capabilities?.mcp?.url || state.connections?.mcp?.url || "";
+    el.mcpUrlPanel.textContent = mcpUrl || "—";
+    el.copyMcpUrlPanel.disabled = !mcpUrl;
+  }
+
+  function renderProfile() {
+    const user = state.user;
+    if (!user) {
+      el.profileCard.innerHTML = `
+        <h3 class="card__title">Beta fallback</h3>
+        <p class="card__hint">Вы вошли по старому коду доступа. Email-профиль появится после входа или регистрации.</p>
+        <button type="button" class="btn btn--primary btn--small" data-auth-open="login">Войти по email</button>
+      `;
+      el.profileCard.querySelector("[data-auth-open]").addEventListener("click", () => openAuth("login"));
+      return;
+    }
+    el.profileCard.innerHTML = `
+      <div class="kv">
+        <div class="kv-row"><span>Имя</span><strong>${esc(user.name || "—")}</strong></div>
+        <div class="kv-row"><span>Email</span><strong>${esc(user.email)}</strong></div>
+        <div class="kv-row"><span>Роль</span><strong>${esc(user.role)}</strong></div>
+        <div class="kv-row"><span>Статус</span><strong>${esc(user.status)}</strong></div>
+        <div class="kv-row"><span>Workspace</span><strong class="mono">${esc(user.workspace_id || "—")}</strong></div>
+      </div>
+    `;
   }
 
   /* ---------- overview ---------- */
@@ -217,6 +438,10 @@
 
     el.mcpUrl.textContent = mcpUrl || "—";
     el.copyMcpUrl.disabled = !mcpUrl;
+    if (el.mcpUrlPanel) {
+      el.mcpUrlPanel.textContent = mcpUrl || "—";
+      el.copyMcpUrlPanel.disabled = !mcpUrl;
+    }
 
     const stats = [
       stat("Сервис", badge("Hosted beta · live", "ok")),
@@ -575,6 +800,114 @@
     `;
   }
 
+  /* ---------- admin ---------- */
+
+  async function enterAdmin() {
+    el.landing.hidden = true;
+    el.gate.hidden = true;
+    el.app.hidden = true;
+    el.adminApp.hidden = false;
+    closeAuth();
+    try {
+      const me = await api("/api/auth/me");
+      state.user = me.user || null;
+      renderUserPill();
+      if (!state.user || state.user.role !== "admin") {
+        el.adminContent.innerHTML = errorState("Доступ к /admin есть только у пользователя с ролью admin.");
+        return;
+      }
+      await loadAdmin();
+    } catch (error) {
+      el.adminContent.innerHTML = `
+        <article class="card">
+          <h3 class="card__title">Нужен вход администратора</h3>
+          <p class="card__hint">Войдите под email-аккаунтом с ролью admin. Старый код доступа не открывает админку.</p>
+          <button id="admin-login-button" type="button" class="btn btn--primary btn--small">Войти</button>
+        </article>
+      `;
+      document.getElementById("admin-login-button").addEventListener("click", () => openAuth("login"));
+    }
+  }
+
+  async function loadAdmin() {
+    el.adminContent.innerHTML = emptyState("Загружаем пользователей...");
+    try {
+      const [users, diagnostics] = await Promise.all([
+        api("/api/admin/users"),
+        api("/api/admin/diagnostics"),
+      ]);
+      renderAdmin(users.users || [], diagnostics);
+    } catch (error) {
+      el.adminContent.innerHTML = errorState(humanizeError(error));
+    }
+  }
+
+  function renderAdmin(users, diagnostics) {
+    const rows = users.map((user) => `
+      <tr>
+        <td><strong>${esc(user.name || "—")}</strong><br><span class="mono">${esc(user.email || "")}</span></td>
+        <td>${esc(user.role || "user")}</td>
+        <td>${statusBadgeMarkup(user.status === "active" ? "Активен" : "Отключён", user.status === "active" ? "ok" : "warn")}</td>
+        <td>${esc(formatTime(user.created_at))}</td>
+        <td>${esc(formatTime(user.last_login_at))}</td>
+        <td>${esc(user.platform_connections ?? 0)}</td>
+        <td>
+          <div class="admin-table__actions">
+            <button class="btn btn--secondary btn--small" data-admin-status="${escAttr(user.id)}" data-status="${user.status === "active" ? "disabled" : "active"}">${user.status === "active" ? "Отключить" : "Включить"}</button>
+            <button class="btn btn--secondary btn--small" data-admin-role="${escAttr(user.id)}" data-role="${user.role === "admin" ? "user" : "admin"}">${user.role === "admin" ? "Сделать user" : "Сделать admin"}</button>
+          </div>
+        </td>
+      </tr>
+    `).join("");
+    const database = diagnostics.database || {};
+    el.adminContent.innerHTML = `
+      <div class="diag-grid">
+        <article class="card">
+          <h3 class="card__title">Database</h3>
+          ${kvGrid([
+            ["Статус", statusValue(database.status)],
+            ["Driver", esc(database.driver || "—")],
+            ["Users", esc(database.users ?? "—")],
+            ["Active sessions", esc(database.active_sessions ?? "—")],
+          ])}
+        </article>
+        <article class="card">
+          <h3 class="card__title">Security</h3>
+          ${kvGrid([
+            ["Preview-only", boolValue(diagnostics.security?.preview_only, true)],
+            ["API token configured", boolValue(diagnostics.security?.beta_token_configured, true)],
+            ["Secrets redacted", boolValue(diagnostics.security?.secrets_redacted, true)],
+          ])}
+        </article>
+      </div>
+      <article class="card">
+        <h3 class="card__title">Пользователи</h3>
+        <table class="admin-table">
+          <thead><tr><th>Пользователь</th><th>Роль</th><th>Статус</th><th>Создан</th><th>Последний вход</th><th>Платформы</th><th>Действия</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="7">Пользователей пока нет.</td></tr>`}</tbody>
+        </table>
+      </article>
+    `;
+    el.adminContent.querySelectorAll("[data-admin-status]").forEach((button) => {
+      button.addEventListener("click", () => updateAdminUser(button.dataset.adminStatus, { status: button.dataset.status }, "/api/admin/users/status", button));
+    });
+    el.adminContent.querySelectorAll("[data-admin-role]").forEach((button) => {
+      button.addEventListener("click", () => updateAdminUser(button.dataset.adminRole, { role: button.dataset.role }, "/api/admin/users/role", button));
+    });
+  }
+
+  async function updateAdminUser(userId, payload, endpoint, button) {
+    setLoading(button, true);
+    try {
+      await api(endpoint, "POST", { user_id: userId, ...payload });
+      await loadAdmin();
+      toast("Пользователь обновлён.", "success");
+    } catch (error) {
+      toast(humanizeError(error), "error");
+      setLoading(button, false);
+    }
+  }
+
   /* ---------- status helpers ---------- */
 
   function resolveStatus(platform) {
@@ -645,6 +978,10 @@
     return `<span class="badge badge--${tone}">${esc(text)}</span>`;
   }
 
+  function statusBadgeMarkup(text, tone) {
+    return `<span class="badge badge--${escAttr(tone)}">${esc(text)}</span>`;
+  }
+
   function monoText(value) {
     return `<span class="mono">${esc(value)}</span>`;
   }
@@ -686,7 +1023,7 @@
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
     if (body) headers["Content-Type"] = "application/json";
-    const response = await fetch(path, { method, headers, body: body ? JSON.stringify(body) : undefined });
+    const response = await fetch(path, { method, headers, credentials: "same-origin", body: body ? JSON.stringify(body) : undefined });
     const text = await response.text();
     let payload = {};
     if (text) {
@@ -712,7 +1049,13 @@
       clearToken();
       state.capabilities = null;
       state.connections = null;
-      showGate("Сессия истекла или код доступа неверный. Введите код доступа еще раз.");
+      if (state.user) {
+        state.user = null;
+        showLanding();
+        openAuth("login");
+      } else {
+        showGate("Сессия истекла или код доступа неверный. Введите код доступа еще раз.");
+      }
       return true;
     }
     return false;
