@@ -31,6 +31,7 @@
     connections: null,
     mcpToken: null,
     activePending: null,
+    dismissedPendingIds: new Set(),
     notice: null,
     diagnosticsRun: false,
   };
@@ -632,12 +633,36 @@
 
   function renderConnections(connections) {
     el.connectionsNotice.innerHTML = state.notice ? noticeMarkup(state.notice.text, state.notice.tone) : "";
-    el.pendingPanel.innerHTML = state.activePending ? renderPendingPanel(state.activePending) : "";
     const platforms = (connections && connections.platforms) || [];
+    syncActivePending(platforms);
+    el.pendingPanel.innerHTML = state.activePending ? renderPendingPanel(state.activePending) : "";
     el.connectionsList.innerHTML = platforms.length
       ? platforms.map(renderPlatformCard).join("")
       : emptyState("Пока нет подключенных рекламных аккаунтов. Начните с подключения рекламной платформы.");
     bindConnectionActions();
+  }
+
+  function syncActivePending(platforms) {
+    const pending = firstActivePending(platforms);
+    if (state.activePending) {
+      const stillExists = platforms.some((platform) =>
+        (platform.pending_selections || []).some((item) =>
+          item.pending_id === state.activePending.pending_id && item.status === "pending_account_selection",
+        ),
+      );
+      if (!stillExists) state.activePending = null;
+    }
+    if (!state.activePending && pending && !state.dismissedPendingIds.has(pending.pending_id)) {
+      state.activePending = pending;
+    }
+  }
+
+  function firstActivePending(platforms) {
+    for (const platform of platforms) {
+      const pending = (platform.pending_selections || []).find((item) => item.status === "pending_account_selection");
+      if (pending) return pending;
+    }
+    return null;
   }
 
   function renderPlatformCard(platform) {
@@ -736,7 +761,7 @@
       <article class="card pending-card">
         <h3 class="card__title">Выберите аккаунты · ${esc(providerLabel(pending.provider))}</h3>
         <p class="card__hint">Отметьте рекламные аккаунты, которые сможет использовать AdForge MCP. Секреты хранятся только на сервере и не показываются в интерфейсе.</p>
-        <form id="pending-form" data-provider="${escAttr(pending.provider)}">
+        <form id="pending-form" data-provider="${escAttr(pending.provider)}" data-pending-id="${escAttr(pending.pending_id)}">
           <div class="pending-list">${options}</div>
           <div class="pending-actions">
             <button type="submit" class="btn btn--primary btn--small" ${accounts.length ? "" : "disabled"}>Сохранить выбранные аккаунты</button>
@@ -783,6 +808,7 @@
       if (cancel) {
         cancel.addEventListener("click", () => {
           state.activePending = null;
+          state.dismissedPendingIds.add(form.dataset.pendingId || "");
           renderConnections(state.connections);
         });
       }
@@ -836,6 +862,7 @@
         pending_id: state.activePending.pending_id,
         account_ids: accountIds,
       });
+      state.dismissedPendingIds.add(state.activePending.pending_id);
       state.activePending = null;
       state.notice = { tone: "success", text: "Аккаунты подключены. MCP tools теперь могут использовать эту платформу." };
       await loadConnections();

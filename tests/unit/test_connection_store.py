@@ -222,3 +222,23 @@ def test_pending_selections_mark_expired_records(tmp_path: Path) -> None:
     pending_status = store.pending_selections("meta_ads")
 
     assert pending_status[0]["status"] == "expired"
+
+
+def test_select_pending_accounts_clears_stale_provider_pending_records(tmp_path: Path) -> None:
+    store = HostedConnectionStore(tmp_path / "connections.json")
+    first = store.save_oauth_pending(
+        "yandex_direct",
+        [{"name": "Yandex Client", "account_id": "client-login", "direct_client_login": "client-login"}],
+        credentials={"access_token": "access-token"},
+    )
+    store.save_oauth_pending(
+        "yandex_direct",
+        [{"name": "Yandex Client", "account_id": "client-login", "direct_client_login": "client-login"}],
+        credentials={"access_token": "new-access-token"},
+    )
+
+    selected = store.select_pending_accounts("yandex_direct", first["pending_id"], ["client-login"])
+
+    assert selected["status"] == "connected"
+    assert store.pending_selections("yandex_direct") == []
+    assert store.safe_provider_status("yandex_direct")["accounts"][0]["account_id"] == "client-login"

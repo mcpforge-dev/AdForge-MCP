@@ -327,7 +327,8 @@ class HostedConnectionStore:
         if not selected_accounts:
             raise ValueError("Selected account_ids were not found in pending OAuth discovery.")
         status = self.save_provider_config(provider, {"provider": provider, "accounts": selected_accounts}, source="dashboard_oauth")
-        self._remove_pending(provider, pending_id)
+        # Completing an OAuth selection makes older pending records for the same provider stale.
+        self._remove_all_pending(provider)
         return {"provider": provider, "status": "connected", "accounts": status["accounts"]}
 
     def _pending(self, provider: str, pending_id: str) -> dict[str, Any]:
@@ -359,6 +360,14 @@ class HostedConnectionStore:
         pending_root = data.get("oauth_pending", {}) if isinstance(data.get("oauth_pending", {}), dict) else {}
         provider_pending = pending_root.get(provider, {}) if isinstance(pending_root.get(provider, {}), dict) else {}
         provider_pending.pop(pending_id, None)
+        self._write(data)
+
+    def _remove_all_pending(self, provider: str) -> None:
+        data = self.read()
+        pending_root = data.get("oauth_pending", {}) if isinstance(data.get("oauth_pending", {}), dict) else {}
+        if isinstance(pending_root, dict):
+            pending_root.pop(provider, None)
+            data["oauth_pending"] = pending_root
         self._write(data)
 
     def _write(self, data: dict[str, Any]) -> None:
