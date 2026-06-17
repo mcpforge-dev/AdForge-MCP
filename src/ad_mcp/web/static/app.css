@@ -190,7 +190,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 }
 
 .site-header {
-  width: min(1120px, calc(100% - 32px));
+  width: min(1280px, calc(100% - 48px));
   margin: 0 auto;
   height: 72px;
   display: flex;
@@ -223,7 +223,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .site-nav a:hover { color: var(--text); }
 
 .landing-main {
-  width: min(1120px, calc(100% - 32px));
+  width: min(1280px, calc(100% - 48px));
   margin: 0 auto;
   padding: 48px 0 72px;
 }
@@ -642,7 +642,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 }
 
 .topbar__inner {
-  max-width: 1080px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 0 24px;
   min-height: 58px;
@@ -655,7 +655,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .topbar__brand { display: flex; align-items: center; gap: 9px; font-weight: 600; }
 
 .tabs-shell {
-  width: min(1080px, calc(100% - 48px));
+  width: min(1280px, calc(100% - 48px));
   margin: 14px auto 0;
   display: flex;
   align-items: center;
@@ -694,7 +694,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .main {
   width: 100%;
-  max-width: 1080px;
+  max-width: 1280px;
   margin: 0 auto;
   padding: 28px 24px 48px;
   flex: 1;
