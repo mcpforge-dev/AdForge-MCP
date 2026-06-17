@@ -577,6 +577,77 @@ def test_forgot_password_handles_missing_smtp_without_user_enumeration(tmp_path)
     assert "SMTP" not in existing["error"]
 
 
+def test_registration_with_existing_email_is_enumeration_safe(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        first_status, _first, _cookie = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "Client User", "email": "client@example.com", "password": "super-secret"},
+        )
+        dup_status, dup, _ = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "Another", "email": "client@example.com", "password": "super-secret"},
+        )
+    finally:
+        close()
+
+    assert first_status == 200
+    assert dup_status == 400
+    assert dup["code"] == "registration_failed"
+    # The client must not learn that the email already exists.
+    assert "существ" not in dup["error"].lower()
+    assert "exist" not in dup["error"].lower()
+
+
+def test_registration_requires_code_when_configured(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        auth_registration_code="beta-invite-code-123",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        no_code_status, no_code, _ = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "No Code", "email": "nocode@example.com", "password": "super-secret"},
+        )
+        wrong_code_status, wrong_code, _ = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "Wrong", "email": "wrong@example.com", "password": "super-secret", "access_code": "nope"},
+        )
+        ok_status, ok_payload, ok_cookie = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "Valid", "email": "valid@example.com", "password": "super-secret", "access_code": "beta-invite-code-123"},
+        )
+    finally:
+        close()
+
+    assert no_code_status == 403
+    assert no_code["code"] == "registration_code_required"
+    assert wrong_code_status == 403
+    assert wrong_code["code"] == "registration_code_required"
+    assert ok_status == 200
+    assert ok_payload["user"]["email"] == "valid@example.com"
+    assert "adforge_session=" in ok_cookie
+
+
 def test_password_reset_token_expires(tmp_path) -> None:
     database_path = tmp_path / "auth.db"
     settings = Settings(

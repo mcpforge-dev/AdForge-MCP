@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, quote, urlparse
 from ad_mcp.core.errors import AdMCPError, normalize_error
 from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
-from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore, AuthUser, AuthValidationError
+from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore, AuthUser, AuthValidationError, EmailAlreadyRegisteredError
 from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.emailer import EmailDeliveryError, PasswordResetEmailer
 from ad_mcp.web.hosted import HostedConnectionService
@@ -656,13 +656,21 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if not configured_code and not self.settings.auth_allow_public_registration:
                     return self._error("Публичная регистрация временно закрыта.", HTTPStatus.FORBIDDEN, "registration_closed")
                 self.auth.ensure_schema()
-                user = self.auth.create_user(
-                    email=str(payload.get("email", "")),
-                    name=str(payload.get("name", "")),
-                    password=str(payload.get("password", "")),
-                    role="user",
-                    status="active",
-                )
+                try:
+                    user = self.auth.create_user(
+                        email=str(payload.get("email", "")),
+                        name=str(payload.get("name", "")),
+                        password=str(payload.get("password", "")),
+                        role="user",
+                        status="active",
+                    )
+                except EmailAlreadyRegisteredError:
+                    # Do not reveal whether the email already exists (enumeration).
+                    return self._error(
+                        "Не удалось создать аккаунт. Проверьте данные или обратитесь к администратору.",
+                        HTTPStatus.BAD_REQUEST,
+                        "registration_failed",
+                    )
                 token, _session_id = self.auth.create_session(
                     user.id,
                     user_agent=str(self.headers.get("User-Agent", "")),

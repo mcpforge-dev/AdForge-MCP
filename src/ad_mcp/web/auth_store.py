@@ -30,6 +30,15 @@ class AuthValidationError(AuthStoreError):
     pass
 
 
+class EmailAlreadyRegisteredError(AuthValidationError):
+    """Raised when an email is already registered.
+
+    The public registration endpoint maps this to a generic message so it
+    cannot be used to enumerate which emails already have accounts. Operator
+    tooling (admin CLI) can still surface the specific cause.
+    """
+
+
 @dataclass(frozen=True)
 class AuthUser:
     id: str
@@ -216,7 +225,7 @@ class AuthStore:
         with self._connect() as connection:
             existing = self._query_one(connection, "SELECT id FROM users WHERE email = ?", (email,))
             if existing:
-                raise AuthValidationError("Пользователь с таким email уже существует.")
+                raise EmailAlreadyRegisteredError("Пользователь с таким email уже существует.")
             self._execute(
                 connection,
                 """
