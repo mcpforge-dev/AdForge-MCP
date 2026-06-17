@@ -527,6 +527,13 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   flex-wrap: wrap;
 }
 
+.mini-title {
+  display: inline-block;
+  color: var(--text);
+  font-size: 12.5px;
+  margin-bottom: 6px;
+}
+
 /* ---------- Token gate ---------- */
 
 .gate {

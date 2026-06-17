@@ -99,6 +99,16 @@ OAUTH_PUBLIC_ENABLE_SETTINGS = {
 }
 
 OAUTH_PROVIDER_SETUP = {
+    "meta_ads": [
+        "Meta App Dashboard: добавьте точный Redirect URL в Facebook Login / Valid OAuth Redirect URIs.",
+        "Redirect URL должен совпадать символ в символ: {redirect_url}",
+        "Проверьте app id/app secret, Ads API permissions и доступ тестового пользователя к Business/Ad Accounts.",
+    ],
+    "google_ads": [
+        "Google Cloud Console: OAuth Client type должен быть Web application.",
+        "Authorized redirect URI должен совпадать символ в символ: {redirect_url}",
+        "Проверьте OAuth consent screen, test users, Google Ads API и AD_MCP_GOOGLE_ADS_DEVELOPER_TOKEN.",
+    ],
     "tiktok_ads": [
         "TikTok for Business Developer: добавьте точный Redirect URL в приложение.",
         "Redirect URL должен совпадать символ в символ: {redirect_url}",
@@ -178,6 +188,25 @@ class HostedConnectionService:
             "live_credentials_checked": False,
             "message": "Diagnostics validate local OAuth configuration and storage state. They do not prove live provider credentials work.",
             "providers": [self._oauth_diagnostics_for(platform) for platform in requested],
+        }
+
+    def oauth_readiness(self, provider: str | None = None) -> dict[str, Any]:
+        requested = [platform for platform in PLATFORMS if provider in (None, platform.provider)]
+        if provider is not None and not requested:
+            raise ValueError(f"Unsupported provider: {provider}")
+        platforms = [self._oauth_readiness_for(platform) for platform in requested]
+        ready_count = sum(1 for item in platforms if item["overall_status"] == "ready_to_connect")
+        return {
+            "mode": "oauth_end_to_end_readiness",
+            "public_base_url": self._public_base_url(),
+            "storage_scope": "global_compatibility_store",
+            "workspace_scoping": "limited_until_connection_store_migration",
+            "summary": {
+                "platform_count": len(platforms),
+                "ready_to_connect": ready_count,
+                "blocked": len(platforms) - ready_count,
+            },
+            "platforms": platforms,
         }
 
     def dashboard_oauth_return_url(self, provider: str, payload: dict[str, Any] | None = None, error: str | None = None) -> str:
@@ -417,6 +446,115 @@ class HostedConnectionService:
             "notes": self._oauth_provider_notes(platform.provider),
             "setup_instructions": self._oauth_provider_setup(platform.provider),
         }
+
+    def _oauth_readiness_for(self, platform: PlatformDescriptor) -> dict[str, Any]:
+        diagnostic = self._oauth_diagnostics_for(platform)
+        platform_status = self._platform_status(platform)
+        missing_required = diagnostic["missing_required_env"]
+        credentials_present = diagnostic["status"] == "configured"
+        public_enabled = bool(diagnostic["public_connection_enabled"])
+        connected_account_count = int(diagnostic["connected_account_count"])
+        pending_selection_count = int(diagnostic["pending_selection_count"])
+        authorize_status = self._authorize_url_readiness(platform.provider, credentials_present, public_enabled)
+        connect_enabled = credentials_present and public_enabled and authorize_status["status"] == "ready"
+        if connect_enabled:
+            overall_status = "ready_to_connect"
+        elif missing_required:
+            overall_status = "blocked_missing_credentials"
+        elif not public_enabled:
+            overall_status = "blocked_provider_dashboard_check"
+        else:
+            overall_status = "blocked_authorize_url"
+        read_tools_status = self._read_tools_status(platform.provider, connected_account_count)
+        blockers = self._oauth_blockers(platform.provider, missing_required, public_enabled, authorize_status)
+        return {
+            "provider": platform.provider,
+            "label": platform.label,
+            "overall_status": overall_status,
+            "credentials_present": credentials_present,
+            "missing_required_env": missing_required,
+            "public_connection_enabled": public_enabled,
+            "expected_redirect_url": diagnostic["redirect_url"],
+            "authorize_url": authorize_status,
+            "connect_button_enabled": connect_enabled,
+            "callback_endpoint": diagnostic["callback_endpoint"],
+            "pending_account_selection_supported": True,
+            "pending_selection_count": pending_selection_count,
+            "connected_account_count": connected_account_count,
+            "selected_accounts_saved": connected_account_count > 0,
+            "read_tools_status": read_tools_status,
+            "last_oauth_attempt_status": "not_recorded",
+            "last_callback_status": "not_recorded",
+            "last_provider_error": "not_recorded",
+            "storage_limitation": "OAuth connections currently use the global compatibility connection store; full user/workspace scoping needs a separate migration.",
+            "client_status": "Доступно для подключения" if connect_enabled else "Платформа временно недоступна",
+            "admin_status": platform_status["diagnostic_summary"]["status"],
+            "required_operator_action": self._operator_actions(platform.provider, missing_required, public_enabled, blockers),
+            "blockers": blockers,
+            "setup_instructions": diagnostic["setup_instructions"],
+        }
+
+    def _authorize_url_readiness(self, provider: str, credentials_present: bool, public_enabled: bool) -> dict[str, Any]:
+        if not credentials_present:
+            return {"status": "blocked_missing_credentials", "message": "Required OAuth env credentials are missing."}
+        if not public_enabled:
+            return {
+                "status": "blocked_public_disabled",
+                "message": "Credentials are present, but public OAuth is disabled until provider dashboard settings are verified.",
+            }
+        service = self._oauth_service(provider)
+        if service is None:
+            return {"status": "unsupported_provider", "message": "OAuth flow is not implemented."}
+        return {
+            "status": "ready",
+            "message": "Authorize URL can be generated for client connect.",
+            "redirect_uri": _join_url(self._public_base_url(), self._oauth_redirect_path(provider)),
+            "authorize_url_endpoint": f"/api/hosted/oauth/{OAUTH_PROVIDER_SLUGS[provider]}/authorize-url",
+        }
+
+    def _read_tools_status(self, provider: str, connected_account_count: int) -> str:
+        if connected_account_count <= 0:
+            return "waiting_for_connected_accounts"
+        if provider in {"meta_ads", "google_ads"}:
+            return "real_read_tools_available_when_provider_api_permissions_allow"
+        return "limited_not_available_for_campaigns_or_metrics_until_provider_reads_are_completed"
+
+    def _oauth_blockers(
+        self,
+        provider: str,
+        missing_required: list[str],
+        public_enabled: bool,
+        authorize_status: dict[str, Any],
+    ) -> list[str]:
+        blockers: list[str] = []
+        if missing_required:
+            blockers.append("missing_required_env")
+        if provider in OAUTH_PUBLIC_ENABLE_SETTINGS and not public_enabled:
+            blockers.append("public_enabled_false")
+        if authorize_status["status"] != "ready":
+            blockers.append(authorize_status["status"])
+        return blockers
+
+    def _operator_actions(
+        self,
+        provider: str,
+        missing_required: list[str],
+        public_enabled: bool,
+        blockers: list[str],
+    ) -> list[str]:
+        actions: list[str] = []
+        if missing_required:
+            actions.append(f"Добавьте env на VPS: {', '.join(missing_required)}.")
+        if "public_enabled_false" in blockers:
+            enable_env = {
+                "tiktok_ads": "AD_MCP_TIKTOK_OAUTH_PUBLIC_ENABLED=true",
+                "yandex_direct": "AD_MCP_YANDEX_OAUTH_PUBLIC_ENABLED=true",
+            }.get(provider)
+            if enable_env:
+                actions.append(f"После проверки provider dashboard включите {enable_env}.")
+        if not actions:
+            actions.append("Запустите ручной OAuth connect и проверьте callback/account selection.")
+        return actions
 
     def _oauth_provider_notes(self, provider: str) -> list[str]:
         notes = {

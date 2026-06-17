@@ -366,6 +366,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                         "database": self.auth.diagnostics(),
                         "service": self.diagnostics.overview(live=False),
                         "oauth": self.hosted.oauth_diagnostics(),
+                        "oauth_readiness": self.hosted.oauth_readiness(),
                         "security": self.diagnostics.security(),
                     }
                 )
@@ -402,6 +403,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_json(self.hosted.connections())
             if route == "/api/hosted/oauth/diagnostics":
                 return self._send_json(self.hosted.oauth_diagnostics())
+            if route == "/api/hosted/oauth/readiness":
+                return self._send_json(self.hosted.oauth_readiness())
             if route == "/api/hosted/oauth/meta/start":
                 return self._redirect(self.hosted.meta_oauth_redirect_url())
             if route == "/api/hosted/oauth/meta/diagnostics":

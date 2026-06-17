@@ -168,6 +168,57 @@ def test_next_platform_oauth_can_be_publicly_enabled_after_provider_dashboard_ch
     assert "tiktok-app-secret" not in str(info)
 
 
+def test_oauth_readiness_reports_all_live_redirects_and_blockers_without_secrets(tmp_path: Path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        public_base_url="https://mcp.holymedia.kz",
+        tiktok_oauth_app_id="tiktok-app-id",
+        tiktok_oauth_app_secret="tiktok-app-secret",
+        yandex_oauth_client_id="yandex-client-id",
+        yandex_oauth_client_secret="yandex-client-secret",
+    )
+    service = HostedConnectionService(settings)
+
+    readiness = service.oauth_readiness()
+    platforms = {item["provider"]: item for item in readiness["platforms"]}
+
+    assert readiness["summary"] == {"platform_count": 4, "ready_to_connect": 0, "blocked": 4}
+    assert platforms["meta_ads"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/meta/callback"
+    assert platforms["google_ads"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/google/callback"
+    assert platforms["tiktok_ads"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/tiktok/callback"
+    assert platforms["yandex_direct"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/yandex/callback"
+    assert platforms["meta_ads"]["overall_status"] == "blocked_missing_credentials"
+    assert platforms["google_ads"]["overall_status"] == "blocked_missing_credentials"
+    assert platforms["tiktok_ads"]["overall_status"] == "blocked_provider_dashboard_check"
+    assert platforms["yandex_direct"]["overall_status"] == "blocked_provider_dashboard_check"
+    assert platforms["tiktok_ads"]["authorize_url"]["status"] == "blocked_public_disabled"
+    assert platforms["yandex_direct"]["authorize_url"]["status"] == "blocked_public_disabled"
+    assert "tiktok-app-secret" not in str(readiness)
+    assert "yandex-client-secret" not in str(readiness)
+
+
+def test_oauth_readiness_marks_google_ready_when_credentials_are_present(tmp_path: Path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        public_base_url="https://mcp.holymedia.kz",
+        google_oauth_client_id="google-client-id",
+        google_oauth_client_secret="google-client-secret",
+        google_ads_developer_token="developer-token",
+    )
+    service = HostedConnectionService(settings)
+
+    readiness = service.oauth_readiness("google_ads")
+    google = readiness["platforms"][0]
+
+    assert readiness["summary"] == {"platform_count": 1, "ready_to_connect": 1, "blocked": 0}
+    assert google["overall_status"] == "ready_to_connect"
+    assert google["connect_button_enabled"] is True
+    assert google["authorize_url"]["status"] == "ready"
+    assert google["authorize_url"]["redirect_uri"] == "https://mcp.holymedia.kz/oauth/google/callback"
+    assert "google-client-secret" not in str(readiness)
+    assert "developer-token" not in str(readiness)
+
+
 def test_import_local_provider_writes_hosted_store_without_exposing_secrets(tmp_path: Path) -> None:
     config = tmp_path / "ads_config.yaml"
     config.write_text(

@@ -252,6 +252,7 @@ def main() -> int:
     checks.append(capabilities)
     if not args.skip_oauth:
         checks.append(_check_authorized_api(args.base_url, args.token, "/api/hosted/oauth/diagnostics"))
+        checks.append(_check_authorized_api(args.base_url, args.token, "/api/hosted/oauth/readiness"))
     checks.append(_check_preview_only(diagnostics.data, ready.data))
     checks.append(_check_security_posture(security_diagnostics.data))
     checks.append(_check_public_mcp_url(mcp_diagnostics.data))

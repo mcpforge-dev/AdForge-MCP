@@ -1020,7 +1020,7 @@
       </tr>
     `).join("");
     const database = diagnostics.database || {};
-    const oauthProviders = diagnostics.oauth?.providers || [];
+    const oauthProviders = diagnostics.oauth_readiness?.platforms || diagnostics.oauth?.providers || [];
     const oauthCards = oauthProviders.map(renderAdminOAuthCard).join("");
     el.adminContent.innerHTML = `
       <div class="diag-grid">
@@ -1069,9 +1069,13 @@
   }
 
   function renderAdminOAuthCard(provider) {
-    const ready = provider.client_visible_status === "ready_to_connect";
+    const ready = provider.overall_status === "ready_to_connect" || provider.client_visible_status === "ready_to_connect";
     const missing = provider.missing_required_env || [];
     const setup = provider.setup_instructions || [];
+    const actions = provider.required_operator_action || [];
+    const blockers = provider.blockers || [];
+    const authorize = provider.authorize_url || {};
+    const redirectUrl = provider.expected_redirect_url || provider.redirect_url || "—";
     return `
       <div class="admin-oauth-card">
         <div class="admin-oauth-card__head">
@@ -1079,11 +1083,17 @@
           ${statusBadgeMarkup(ready ? "Готово клиенту" : "Платформа настраивается", ready ? "ok" : "warn")}
         </div>
         <div class="kv">
-          <div class="kv-row"><span>Env credentials</span><strong>${provider.status === "configured" ? "есть" : "не хватает"}</strong></div>
+          <div class="kv-row"><span>Overall</span><strong>${esc(statusLabel(provider.overall_status || provider.client_visible_status || provider.status))}</strong></div>
+          <div class="kv-row"><span>Env credentials</span><strong>${provider.credentials_present || provider.status === "configured" ? "есть" : "не хватает"}</strong></div>
           <div class="kv-row"><span>Public OAuth</span><strong>${provider.public_connection_enabled ? "включён" : "выключен"}</strong></div>
-          <div class="kv-row"><span>Redirect URL</span><strong class="mono">${esc(provider.redirect_url || "—")}</strong></div>
+          <div class="kv-row"><span>Authorize URL</span><strong>${esc(statusLabel(authorize.status || "not_checked"))}</strong></div>
+          <div class="kv-row"><span>Redirect URL</span><strong class="mono">${esc(redirectUrl)}</strong></div>
+          <div class="kv-row"><span>Connected accounts</span><strong>${esc(provider.connected_account_count ?? 0)}</strong></div>
+          <div class="kv-row"><span>Last attempt</span><strong>${esc(statusLabel(provider.last_oauth_attempt_status || "not_recorded"))}</strong></div>
         </div>
         ${missing.length ? `<p class="card__hint">Не настроено: ${esc(missing.join(", "))}</p>` : ""}
+        ${blockers.length ? `<p class="card__hint">Блокеры: ${esc(blockers.join(", "))}</p>` : ""}
+        ${actions.length ? `<div><strong class="mini-title">Что сделать оператору</strong><ul class="list-plain">${actions.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>` : ""}
         ${setup.length ? `<ul class="list-plain">${setup.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}
       </div>
     `;
@@ -1155,6 +1165,15 @@
       token_expired: "токен истек",
       env_missing: "платформа настраивается",
       provider_setup_required: "нужна настройка провайдера",
+      platform_configuring: "платформа настраивается",
+      ready_to_connect: "готово к подключению",
+      blocked_missing_credentials: "нет credentials",
+      blocked_provider_dashboard_check: "нужна проверка provider dashboard",
+      blocked_authorize_url: "authorize URL заблокирован",
+      blocked_public_disabled: "public OAuth выключен",
+      missing_env: "нет env",
+      not_checked: "не проверено",
+      not_recorded: "не записывается",
       api_error: "ошибка API",
       needs_setup: "нужна настройка",
       degraded: "частично работает",
