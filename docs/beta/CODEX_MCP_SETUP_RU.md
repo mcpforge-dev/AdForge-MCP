@@ -6,7 +6,7 @@
 
 - Dashboard URL.
 - Hosted MCP URL, например `https://your-domain.com/mcp`.
-- Beta token.
+- Персональный MCP token из dashboard: `/app` -> `MCP` -> `Создать MCP token`.
 - Подключенные рекламные аккаунты в dashboard.
 
 ## Шаги в Codex
@@ -17,16 +17,16 @@
 4. Указать имя: `AdForge MCP`.
 5. Выбрать HTTP/Streamable HTTP transport, если интерфейс клиента дает выбор.
 6. Указать URL hosted endpoint: `https://your-domain.com/mcp`.
-7. Передать beta token как bearer header:
+7. Передать персональный MCP token как bearer header:
 
 ```http
-Authorization: Bearer <BETA_TOKEN>
+Authorization: Bearer <PERSONAL_MCP_TOKEN>
 ```
 
 8. Сохранить сервер.
 9. Проверить, что tools AdForge MCP появились в списке.
 
-UI Codex может меняться. Важны не названия кнопок, а параметры подключения: server name, hosted MCP endpoint и auth/beta token.
+UI Codex может меняться. Важны не названия кнопок, а параметры подключения: server name, hosted MCP endpoint и bearer token.
 
 ## Пример config
 
@@ -39,7 +39,7 @@ UI Codex может меняться. Важны не названия кноп�
       "transport": "streamable_http",
       "url": "https://your-domain.com/mcp",
       "headers": {
-        "Authorization": "Bearer <BETA_TOKEN>"
+        "Authorization": "Bearer <PERSONAL_MCP_TOKEN>"
       }
     }
   }
@@ -60,7 +60,7 @@ UI Codex может меняться. Важны не названия кноп�
 Проверьте:
 
 - MCP URL скопирован из dashboard без лишних пробелов;
-- beta token передан через `Authorization: Bearer ...`;
+- personal MCP token передан через `Authorization: Bearer ...`;
 - dashboard показывает `MCP ready`;
 - endpoint `/api/diagnostics/mcp` доступен через dashboard API;
 - hosted MCP process запущен на сервере.

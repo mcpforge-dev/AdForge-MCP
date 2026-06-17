@@ -13,15 +13,18 @@ AdForge MCP - hosted MCP-сервис. Клиент не скачивает GitH
 
 ## Быстрый путь beta-пользователя
 
-1. Получить dashboard URL, hosted MCP URL и beta token.
-2. Открыть dashboard.
-3. Перейти в `Connections`.
+1. Получить dashboard URL и создать email-аккаунт.
+2. Открыть dashboard и войти в личный кабинет.
+3. Перейти в `Подключения`.
 4. Подключить Meta Ads и/или Google Ads через OAuth.
 5. Выбрать доступные рекламные аккаунты.
-6. Запустить диагностику.
-7. Скопировать MCP URL.
-8. Добавить AdForge MCP в AI-клиент.
-9. Проверить tools запросом: `Проверь диагностику AdForge MCP`.
+6. Перейти в `MCP`, скопировать MCP URL и создать персональный MCP token.
+7. Сохранить raw token сразу: он показывается только один раз.
+8. Добавить AdForge MCP в Codex / Claude / другой MCP-клиент как hosted Streamable HTTP server.
+9. Указать `Authorization: Bearer <ваш персональный MCP token>`.
+10. Проверить tools запросом: `Проверь диагностику AdForge MCP`.
+
+Старый общий beta token из `AD_MCP_WEB_API_TOKEN` остается server/operator fallback для smoke-проверок и текущей beta-инфраструктуры. Клиентский UI должен использовать персональный MCP token пользователя.
 
 ## Подробные инструкции
 

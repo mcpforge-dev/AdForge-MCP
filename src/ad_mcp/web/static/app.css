@@ -351,21 +351,20 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .modal__close {
   position: absolute;
-  right: 12px;
-  top: 12px;
-  width: 34px;
-  height: 34px;
+  right: 14px;
+  top: 14px;
+  width: 38px;
+  height: 38px;
   border-radius: 999px;
   border: 1px solid transparent;
-  background: transparent;
+  background: rgba(255, 255, 255, 0.02);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 22px;
+  font-size: 24px;
   line-height: 1;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
+  display: grid;
+  place-items: center;
+  padding: 0 0 2px;
 }
 
 .modal__close:hover { color: var(--text); border-color: var(--border); }
@@ -429,17 +428,44 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   white-space: nowrap;
 }
 
-.token-placeholder {
-  border: 1px dashed var(--border);
+.token-status,
+.token-reveal {
+  border: 1px solid var(--border);
   border-radius: var(--radius-small);
   padding: 14px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
   color: var(--text-muted);
+  margin-bottom: 10px;
 }
 
-.token-placeholder strong { color: var(--text); }
+.token-reveal {
+  border-color: rgba(245, 183, 89, 0.38);
+  background: var(--warn-bg);
+}
+
+.token-status strong,
+.token-reveal strong { color: var(--text); }
+
+.token-secret-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.token-secret {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  padding: 8px 10px;
+  overflow-x: auto;
+  white-space: nowrap;
+}
+
+.token-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
 
 .admin-table {
   width: 100%;
@@ -554,15 +580,34 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   max-width: 1080px;
   margin: 0 auto;
   padding: 0 24px;
-  height: 58px;
+  min-height: 58px;
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 24px;
 }
 
 .topbar__brand { display: flex; align-items: center; gap: 9px; font-weight: 600; }
 
-.topbar__nav { display: flex; gap: 4px; flex: 1; min-width: 0; overflow-x: auto; }
+.tabs-shell {
+  width: min(1080px, calc(100% - 48px));
+  margin: 14px auto 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.tabs-bar {
+  min-width: 0;
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding: 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: rgba(18, 21, 27, 0.78);
+}
 
 .nav-tab {
   background: transparent;
@@ -579,7 +624,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .nav-tab:hover { color: var(--text); }
 .nav-tab.is-active { color: var(--text); background: var(--bg-elevated); }
 
-.topbar__side { display: flex; align-items: center; gap: 10px; }
+.topbar__side { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
 
 .main {
   width: 100%;
@@ -932,10 +977,13 @@ details.raw-json pre {
   .hero h1 { font-size: 36px; }
   .hero p { font-size: 16px; }
   .admin-table { display: block; overflow-x: auto; }
-  .topbar__inner { padding: 8px 14px; gap: 12px; height: auto; flex-wrap: wrap; }
-  .topbar__nav { order: 3; width: 100%; }
+  .topbar__inner { padding: 8px 14px; gap: 12px; min-height: auto; }
+  .tabs-shell { width: calc(100% - 28px); align-items: flex-start; flex-direction: column; margin-top: 10px; }
+  .tabs-bar { width: 100%; border-radius: var(--radius-small); }
   .main { padding: 20px 14px 40px; }
   .stats-grid { grid-template-columns: 1fr; }
   .platform-card__head { flex-direction: column; }
-  .mcp-url-row { flex-direction: column; }
+  .mcp-url-row, .token-secret-row { flex-direction: column; }
 }
+
+body:has(.app:not([hidden])) { overflow-x: hidden; }

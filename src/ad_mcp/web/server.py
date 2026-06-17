@@ -13,7 +13,7 @@ from urllib.parse import parse_qs, urlparse
 from ad_mcp.core.errors import AdMCPError, normalize_error
 from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
-from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore, AuthUser
+from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore, AuthUser, AuthValidationError
 from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.service import MetaDashboardService
@@ -267,6 +267,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             return "invalid_json"
         if isinstance(exc, KeyError):
             return "missing_field"
+        if isinstance(exc, AuthValidationError):
+            return "validation_error"
         return str(normalize_error(exc).get("code") or "bad_request")
 
     def _unexpected_error(self, operation: str, exc: Exception) -> None:
@@ -346,6 +348,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if not user:
                     return self._send_json({"authenticated": False}, HTTPStatus.UNAUTHORIZED)
                 return self._send_json({"authenticated": True, "user": user.public_dict()})
+            if route == "/api/mcp-token":
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                return self._send_json({"token": self.auth.mcp_token_summary(user.id)})
             if route == "/api/admin/users":
                 if not self._ensure_admin_user():
                     return
@@ -558,6 +566,32 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return
                 self.auth.revoke_session(self._session_token())
                 return self._send_auth_json({"ok": True}, clear_session=True)
+            if route == "/api/mcp-token/create":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                result = self.auth.create_mcp_token(user)
+                return self._send_json({"token": {key: value for key, value in result.items() if key != "raw_token"}, "raw_token": result["raw_token"]})
+            if route == "/api/mcp-token/rotate":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                result = self.auth.rotate_mcp_token(user)
+                return self._send_json({"token": {key: value for key, value in result.items() if key != "raw_token"}, "raw_token": result["raw_token"]})
+            if route == "/api/mcp-token/revoke":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                return self._send_json({"token": self.auth.revoke_mcp_token(user.id)})
             if route == "/api/admin/users/status":
                 if not self._ensure_same_origin_session_post(route):
                     return
@@ -574,6 +608,14 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 payload = self._json_body()
                 user = self.auth.set_user_role(str(payload["user_id"]), str(payload["role"]))
                 return self._send_json({"user": user})
+            if route == "/api/admin/users/mcp-token/revoke":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                if not self._ensure_admin_user():
+                    return
+                payload = self._json_body()
+                self.auth.ensure_schema()
+                return self._send_json({"token": self.auth.revoke_mcp_token(str(payload["user_id"]))})
             if not self._ensure_api_authorized(route):
                 return
             if not self._ensure_same_origin_session_post(route):

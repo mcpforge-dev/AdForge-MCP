@@ -29,6 +29,7 @@
     user: null,
     capabilities: null,
     connections: null,
+    mcpToken: null,
     activePending: null,
     notice: null,
     diagnosticsRun: false,
@@ -82,6 +83,11 @@
     el.copyMcpUrl = document.getElementById("copy-mcp-url");
     el.mcpUrlPanel = document.getElementById("mcp-url-panel");
     el.copyMcpUrlPanel = document.getElementById("copy-mcp-url-panel");
+    el.mcpTokenStatus = document.getElementById("mcp-token-status");
+    el.mcpTokenReveal = document.getElementById("mcp-token-reveal");
+    el.mcpTokenRaw = document.getElementById("mcp-token-raw");
+    el.copyMcpToken = document.getElementById("copy-mcp-token");
+    el.mcpTokenActions = document.getElementById("mcp-token-actions");
     el.profileCard = document.getElementById("profile-card");
     el.userPill = document.getElementById("user-pill");
     el.connectionsNotice = document.getElementById("connections-notice");
@@ -354,6 +360,12 @@
       await copyText(url);
       toast("MCP URL скопирован.", "success");
     });
+    el.copyMcpToken.addEventListener("click", async () => {
+      const token = el.mcpTokenRaw.textContent.trim();
+      if (!token) return;
+      await copyText(token);
+      toast("MCP token скопирован. Сохраните его в безопасном месте.", "success");
+    });
   }
 
   async function logout() {
@@ -366,6 +378,7 @@
     state.user = null;
     state.capabilities = null;
     state.connections = null;
+    state.mcpToken = null;
     state.activePending = null;
     window.history.replaceState({}, "", "/");
     showLanding();
@@ -427,6 +440,94 @@
     const mcpUrl = state.capabilities?.mcp?.url || state.connections?.mcp?.url || "";
     el.mcpUrlPanel.textContent = mcpUrl || "—";
     el.copyMcpUrlPanel.disabled = !mcpUrl;
+    if (!state.user) {
+      state.mcpToken = null;
+      renderMcpTokenStatus(null, { sessionRequired: true });
+      return;
+    }
+    loadMcpToken();
+  }
+
+  async function loadMcpToken() {
+    el.mcpTokenReveal.hidden = true;
+    el.mcpTokenRaw.textContent = "";
+    el.mcpTokenStatus.innerHTML = emptyState("Загружаем статус token...");
+    el.mcpTokenActions.innerHTML = "";
+    try {
+      const payload = await api("/api/mcp-token");
+      state.mcpToken = payload.token || null;
+      renderMcpTokenStatus(state.mcpToken);
+    } catch (error) {
+      if (handle401(error)) return;
+      renderMcpTokenStatus(null, { error: humanizeError(error) });
+    }
+  }
+
+  function renderMcpTokenStatus(token, options = {}) {
+    if (options.sessionRequired) {
+      el.mcpTokenStatus.innerHTML = `
+        <strong>Персональный MCP token</strong>
+        <span>Войдите по email, чтобы создать персональный token. Старый beta fallback остаётся только для операторских smoke-проверок.</span>
+      `;
+      el.mcpTokenActions.innerHTML = `<button type="button" class="btn btn--primary btn--small" data-auth-open="login">Войти по email</button>`;
+      el.mcpTokenActions.querySelector("[data-auth-open]").addEventListener("click", () => openAuth("login"));
+      return;
+    }
+    if (options.error) {
+      el.mcpTokenStatus.innerHTML = errorState(options.error);
+      return;
+    }
+    const exists = Boolean(token?.exists);
+    const active = exists && token.status === "active";
+    el.mcpTokenStatus.innerHTML = `
+      <strong>Персональный MCP token</strong>
+      <div class="kv">
+        <div class="kv-row"><span>Статус</span><strong>${statusBadgeMarkup(active ? "Активен" : exists ? "Отозван" : "Не создан", active ? "ok" : exists ? "warn" : "muted")}</strong></div>
+        <div class="kv-row"><span>Prefix</span><strong class="mono">${esc(token?.token_prefix || "—")}</strong></div>
+        <div class="kv-row"><span>Создан</span><strong>${esc(formatTime(token?.created_at))}</strong></div>
+        <div class="kv-row"><span>Последнее использование</span><strong>${esc(formatTime(token?.last_used_at))}</strong></div>
+      </div>
+      <span>Используйте этот token в Codex или Claude как Bearer token. Raw token показывается только после создания или ротации.</span>
+    `;
+    el.mcpTokenActions.innerHTML = active
+      ? `
+        <button type="button" class="btn btn--secondary btn--small" data-mcp-token-action="rotate">Сгенерировать новый token</button>
+        <button type="button" class="btn btn--danger btn--small" data-mcp-token-action="revoke">Отозвать token</button>
+      `
+      : `<button type="button" class="btn btn--primary btn--small" data-mcp-token-action="create">Создать MCP token</button>`;
+    el.mcpTokenActions.querySelectorAll("[data-mcp-token-action]").forEach((button) => {
+      button.addEventListener("click", () => runMcpTokenAction(button.dataset.mcpTokenAction, button));
+    });
+  }
+
+  async function runMcpTokenAction(action, button) {
+    if (action === "revoke" && !window.confirm("Отозвать текущий MCP token? После этого подключение в Codex или Claude перестанет работать.")) return;
+    if (action === "rotate" && !window.confirm("Сгенерировать новый MCP token? Старый token перестанет работать.")) return;
+    const endpoint = {
+      create: "/api/mcp-token/create",
+      rotate: "/api/mcp-token/rotate",
+      revoke: "/api/mcp-token/revoke",
+    }[action];
+    if (!endpoint) return;
+    setLoading(button, true);
+    try {
+      const payload = await api(endpoint, "POST", {});
+      state.mcpToken = payload.token || null;
+      renderMcpTokenStatus(state.mcpToken);
+      if (payload.raw_token) {
+        el.mcpTokenRaw.textContent = payload.raw_token;
+        el.mcpTokenReveal.hidden = false;
+        toast("Token создан. Скопируйте его сейчас: он показывается только один раз.", "success");
+      } else {
+        el.mcpTokenReveal.hidden = true;
+        el.mcpTokenRaw.textContent = "";
+        toast("MCP token отозван.", "success");
+      }
+    } catch (error) {
+      if (handle401(error)) return;
+      toast(humanizeError(error), "error");
+      renderMcpTokenStatus(state.mcpToken);
+    }
   }
 
   function renderProfile() {
@@ -890,6 +991,11 @@
         <td><strong>${esc(user.name || "—")}</strong><br><span class="mono">${esc(user.email || "")}</span></td>
         <td>${esc(user.role || "user")}</td>
         <td>${statusBadgeMarkup(user.status === "active" ? "Активен" : "Отключён", user.status === "active" ? "ok" : "warn")}</td>
+        <td>
+          ${statusBadgeMarkup(user.mcp_token_status === "active" ? "Token активен" : user.mcp_token_status === "revoked" ? "Token отозван" : "Нет token", user.mcp_token_status === "active" ? "ok" : "muted")}<br>
+          <span class="mono">${esc(user.mcp_token_prefix || "—")}</span><br>
+          <span>${esc(formatTime(user.mcp_token_last_used_at))}</span>
+        </td>
         <td>${esc(formatTime(user.created_at))}</td>
         <td>${esc(formatTime(user.last_login_at))}</td>
         <td>${esc(user.platform_connections ?? 0)}</td>
@@ -897,6 +1003,7 @@
           <div class="admin-table__actions">
             <button class="btn btn--secondary btn--small" data-admin-status="${escAttr(user.id)}" data-status="${user.status === "active" ? "disabled" : "active"}">${user.status === "active" ? "Отключить" : "Включить"}</button>
             <button class="btn btn--secondary btn--small" data-admin-role="${escAttr(user.id)}" data-role="${user.role === "admin" ? "user" : "admin"}">${user.role === "admin" ? "Сделать user" : "Сделать admin"}</button>
+            ${user.mcp_token_status === "active" ? `<button class="btn btn--danger btn--small" data-admin-token-revoke="${escAttr(user.id)}">Отозвать MCP token</button>` : ""}
           </div>
         </td>
       </tr>
@@ -911,6 +1018,7 @@
             ["Driver", esc(database.driver || "—")],
             ["Users", esc(database.users ?? "—")],
             ["Active sessions", esc(database.active_sessions ?? "—")],
+            ["Active MCP tokens", esc(database.active_mcp_tokens ?? "—")],
           ])}
         </article>
         <article class="card">
@@ -925,8 +1033,8 @@
       <article class="card">
         <h3 class="card__title">Пользователи</h3>
         <table class="admin-table">
-          <thead><tr><th>Пользователь</th><th>Роль</th><th>Статус</th><th>Создан</th><th>Последний вход</th><th>Платформы</th><th>Действия</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="7">Пользователей пока нет.</td></tr>`}</tbody>
+          <thead><tr><th>Пользователь</th><th>Роль</th><th>Статус</th><th>MCP token</th><th>Создан</th><th>Последний вход</th><th>Платформы</th><th>Действия</th></tr></thead>
+          <tbody>${rows || `<tr><td colspan="8">Пользователей пока нет.</td></tr>`}</tbody>
         </table>
       </article>
     `;
@@ -935,6 +1043,12 @@
     });
     el.adminContent.querySelectorAll("[data-admin-role]").forEach((button) => {
       button.addEventListener("click", () => updateAdminUser(button.dataset.adminRole, { role: button.dataset.role }, "/api/admin/users/role", button));
+    });
+    el.adminContent.querySelectorAll("[data-admin-token-revoke]").forEach((button) => {
+      button.addEventListener("click", () => {
+        if (!window.confirm("Отозвать MCP token пользователя? Raw token не будет показан и восстановить его нельзя.")) return;
+        updateAdminUser(button.dataset.adminTokenRevoke, {}, "/api/admin/users/mcp-token/revoke", button);
+      });
     });
   }
 

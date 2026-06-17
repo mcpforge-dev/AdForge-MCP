@@ -5,7 +5,7 @@ Claude подключает AdForge MCP как внешний custom connector. 
 ## Что нужно заранее
 
 - Hosted MCP URL, например `https://your-domain.com/mcp`.
-- Beta token.
+- Персональный MCP token из dashboard: `/app` -> `MCP` -> `Создать MCP token`.
 - Подключенные аккаунты в dashboard.
 
 ## Шаги в Claude
@@ -16,10 +16,10 @@ Claude подключает AdForge MCP как внешний custom connector. 
 4. Нажать `+` или `Add custom connector`.
 5. Указать Name: `AdForge MCP`.
 6. Указать URL: `https://your-domain.com/mcp`.
-7. Если Claude просит auth headers, передать:
+7. Если Claude просит auth headers, передать персональный MCP token:
 
 ```http
-Authorization: Bearer <BETA_TOKEN>
+Authorization: Bearer <PERSONAL_MCP_TOKEN>
 ```
 
 8. Сохранить connector.

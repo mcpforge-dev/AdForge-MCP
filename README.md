@@ -8,15 +8,16 @@ AdForge MCP - hosted MCP-сервис для безопасной работы �
 
 Для beta-пользователя рабочий сценарий такой:
 
-1. Получить URL dashboard и beta token.
-2. Открыть dashboard AdForge MCP и ввести beta token на экране входа.
+1. Получить URL dashboard и создать email-аккаунт.
+2. Открыть dashboard AdForge MCP и войти в личный кабинет.
 3. На `Overview` увидеть статус сервиса, preview-only бейдж и блок `Connect to MCP client`.
 4. Перейти в `Connections` и подключить Meta Ads и/или Google Ads через OAuth.
 5. Выбрать рекламные аккаунты после OAuth callback и сохранить выбор.
 6. На `Diagnostics` запустить полную диагностику.
-7. Скопировать MCP URL из блока `Connect to MCP client`.
-8. Добавить AdForge MCP в Codex, Claude или другой MCP-клиент как внешний hosted server/custom connector (Bearer-авторизация beta token).
-9. Задать AI-клиенту тестовый запрос: `Проверь диагностику AdForge MCP`.
+7. На вкладке `MCP` создать персональный MCP token и сразу сохранить raw token.
+8. Скопировать MCP URL из блока `Connect to MCP client`.
+9. Добавить AdForge MCP в Codex, Claude или другой MCP-клиент как внешний hosted server/custom connector (Bearer-авторизация персональным MCP token).
+10. Задать AI-клиенту тестовый запрос: `Проверь диагностику AdForge MCP`.
 
 Клиенту не нужны `.env`, `ads_config.yaml`, GitHub clone или локальный Python runtime.
 
@@ -28,7 +29,7 @@ Dashboard состоит из трёх разделов: `Overview` (стату�
 
 - Hosted MCP transport: Streamable HTTP endpoint, по умолчанию `/mcp`.
 - Web dashboard: token gate, Overview, Connections (OAuth onboarding, account selection, reconnect/disconnect) и Diagnostics.
-- Auth: Web API и MCP endpoint закрыты beta token из `AD_MCP_WEB_API_TOKEN`.
+- Auth: Web UI работает через email-сессии; MCP endpoint принимает персональный MCP token пользователя и сохраняет `AD_MCP_WEB_API_TOKEN` как fallback для smoke/operator сценариев.
 - Meta Ads: OAuth, выбор аккаунтов, campaigns, statuses, basic metrics, diagnostics.
 - Google Ads: OAuth, выбор customer accounts, campaigns, statuses, basic metrics, diagnostics при валидных Google Ads credentials и developer token.
 - TikTok Ads: OAuth groundwork и сохранение подключения; campaigns/metrics в beta могут возвращать `not_available`.
@@ -150,7 +151,7 @@ Recommended beta deployment uses two internal processes behind Nginx:
 - dashboard/API: `127.0.0.1:8765`;
 - MCP transport: `127.0.0.1:8766/mcp`.
 
-External users receive only dashboard URL, MCP URL and beta token. Server secrets stay in environment variables on the VPS/WPS server.
+External users receive dashboard URL, MCP URL and create their personal MCP token inside `/app`. Server secrets and the beta fallback token stay in environment variables on the VPS/WPS server.
 
 Deployment details for the server team: [DEPLOYING.md](DEPLOYING.md).
 

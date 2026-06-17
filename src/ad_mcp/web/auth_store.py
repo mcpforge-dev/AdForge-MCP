@@ -312,6 +312,84 @@ class AuthStore:
                 (_now(), _hash_value(token)),
             )
 
+    def mcp_token_summary(self, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT id, token_prefix, name, status, created_at, last_used_at, revoked_at
+                FROM mcp_access_tokens
+                WHERE user_id = ?
+                ORDER BY created_at DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+        return self._safe_mcp_token_summary(row)
+
+    def create_mcp_token(self, user: AuthUser, *, name: str = "Personal MCP token") -> dict[str, Any]:
+        active = self.mcp_token_summary(user.id)
+        if active.get("exists") and active.get("status") == "active":
+            raise AuthValidationError("У пользователя уже есть активный MCP token. Сгенерируйте новый token или отзовите текущий.")
+        with self._connect() as connection:
+            return self._insert_mcp_token(connection, user, name=name)
+
+    def rotate_mcp_token(self, user: AuthUser, *, name: str = "Personal MCP token") -> dict[str, Any]:
+        with self._connect() as connection:
+            now = _now()
+            self._execute(
+                connection,
+                """
+                UPDATE mcp_access_tokens
+                SET status = 'revoked', revoked_at = ?
+                WHERE user_id = ? AND status = 'active' AND revoked_at IS NULL
+                """,
+                (now, user.id),
+            )
+            return self._insert_mcp_token(connection, user, name=name)
+
+    def revoke_mcp_token(self, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            now = _now()
+            self._execute(
+                connection,
+                """
+                UPDATE mcp_access_tokens
+                SET status = 'revoked', revoked_at = ?
+                WHERE user_id = ? AND status = 'active' AND revoked_at IS NULL
+                """,
+                (now, user_id),
+            )
+        return self.mcp_token_summary(user_id)
+
+    def verify_mcp_token(self, token: str) -> AuthUser | None:
+        if not token:
+            return None
+        token_hash = _hash_value(token)
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT u.*, COALESCE(t.workspace_id, wm.workspace_id) AS workspace_id
+                FROM mcp_access_tokens t
+                JOIN users u ON u.id = t.user_id
+                LEFT JOIN workspace_members wm ON wm.user_id = u.id
+                WHERE t.token_hash = ?
+                  AND t.status = 'active'
+                  AND t.revoked_at IS NULL
+                ORDER BY wm.created_at ASC
+                LIMIT 1
+                """,
+                (token_hash,),
+            )
+            if not row:
+                return None
+            user = self._row_to_user(row)
+            if not user.is_active:
+                return None
+            self._execute(connection, "UPDATE mcp_access_tokens SET last_used_at = ? WHERE token_hash = ?", (_now(), token_hash))
+            return user
+
     def list_users(self) -> list[dict[str, Any]]:
         with self._connect() as connection:
             rows = self._query_all(
@@ -319,7 +397,33 @@ class AuthStore:
                 """
                 SELECT
                   u.id, u.email, u.name, u.role, u.status, u.created_at, u.updated_at, u.last_login_at,
-                  COUNT(DISTINCT pc.id) AS platform_connections
+                  COUNT(DISTINCT pc.id) AS platform_connections,
+                  (
+                    SELECT COUNT(*)
+                    FROM mcp_access_tokens mt
+                    WHERE mt.user_id = u.id AND mt.status = 'active' AND mt.revoked_at IS NULL
+                  ) AS active_mcp_tokens,
+                  (
+                    SELECT mt.token_prefix
+                    FROM mcp_access_tokens mt
+                    WHERE mt.user_id = u.id
+                    ORDER BY mt.created_at DESC
+                    LIMIT 1
+                  ) AS mcp_token_prefix,
+                  (
+                    SELECT mt.status
+                    FROM mcp_access_tokens mt
+                    WHERE mt.user_id = u.id
+                    ORDER BY mt.created_at DESC
+                    LIMIT 1
+                  ) AS mcp_token_status,
+                  (
+                    SELECT mt.last_used_at
+                    FROM mcp_access_tokens mt
+                    WHERE mt.user_id = u.id
+                    ORDER BY mt.created_at DESC
+                    LIMIT 1
+                  ) AS mcp_token_last_used_at
                 FROM users u
                 LEFT JOIN platform_connections pc ON pc.user_id = u.id
                 GROUP BY u.id, u.email, u.name, u.role, u.status, u.created_at, u.updated_at, u.last_login_at
@@ -364,15 +468,68 @@ class AuthStore:
             with self._connect() as connection:
                 users = self._query_one(connection, "SELECT COUNT(*) AS count FROM users") or {"count": 0}
                 sessions = self._query_one(connection, "SELECT COUNT(*) AS count FROM user_sessions WHERE revoked_at IS NULL") or {"count": 0}
+                active_mcp_tokens = self._query_one(
+                    connection,
+                    "SELECT COUNT(*) AS count FROM mcp_access_tokens WHERE status = 'active' AND revoked_at IS NULL",
+                ) or {"count": 0}
             return {
                 "status": "ok",
                 "driver": self.driver,
                 "configured": bool(self.settings.database_url.strip()),
                 "users": int(users["count"]),
                 "active_sessions": int(sessions["count"]),
+                "active_mcp_tokens": int(active_mcp_tokens["count"]),
             }
         except AuthStoreError as exc:
             return {"status": "error", "driver": self.driver, "error": str(exc)}
+
+    def _insert_mcp_token(self, connection, user: AuthUser, *, name: str) -> dict[str, Any]:
+        raw_token = f"mcp_live_{secrets.token_urlsafe(32)}"
+        token_id = uuid.uuid4().hex
+        timestamp = _now()
+        token_prefix = raw_token[:18]
+        self._execute(
+            connection,
+            """
+            INSERT INTO mcp_access_tokens
+              (id, user_id, workspace_id, token_hash, token_prefix, name, status, created_at, last_used_at, revoked_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'active', ?, NULL, NULL)
+            """,
+            (token_id, user.id, user.workspace_id, _hash_value(raw_token), token_prefix, name.strip() or "Personal MCP token", timestamp),
+        )
+        summary = self._safe_mcp_token_summary(
+            {
+                "id": token_id,
+                "token_prefix": token_prefix,
+                "name": name,
+                "status": "active",
+                "created_at": timestamp,
+                "last_used_at": None,
+                "revoked_at": None,
+            }
+        )
+        return summary | {"raw_token": raw_token}
+
+    def _safe_mcp_token_summary(self, row: dict[str, Any] | None) -> dict[str, Any]:
+        if not row:
+            return {
+                "exists": False,
+                "token_prefix": "",
+                "name": "",
+                "status": "missing",
+                "created_at": None,
+                "last_used_at": None,
+                "revoked_at": None,
+            }
+        return {
+            "exists": True,
+            "token_prefix": str(row.get("token_prefix") or ""),
+            "name": str(row.get("name") or "Personal MCP token"),
+            "status": str(row.get("status") or "missing"),
+            "created_at": row.get("created_at"),
+            "last_used_at": row.get("last_used_at"),
+            "revoked_at": row.get("revoked_at"),
+        }
 
     def _row_to_user(self, row: dict[str, Any]) -> AuthUser:
         return AuthUser(

@@ -6,19 +6,32 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
+from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore
 
 
 MCP_SCOPE = "adforge:mcp"
 
 
 class StaticBearerTokenVerifier:
-    def __init__(self, token: str) -> None:
+    def __init__(self, token: str, *, settings: Settings | None = None, auth_store: AuthStore | None = None) -> None:
         self._token = token
+        self._settings = settings
+        self._auth_store = auth_store
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        if not self._token or not secrets.compare_digest(token, self._token):
+        if self._token and secrets.compare_digest(token, self._token):
+            return AccessToken(token=token, client_id="adforge-beta-client", scopes=[MCP_SCOPE])
+        if not self._settings:
             return None
-        return AccessToken(token=token, client_id="adforge-beta-client", scopes=[MCP_SCOPE])
+        store = self._auth_store or AuthStore(self._settings)
+        try:
+            store.ensure_schema()
+            user = store.verify_mcp_token(token)
+        except (AuthDatabaseUnavailable, RuntimeError):
+            return None
+        if not user:
+            return None
+        return AccessToken(token=token, client_id=f"adforge-user:{user.id}", scopes=[MCP_SCOPE])
 
 
 def mcp_token_required(settings: Settings) -> bool:
@@ -39,5 +52,5 @@ def build_mcp_auth(settings: Settings) -> tuple[AuthSettings | None, StaticBeare
             resource_server_url=resource_server_url,
             required_scopes=[MCP_SCOPE],
         ),
-        StaticBearerTokenVerifier(token),
+        StaticBearerTokenVerifier(token, settings=settings),
     )

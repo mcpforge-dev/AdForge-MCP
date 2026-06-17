@@ -148,20 +148,23 @@
           <span class="topbar__name">AdForge MCP</span>
           <span class="chip chip--beta">Бета</span>
         </div>
-        <nav class="topbar__nav" aria-label="Разделы">
-          <button type="button" class="nav-tab is-active" data-nav="overview">Начало работы</button>
-          <button type="button" class="nav-tab" data-nav="connections">Подключения</button>
-          <button type="button" class="nav-tab" data-nav="mcp">MCP</button>
-          <button type="button" class="nav-tab" data-nav="diagnostics">Диагностика</button>
-          <button type="button" class="nav-tab" data-nav="profile">Профиль</button>
-        </nav>
         <div class="topbar__side">
-          <span id="preview-badge" class="badge badge--ok" title="Опасные действия только показываются как preview и не применяются.">Preview-only: включено</span>
           <span id="user-pill" class="user-pill" hidden></span>
           <button id="signout" type="button" class="btn btn--ghost btn--small">Выйти</button>
         </div>
       </div>
     </header>
+
+    <div class="tabs-shell">
+      <nav class="tabs-bar" aria-label="Разделы личного кабинета">
+        <button type="button" class="nav-tab is-active" data-nav="overview">Начало работы</button>
+        <button type="button" class="nav-tab" data-nav="connections">Подключения</button>
+        <button type="button" class="nav-tab" data-nav="mcp">MCP</button>
+        <button type="button" class="nav-tab" data-nav="diagnostics">Диагностика</button>
+        <button type="button" class="nav-tab" data-nav="profile">Профиль</button>
+      </nav>
+      <span id="preview-badge" class="badge badge--ok" title="Опасные действия только показываются как preview и не применяются.">Preview-only: включено</span>
+    </div>
 
     <main class="main">
       <!-- Overview -->
@@ -181,12 +184,12 @@
           </article>
           <article class="card mcp-card">
             <h3 class="card__title">Подключение к AI-клиенту</h3>
-            <p class="card__hint">Скопируйте MCP URL и добавьте его в Codex, Claude или другой MCP-клиент. Для beta используйте ваш код доступа как Bearer-авторизацию.</p>
+            <p class="card__hint">Скопируйте MCP URL и создайте персональный token в разделе MCP. Используйте его в Codex или Claude как Bearer token.</p>
             <div class="mcp-url-row">
               <code id="mcp-url" class="mcp-url">—</code>
               <button id="copy-mcp-url" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
             </div>
-            <pre class="code-block">Authorization: Bearer &lt;КОД_ДОСТУПА&gt;</pre>
+            <pre class="code-block">Authorization: Bearer &lt;ВАШ_MCP_TOKEN&gt;</pre>
           </article>
         </div>
       </section>
@@ -195,7 +198,7 @@
       <section id="section-mcp" class="section" data-section="mcp" hidden>
         <div class="section-head">
           <h2>MCP подключение</h2>
-          <p class="section-head__sub">Персональный MCP token будет добавлен следующим этапом. Пока для beta-smoke сохраняется общий серверный Bearer fallback.</p>
+          <p class="section-head__sub">Создайте персональный token для подключения AdForge MCP к Codex, Claude или другому MCP-клиенту. Raw token показывается только один раз.</p>
         </div>
         <article class="card mcp-card">
           <h3 class="card__title">Hosted MCP URL</h3>
@@ -203,10 +206,19 @@
             <code id="mcp-url-panel" class="mcp-url">—</code>
             <button id="copy-mcp-url-panel" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
           </div>
-          <div class="token-placeholder">
-            <strong>Персональный MCP token</strong>
-            <span>Будет создан в отдельном безопасном этапе: raw token показывается один раз, в базе хранится только hash.</span>
+          <div id="mcp-token-status" class="token-status">
+            <div class="empty-state"><p>Загружаем статус token...</p></div>
           </div>
+          <div id="mcp-token-reveal" class="token-reveal" hidden>
+            <strong>Token будет показан только один раз</strong>
+            <span>Сохраните его в безопасном месте. После обновления страницы будет виден только prefix.</span>
+            <div class="token-secret-row">
+              <code id="mcp-token-raw" class="token-secret"></code>
+              <button id="copy-mcp-token" type="button" class="btn btn--secondary btn--small">Скопировать token</button>
+            </div>
+          </div>
+          <div id="mcp-token-actions" class="token-actions"></div>
+          <pre class="code-block">Authorization: Bearer &lt;ВАШ_MCP_TOKEN&gt;</pre>
         </article>
       </section>
 

@@ -7,6 +7,7 @@ import pytest
 from ad_mcp.http_server import create_http_app
 from ad_mcp.mcp_auth import StaticBearerTokenVerifier, build_mcp_auth
 from ad_mcp.settings import Settings
+from ad_mcp.web.auth_store import AuthStore
 
 
 def _test_client(app):
@@ -117,3 +118,55 @@ def test_public_mcp_url_can_be_overridden_for_reverse_proxy(tmp_path) -> None:
     )
 
     assert settings.public_mcp_url == "https://mcp.example.com/custom-mcp"
+
+
+@pytest.mark.asyncio
+async def test_mcp_verifier_accepts_user_token_and_preserves_beta_fallback(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connections_config="missing.yaml",
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    user = store.create_user(email="client@example.com", name="Client", password="super-secret")
+    raw_token = store.create_mcp_token(user)["raw_token"]
+    _auth_settings, verifier = build_mcp_auth(settings)
+
+    assert verifier is not None
+    beta_access = await verifier.verify_token("secret-token")
+    user_access = await verifier.verify_token(raw_token)
+    wrong_access = await verifier.verify_token("wrong-token")
+
+    assert beta_access is not None
+    assert beta_access.client_id == "adforge-beta-client"
+    assert user_access is not None
+    assert user_access.client_id == f"adforge-user:{user.id}"
+    assert wrong_access is None
+    assert store.mcp_token_summary(user.id)["last_used_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_mcp_verifier_rejects_revoked_and_disabled_user_tokens(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connections_config="missing.yaml",
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    revoked_user = store.create_user(email="revoked@example.com", name="Revoked", password="super-secret")
+    disabled_user = store.create_user(email="disabled@example.com", name="Disabled", password="super-secret")
+    revoked_token = store.create_mcp_token(revoked_user)["raw_token"]
+    disabled_token = store.create_mcp_token(disabled_user)["raw_token"]
+    store.revoke_mcp_token(revoked_user.id)
+    store.set_user_status(disabled_user.id, "disabled")
+    _auth_settings, verifier = build_mcp_auth(settings)
+
+    assert verifier is not None
+    assert await verifier.verify_token(revoked_token) is None
+    assert await verifier.verify_token(disabled_token) is None

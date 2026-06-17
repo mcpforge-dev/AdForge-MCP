@@ -7,7 +7,7 @@
 - MCP работает через Streamable HTTP endpoint.
 - Endpoint по умолчанию: `/mcp`.
 - Внутренний порт по умолчанию: `127.0.0.1:8766`.
-- Доступ закрыт bearer token из `AD_MCP_WEB_API_TOKEN`.
+- Доступ закрыт bearer token: пользовательским MCP token из dashboard или fallback token из `AD_MCP_WEB_API_TOKEN` для smoke/operator сценариев.
 - Stdio-режим `ad-mcp-server` сохранен для локальной разработки.
 
 ## Переменные окружения
@@ -80,11 +80,16 @@ location / {
 }
 ```
 
-Для реального подключения MCP client должен отправлять:
+Для реального подключения MCP client должен отправлять персональный token пользователя:
 
 ```http
-Authorization: Bearer <beta-token>
+Authorization: Bearer <personal-mcp-token>
 ```
+
+Персональный token создаётся в dashboard: `/app` -> `MCP` -> `Создать MCP token`.
+Raw token показывается только один раз после создания или ротации. В базе хранится только hash и prefix.
+
+`AD_MCP_WEB_API_TOKEN` не показывается клиентам. Он оставлен как fallback, чтобы не ломать strict smoke checks и текущую beta-инфраструктуру.
 
 ## Текущий beta-flow
 
