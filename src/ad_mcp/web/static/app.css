@@ -350,6 +350,10 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   box-shadow: 0 28px 84px rgba(0,0,0,0.42);
 }
 
+.modal__panel--wide {
+  width: min(620px, 100%);
+}
+
 .modal__close {
   position: absolute;
   right: 12px;
@@ -371,6 +375,13 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .modal__close:hover { color: var(--text); border-color: var(--border); }
 .modal__hint { color: var(--text-muted); margin: 7px 0 16px; font-size: 14px; }
 .modal__footnote { color: var(--text-faint); font-size: 12.5px; margin-top: 14px; }
+
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 16px;
+}
 
 .auth-tabs {
   display: flex;
@@ -394,6 +405,18 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .auth-tab.is-active { background: var(--bg-elevated); color: var(--text); }
 .auth-form { display: flex; flex-direction: column; gap: 12px; }
+
+.link-button {
+  align-self: flex-start;
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0;
+  cursor: pointer;
+  font-size: 13.5px;
+}
+
+.link-button:hover { color: var(--text); }
 
 .auth-success {
   display: flex;
@@ -815,6 +838,52 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   overflow-x: auto;
 }
 
+.safe-mode-note,
+.setup-card,
+.prompt-card {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-inset);
+  border-radius: var(--radius-small);
+  padding: 12px 14px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.safe-mode-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.safe-mode-note strong { color: var(--text); }
+
+.setup-list {
+  margin: 10px 0 0;
+  padding-left: 20px;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  font-size: 13.5px;
+}
+
+.prompt-list {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.prompt-list code {
+  display: block;
+  background: rgba(255, 255, 255, 0.025);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  padding: 8px 10px;
+  color: var(--text);
+  white-space: normal;
+}
+
 /* ---------- Connections ---------- */
 
 .platform-card { display: flex; flex-direction: column; gap: 12px; }
@@ -1046,4 +1115,5 @@ details.raw-json pre {
   .platform-card__actions .btn { flex: 1 1 180px; }
   .account-row { align-items: flex-start; flex-direction: column; }
   .mcp-url-row, .token-secret-row { flex-direction: column; }
+  .prompt-list { grid-template-columns: 1fr; }
 }

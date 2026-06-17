@@ -6,7 +6,7 @@
 
 - Dashboard URL.
 - Hosted MCP URL, например `https://your-domain.com/mcp`.
-- Персональный MCP token из dashboard: `/app` -> `MCP` -> `Создать MCP token`.
+- Персональный ключ доступа из dashboard: `/app` -> `MCP` -> `Создать ключ доступа`.
 - Подключенные рекламные аккаунты в dashboard.
 
 ## Шаги в Codex
@@ -17,22 +17,22 @@
 4. Указать имя: `AdForge MCP`.
 5. Выбрать HTTP/Streamable HTTP transport, если интерфейс клиента дает выбор.
 6. Указать URL hosted endpoint: `https://your-domain.com/mcp`.
-7. Передать персональный MCP token одним из двух способов.
+7. Передать персональный ключ доступа одним из двух способов.
 
 ### Вариант A: поле Bearer token environment variable
 
-Если Codex показывает поле `Bearer token environment variable`, туда нужно вставить не сам token, а имя переменной окружения:
+Если Codex показывает поле `Bearer token environment variable`, туда нужно вставить не сам ключ, а имя переменной окружения:
 
 ```text
 ADFORGE_MCP_CLIENT_TOKEN
 ```
 
-Сам raw token нужно сохранить в этой переменной окружения на компьютере, где запущен Codex, затем полностью перезапустить Codex.
+Сам ключ доступа нужно сохранить в этой переменной окружения на компьютере, где запущен Codex, затем полностью перезапустить Codex.
 
 PowerShell пример:
 
 ```powershell
-setx ADFORGE_MCP_CLIENT_TOKEN "<PERSONAL_MCP_TOKEN>"
+setx ADFORGE_MCP_CLIENT_TOKEN "<PERSONAL_MCP_ACCESS_KEY>"
 ```
 
 После `setx` новое значение увидят только новые процессы, поэтому Codex нужно закрыть и открыть заново.
@@ -48,7 +48,7 @@ Authorization: Bearer <PERSONAL_MCP_TOKEN>
 8. Сохранить сервер.
 9. Проверить, что tools AdForge MCP появились в списке.
 
-Важно: если token попал в скриншот, чат или лог, его нужно сразу заменить через dashboard: `/app` -> `MCP` -> `Сгенерировать новый token`.
+Важно: если ключ попал в скриншот, чат или лог, его нужно сразу заменить через dashboard: `/app` -> `MCP` -> `Сгенерировать новый ключ`.
 
 UI Codex может меняться. Важны не названия кнопок, а параметры подключения: server name, hosted MCP endpoint и bearer token.
 
@@ -72,7 +72,6 @@ UI Codex может меняться. Важны не названия кноп�
 
 ## Тестовые запросы
 
-- `Проверь диагностику AdForge MCP`.
 - `Покажи подключенные рекламные платформы`.
 - `Покажи список рекламных аккаунтов`.
 - `Покажи кампании Meta Ads`.
@@ -86,7 +85,6 @@ UI Codex может меняться. Важны не названия кноп�
 - MCP URL скопирован из dashboard без лишних пробелов;
 - если использовано поле `Bearer token environment variable`, в нем стоит имя переменной `ADFORGE_MCP_CLIENT_TOKEN`, а не raw token;
 - Codex был перезапущен после `setx` или изменения переменных окружения;
-- personal MCP token передан через `Authorization: Bearer ...` или через корректную env-переменную;
-- dashboard показывает `MCP ready`;
-- endpoint `/api/diagnostics/mcp` доступен через dashboard API;
+- ключ доступа передан через `Authorization: Bearer ...` или через корректную env-переменную;
+- в новом чате Codex видит AdForge MCP и отвечает на запрос `Какие рекламные аккаунты подключены?`;
 - hosted MCP process запущен на сервере.

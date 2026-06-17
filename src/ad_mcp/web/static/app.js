@@ -1,11 +1,12 @@
 /* AdForge MCP hosted beta dashboard.
-   Onboarding flow: access code gate -> onboarding -> connections -> diagnostics.
+   Onboarding flow: access code gate -> onboarding -> connections -> MCP setup.
    Uses only existing hosted/diagnostics endpoints. Never renders the access code
    or provider secrets. */
 (function () {
   "use strict";
 
   const TOKEN_KEY = "ad_mcp_web_api_token";
+  const MCP_URL_COPIED_KEY = "adforge_mcp_url_copied";
 
   const PROVIDER_SLUG = {
     meta_ads: "meta",
@@ -32,6 +33,8 @@
     mcpToken: null,
     activePending: null,
     dismissedPendingIds: new Set(),
+    pendingModalId: null,
+    mcpUrlCopied: localStorage.getItem(MCP_URL_COPIED_KEY) === "1",
     notice: null,
     diagnosticsRun: false,
   };
@@ -59,7 +62,10 @@
     el.authName = document.getElementById("auth-name");
     el.authEmail = document.getElementById("auth-email");
     el.authPassword = document.getElementById("auth-password");
+    el.authConfirmField = document.getElementById("auth-confirm-field");
+    el.authPasswordConfirm = document.getElementById("auth-password-confirm");
     el.authPasswordToggle = document.getElementById("auth-password-toggle");
+    el.authForgot = document.getElementById("auth-forgot");
     el.authTitle = document.getElementById("auth-title");
     el.authSubtitle = document.getElementById("auth-subtitle");
     el.authSubmit = document.getElementById("auth-submit");
@@ -67,6 +73,11 @@
     el.authSuccess = document.getElementById("auth-success");
     el.authSuccessApp = document.getElementById("auth-success-app");
     el.authTabs = Array.from(document.querySelectorAll("[data-auth-mode]"));
+    el.clientModal = document.getElementById("client-modal");
+    el.clientModalTitle = document.getElementById("client-modal-title");
+    el.clientModalSubtitle = document.getElementById("client-modal-subtitle");
+    el.clientModalBody = document.getElementById("client-modal-body");
+    el.clientModalActions = document.getElementById("client-modal-actions");
     el.gate = document.getElementById("gate");
     el.gateForm = document.getElementById("gate-form");
     el.gateToken = document.getElementById("gate-token");
@@ -88,6 +99,7 @@
     el.mcpTokenReveal = document.getElementById("mcp-token-reveal");
     el.mcpTokenRaw = document.getElementById("mcp-token-raw");
     el.copyMcpToken = document.getElementById("copy-mcp-token");
+    el.copyMcpAuthHeader = document.getElementById("copy-mcp-auth-header");
     el.mcpTokenActions = document.getElementById("mcp-token-actions");
     el.profileCard = document.getElementById("profile-card");
     el.userPill = document.getElementById("user-pill");
@@ -159,9 +171,17 @@
     });
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !el.authModal.hidden) closeAuth();
+      if (event.key === "Escape" && el.clientModal && !el.clientModal.hidden) closeClientModal();
     });
     el.authTabs.forEach((tab) => tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode)));
     el.authPasswordToggle.addEventListener("click", () => togglePasswordVisibility());
+    el.authForgot.addEventListener("click", () => {
+      showClientMessage(
+        "Восстановление пароля готовится",
+        "Мы подключим email-восстановление после настройки SMTP. Сейчас обратитесь к менеджеру AdForge, чтобы безопасно восстановить доступ.",
+        "info",
+      );
+    });
     el.authSuccessApp.addEventListener("click", async () => {
       closeAuth();
       await loadCapabilities();
@@ -174,7 +194,17 @@
         email: el.authEmail.value.trim(),
         password: el.authPassword.value,
       };
-      if (state.authMode === "register") payload.name = el.authName.value.trim();
+      if (state.authMode === "register") {
+        if (el.authPassword.value.length < 8) {
+          showAuthError("Пароль должен быть не короче 8 символов.");
+          return;
+        }
+        if (el.authPassword.value !== el.authPasswordConfirm.value) {
+          showAuthError("Пароль и подтверждение не совпадают.");
+          return;
+        }
+        payload.name = el.authName.value.trim();
+      }
       setLoading(el.authSubmit, true);
       hideAuthError();
       try {
@@ -236,7 +266,10 @@
     const isRegister = state.authMode === "register";
     el.authNameField.hidden = !isRegister;
     el.authName.required = isRegister;
+    el.authConfirmField.hidden = !isRegister;
+    el.authPasswordConfirm.required = isRegister;
     el.authPassword.autocomplete = isRegister ? "new-password" : "current-password";
+    el.authForgot.hidden = isRegister;
     el.authForm.dataset.mode = state.authMode;
     el.authForm.hidden = false;
     el.authSuccess.hidden = true;
@@ -349,23 +382,34 @@
     });
     el.connectionsRefresh.addEventListener("click", () => loadConnections());
     el.diagRun.addEventListener("click", () => runDiagnostics());
+    document.querySelectorAll("[data-client-modal-close]").forEach((node) => {
+      node.addEventListener("click", () => closeClientModal());
+    });
     el.copyMcpUrl.addEventListener("click", async () => {
       const url = el.mcpUrl.textContent.trim();
       if (!url || url === "—") return;
       await copyText(url);
-      toast("MCP URL скопирован.", "success");
+      markMcpUrlCopied();
+      showClientMessage("MCP URL скопирован", "Теперь перейдите в раздел MCP, создайте ключ доступа и добавьте сервер в Codex.", "success");
     });
     el.copyMcpUrlPanel.addEventListener("click", async () => {
       const url = el.mcpUrlPanel.textContent.trim();
       if (!url || url === "—") return;
       await copyText(url);
-      toast("MCP URL скопирован.", "success");
+      markMcpUrlCopied();
+      showClientMessage("MCP URL скопирован", "Вставьте этот URL в поле URL при добавлении MCP server в Codex.", "success");
     });
     el.copyMcpToken.addEventListener("click", async () => {
       const token = el.mcpTokenRaw.textContent.trim();
       if (!token) return;
       await copyText(token);
-      toast("MCP token скопирован. Сохраните его в безопасном месте.", "success");
+      showClientMessage("Ключ доступа скопирован", "Сохраните его в безопасном месте. Полный ключ показывается только один раз.", "success");
+    });
+    el.copyMcpAuthHeader.addEventListener("click", async () => {
+      const token = el.mcpTokenRaw.textContent.trim();
+      if (!token) return;
+      await copyText(`Bearer ${token}`);
+      showClientMessage("Значение заголовка скопировано", "В Codex добавьте Header: Name Authorization, Value Bearer + ваш ключ доступа.", "success");
     });
   }
 
@@ -400,8 +444,9 @@
     const requested = params.get("section");
     if (oauthError) {
       state.notice = { tone: "error", text: humanizeError(oauthError) };
+      showClientMessage("Ошибка подключения", humanizeError(oauthError), "error");
     } else if (pendingId && returnedProvider) {
-      state.notice = { tone: "info", text: "Авторизация завершена. Выберите рекламные аккаунты, которые сможет использовать AdForge MCP." };
+      state.notice = { tone: "info", text: "Авторизация завершена. Выберите рекламные аккаунты, которые нужно подключить." };
     }
     cleanUrl();
     if (pendingId && returnedProvider) {
@@ -428,12 +473,12 @@
     if (state.section === "diagnostics" && !state.diagnosticsRun) {
       el.diagnosticsContent.innerHTML = emptyState("Запустите диагностику, чтобы увидеть состояние сервиса.");
     }
-    if (state.section === "profile") renderProfile();
+    if (state.section === "profile") loadProfile();
   }
 
   function applyPreviewBadge(capabilities) {
     const enabled = capabilities?.preview_only?.enabled !== false;
-    el.previewBadge.textContent = enabled ? "Preview-only: включено" : "Preview-only: выключено";
+    el.previewBadge.textContent = enabled ? "Безопасный режим включён" : "Безопасный режим выключен";
     el.previewBadge.className = `badge ${enabled ? "badge--ok" : "badge--err"}`;
   }
 
@@ -467,8 +512,8 @@
   function renderMcpTokenStatus(token, options = {}) {
     if (options.sessionRequired) {
       el.mcpTokenStatus.innerHTML = `
-        <strong>Персональный MCP token</strong>
-        <span>Войдите по email, чтобы создать персональный token. Старый beta fallback остаётся только для операторских smoke-проверок.</span>
+        <strong>Ключ доступа MCP</strong>
+        <span>Войдите по email, чтобы создать персональный ключ доступа для Codex или Claude.</span>
       `;
       el.mcpTokenActions.innerHTML = `<button type="button" class="btn btn--primary btn--small" data-auth-open="login">Войти по email</button>`;
       el.mcpTokenActions.querySelector("[data-auth-open]").addEventListener("click", () => openAuth("login"));
@@ -481,29 +526,28 @@
     const exists = Boolean(token?.exists);
     const active = exists && token.status === "active";
     el.mcpTokenStatus.innerHTML = `
-      <strong>Персональный MCP token</strong>
+      <strong>Ключ доступа MCP</strong>
       <div class="kv">
         <div class="kv-row"><span>Статус</span><strong>${statusBadgeMarkup(active ? "Активен" : exists ? "Отозван" : "Не создан", active ? "ok" : exists ? "warn" : "muted")}</strong></div>
-        <div class="kv-row"><span>Prefix</span><strong class="mono">${esc(token?.token_prefix || "—")}</strong></div>
         <div class="kv-row"><span>Создан</span><strong>${esc(formatTime(token?.created_at))}</strong></div>
         <div class="kv-row"><span>Последнее использование</span><strong>${esc(formatTime(token?.last_used_at))}</strong></div>
       </div>
-      <span>Используйте этот token в Codex или Claude как Bearer token. Если Codex просит “Bearer token environment variable”, не вставляйте туда raw token: укажите только имя переменной ADFORGE_MCP_CLIENT_TOKEN, сохраните token в эту переменную и перезапустите Codex. Raw token показывается только после создания или ротации.</span>
+      <span>Этот ключ нужен AI-клиенту, чтобы безопасно подключиться к вашему AdForge MCP. Полный ключ показывается только после создания или обновления.</span>
     `;
     el.mcpTokenActions.innerHTML = active
       ? `
-        <button type="button" class="btn btn--secondary btn--small" data-mcp-token-action="rotate">Сгенерировать новый token</button>
-        <button type="button" class="btn btn--danger btn--small" data-mcp-token-action="revoke">Отозвать token</button>
+        <button type="button" class="btn btn--secondary btn--small" data-mcp-token-action="rotate">Сгенерировать новый ключ</button>
+        <button type="button" class="btn btn--danger btn--small" data-mcp-token-action="revoke">Отключить ключ</button>
       `
-      : `<button type="button" class="btn btn--primary btn--small" data-mcp-token-action="create">Создать MCP token</button>`;
+      : `<button type="button" class="btn btn--primary btn--small" data-mcp-token-action="create">Создать ключ доступа</button>`;
     el.mcpTokenActions.querySelectorAll("[data-mcp-token-action]").forEach((button) => {
       button.addEventListener("click", () => runMcpTokenAction(button.dataset.mcpTokenAction, button));
     });
   }
 
   async function runMcpTokenAction(action, button) {
-    if (action === "revoke" && !window.confirm("Отозвать текущий MCP token? После этого подключение в Codex или Claude перестанет работать.")) return;
-    if (action === "rotate" && !window.confirm("Сгенерировать новый MCP token? Старый token перестанет работать.")) return;
+    if (action === "revoke" && !window.confirm("Отключить текущий ключ доступа? После этого подключение в Codex или Claude перестанет работать.")) return;
+    if (action === "rotate" && !window.confirm("Сгенерировать новый ключ доступа? Старый ключ перестанет работать.")) return;
     const endpoint = {
       create: "/api/mcp-token/create",
       rotate: "/api/mcp-token/rotate",
@@ -518,17 +562,28 @@
       if (payload.raw_token) {
         el.mcpTokenRaw.textContent = payload.raw_token;
         el.mcpTokenReveal.hidden = false;
-        toast("Token создан. Скопируйте его сейчас: он показывается только один раз.", "success");
+        showClientMessage("Ключ доступа создан", "Скопируйте его сейчас: полный ключ показывается только один раз.", "success");
       } else {
         el.mcpTokenReveal.hidden = true;
         el.mcpTokenRaw.textContent = "";
-        toast("MCP token отозван.", "success");
+        showClientMessage("Ключ доступа отключён", "Подключение в Codex или Claude перестанет работать, пока вы не создадите новый ключ.", "success");
       }
     } catch (error) {
       if (handle401(error)) return;
-      toast(humanizeError(error), "error");
+      showClientMessage("Не удалось обновить ключ", humanizeError(error), "error");
       renderMcpTokenStatus(state.mcpToken);
     }
+  }
+
+  async function loadProfile() {
+    if (!state.connections) {
+      try {
+        state.connections = await api("/api/hosted/connections");
+      } catch (error) {
+        /* Profile still renders the account block if connection stats are unavailable. */
+      }
+    }
+    renderProfile();
   }
 
   function renderProfile() {
@@ -542,13 +597,21 @@
       el.profileCard.querySelector("[data-auth-open]").addEventListener("click", () => openAuth("login"));
       return;
     }
+    const platforms = state.connections?.platforms || [];
+    const connectedPlatforms = platforms.filter((p) => (p.accounts || []).length > 0);
+    const connectedAccounts = connectedPlatforms.reduce((sum, p) => sum + (p.accounts || []).length, 0);
     el.profileCard.innerHTML = `
+      <h3 class="card__title">Аккаунт</h3>
       <div class="kv">
-        <div class="kv-row"><span>Имя</span><strong>${esc(user.name || "—")}</strong></div>
+        <div class="kv-row"><span>Никнейм</span><strong>${esc(user.name || "—")}</strong></div>
         <div class="kv-row"><span>Email</span><strong>${esc(user.email)}</strong></div>
-        <div class="kv-row"><span>Роль</span><strong>${esc(user.role)}</strong></div>
-        <div class="kv-row"><span>Статус</span><strong>${esc(user.status)}</strong></div>
-        <div class="kv-row"><span>Workspace</span><strong class="mono">${esc(user.workspace_id || "—")}</strong></div>
+        <div class="kv-row"><span>Статус аккаунта</span><strong>${esc(user.status === "active" ? "Активен" : user.status || "—")}</strong></div>
+        <div class="kv-row"><span>Подключённые платформы</span><strong>${esc(connectedPlatforms.map((p) => providerLabel(p.provider)).join(", ") || "Нет")}</strong></div>
+        <div class="kv-row"><span>Рекламные аккаунты</span><strong>${connectedAccounts}</strong></div>
+      </div>
+      <div class="callout">
+        <strong>Редактирование профиля</strong>
+        <span>Никнейм, аватар, смена пароля и восстановление доступа будут подключены отдельным безопасным этапом с backend-хранилищем и email-настройками.</span>
       </div>
     `;
   }
@@ -588,12 +651,12 @@
     }
 
     const stats = [
-      stat("Сервис", badge("Hosted beta · live", "ok")),
-      stat("Live URL", monoText(window.location.origin)),
-      stat("Preview-only", badge(previewOn ? "включено" : "выключено", previewOn ? "ok" : "err")),
+      stat("Сервис", badge("Работает", "ok")),
+      stat("Адрес кабинета", monoText(window.location.origin)),
+      stat("Безопасный режим", badge(previewOn ? "включён" : "выключен", previewOn ? "ok" : "err")),
       stat("Подключенные платформы", String(connectedPlatforms.length)),
       stat("Рекламные аккаунты", String(connectedAccounts)),
-      stat("MCP tools", String((capabilities?.mcp?.tools || []).length || "—")),
+      stat("AI-подключение", state.mcpUrlCopied ? badge("URL скопирован", "ok") : badge("Ожидает настройки", "info")),
     ];
     el.overviewStats.innerHTML = stats.join("");
 
@@ -602,9 +665,9 @@
     const steps = [
       { text: "Подключите рекламную платформу", done: connectedPlatforms.length > 0 || hasPending(platforms) },
       { text: "Выберите рекламные аккаунты", done: connectedAccounts > 0 },
-      { text: "Проверьте диагностику", done: state.diagnosticsRun },
-      { text: "Скопируйте MCP URL", done: false },
-      { text: "Добавьте его в Codex / Claude как внешний MCP-сервер", done: false },
+      { text: "Скопируйте MCP URL", done: state.mcpUrlCopied },
+      { text: "Подключите AdForge MCP в Codex или Claude", done: false },
+      { text: "Перезапустите MCP / откройте новый чат", done: false },
       { text: "Задайте AI первый вопрос по аккаунтам, кампаниям или метрикам", done: false },
     ];
     el.nextSteps.innerHTML = steps
@@ -635,11 +698,12 @@
     el.connectionsNotice.innerHTML = state.notice ? noticeMarkup(state.notice.text, state.notice.tone) : "";
     const platforms = (connections && connections.platforms) || [];
     syncActivePending(platforms);
-    el.pendingPanel.innerHTML = state.activePending ? renderPendingPanel(state.activePending) : "";
+    el.pendingPanel.innerHTML = "";
     el.connectionsList.innerHTML = platforms.length
       ? platforms.map(renderPlatformCard).join("")
       : emptyState("Пока нет подключенных рекламных аккаунтов. Начните с подключения рекламной платформы.");
     bindConnectionActions();
+    syncPendingModal();
   }
 
   function syncActivePending(platforms) {
@@ -668,19 +732,11 @@
   function renderPlatformCard(platform) {
     const status = resolveStatus(platform);
     const accounts = platform.accounts || [];
-    const summary = platform.diagnostic_summary || {};
     const limited = LIMITED_BETA.has(platform.provider);
     const canConnect = Boolean(platform.oauth_configured);
     const connectLabel = !canConnect ? "Платформа настраивается" : status === "connected" ? "Переподключить" : "Подключить";
 
-    const metaBits = [
-      `<span>Статус <strong>${canConnect ? "доступно" : "настраивается"}</strong></span>`,
-      `<span>OAuth <strong>${platform.oauth_credentials_configured ? "секреты есть" : "ждём настройки"}</strong></span>`,
-      `<span>Аккаунты <strong>${accounts.length}</strong></span>`,
-    ];
-    if (summary.last_successful_update) {
-      metaBits.push(`<span>Последняя проверка <strong>${esc(formatTime(summary.last_successful_update))}</strong></span>`);
-    }
+    const metaBits = platformMeta(platform, status, accounts);
 
     const accountsBlock = accounts.length
       ? `<div class="platform-card__accounts">${accounts.map(renderAccountRow).join("")}</div>`
@@ -706,11 +762,27 @@
         ${expired && !pending ? renderExpiredCallout() : ""}
         <div class="platform-card__actions">
           <button type="button" class="btn btn--primary btn--small" data-oauth="${escAttr(platform.provider)}" ${canConnect ? "" : "disabled"}>${connectLabel}</button>
-          <button type="button" class="btn btn--secondary btn--small" data-diag="${escAttr(platform.provider)}">Проверить статус</button>
           ${accounts.length ? `<button type="button" class="btn btn--danger btn--small" data-disconnect="${escAttr(platform.provider)}">Отключить</button>` : ""}
         </div>
       </article>
     `;
+  }
+
+  function platformMeta(platform, status, accounts) {
+    if (accounts.length) {
+      return [`<span>Подключено аккаунтов <strong>${accounts.length}</strong></span>`];
+    }
+    if (status === "select_accounts") {
+      const pending = (platform.pending_selections || []).find((x) => x.status === "pending_account_selection");
+      const count = (pending?.accounts || []).length;
+      return [`<span>Найдено аккаунтов <strong>${count}</strong></span>`];
+    }
+    if (status === "ready_to_connect") return [`<span>Состояние <strong>готово к подключению</strong></span>`];
+    if (status === "reconnect_required") return [`<span>Состояние <strong>нужно подключить заново</strong></span>`];
+    if (status === "provider_setup_required" || status === "credentials_missing") {
+      return [`<span>Состояние <strong>платформа настраивается</strong></span>`];
+    }
+    return [`<span>Состояние <strong>${esc(statusLabel(status))}</strong></span>`];
   }
 
   function renderAccountRow(account) {
@@ -727,7 +799,7 @@
     return `
       <div class="callout callout--warn">
         <strong>Платформа настраивается</strong>
-        <span>Серверная конфигурация найдена, но перед подключением нужно сверить приложение провайдера. Технические детали доступны в админке, клиенту не нужно разбираться с ошибками TikTok/Yandex.</span>
+        <span>Мы готовим подключение этой платформы. Как только настройка будет завершена, кнопка подключения станет доступна.</span>
       </div>
     `;
   }
@@ -737,7 +809,7 @@
     return `
       <div class="callout">
         <strong>Нужно выбрать рекламные аккаунты</strong>
-        <span>OAuth нашел аккаунты: ${count}. Выберите, какие аккаунты сможет использовать AdForge MCP.</span>
+        <span>Мы получили доступ к кабинету и нашли аккаунты: ${count}. Нажмите, чтобы выбрать нужные.</span>
         <button type="button" class="btn btn--secondary btn--small" data-pending="${escAttr(platform.provider)}" data-pending-id="${escAttr(pending.pending_id)}">Выбрать аккаунты</button>
       </div>
     `;
@@ -756,19 +828,15 @@
     const accounts = pending.accounts || [];
     const options = accounts.length
       ? accounts.map(renderPendingOption).join("")
-      : emptyState("Провайдер не вернул рекламные аккаунты.");
+      : emptyState("Аккаунты не найдены. Проверьте, что у пользователя есть доступ к рекламному кабинету.");
     return `
-      <article class="card pending-card">
-        <h3 class="card__title">Выберите аккаунты · ${esc(providerLabel(pending.provider))}</h3>
-        <p class="card__hint">Отметьте рекламные аккаунты, которые сможет использовать AdForge MCP. Секреты хранятся только на сервере и не показываются в интерфейсе.</p>
         <form id="pending-form" data-provider="${escAttr(pending.provider)}" data-pending-id="${escAttr(pending.pending_id)}">
           <div class="pending-list">${options}</div>
           <div class="pending-actions">
-            <button type="submit" class="btn btn--primary btn--small" ${accounts.length ? "" : "disabled"}>Сохранить выбранные аккаунты</button>
-            <button type="button" class="btn btn--ghost btn--small" data-cancel-pending>Отмена</button>
+            <button type="submit" class="btn btn--primary" ${accounts.length ? "" : "disabled"}>Подключить выбранные</button>
+            <button type="button" class="btn btn--ghost" data-cancel-pending>Закрыть</button>
           </div>
         </form>
-      </article>
     `;
   }
 
@@ -798,21 +866,50 @@
     el.connectionsList.querySelectorAll("[data-pending]").forEach((btn) =>
       btn.addEventListener("click", () => loadPending(btn.dataset.pending, btn.dataset.pendingId)),
     );
-    const form = el.pendingPanel.querySelector("#pending-form");
+  }
+
+  function syncPendingModal() {
+    if (!state.activePending) {
+      if (state.pendingModalId) closeClientModal();
+      state.pendingModalId = null;
+      return;
+    }
+    const pending = state.activePending;
+    if (state.pendingModalId === pending.pending_id && !el.clientModal.hidden) return;
+    const accounts = pending.accounts || [];
+    state.pendingModalId = pending.pending_id;
+    showClientModal({
+      title: accounts.length ? "Выберите рекламный аккаунт" : "Аккаунты не найдены",
+      subtitle: accounts.length
+        ? "Мы получили доступ к вашему рекламному кабинету. Выберите аккаунт, который нужно подключить к AdForge MCP."
+        : "Проверьте, что у пользователя есть доступ к рекламному кабинету.",
+      body: renderPendingPanel(pending),
+      tone: accounts.length ? "info" : "warn",
+      closeLabel: accounts.length ? "" : "Закрыть",
+    });
+    const form = el.clientModal.querySelector("#pending-form");
     if (form) {
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         savePending(form.dataset.provider, form, event.submitter);
       });
-      const cancel = el.pendingPanel.querySelector("[data-cancel-pending]");
+      const cancel = el.clientModal.querySelector("[data-cancel-pending]");
       if (cancel) {
         cancel.addEventListener("click", () => {
-          state.activePending = null;
-          state.dismissedPendingIds.add(form.dataset.pendingId || "");
-          renderConnections(state.connections);
+          closePendingModal(true);
         });
       }
     }
+  }
+
+  function closePendingModal(dismiss = false) {
+    if (dismiss && state.activePending?.pending_id) {
+      state.dismissedPendingIds.add(state.activePending.pending_id);
+    }
+    state.pendingModalId = null;
+    state.activePending = null;
+    closeClientModal();
+    if (state.connections) renderConnections(state.connections);
   }
 
   async function startOAuth(provider, button) {
@@ -828,7 +925,7 @@
       setLoading(button, false);
       state.notice = { tone: "error", text: humanizeError(error) };
       renderConnections(state.connections);
-      toast(humanizeError(error), "error");
+      showClientMessage("Ошибка подключения", humanizeError(error), "error");
     }
   }
 
@@ -837,7 +934,7 @@
     if (!slug || !pendingId) return;
     try {
       state.activePending = await api(`/api/hosted/oauth/${slug}/pending?pending_id=${encodeURIComponent(pendingId)}`);
-      state.notice = { tone: "info", text: "Выберите один или несколько аккаунтов и сохраните подключение." };
+      state.notice = null;
       if (!state.connections) state.connections = await api("/api/hosted/connections");
       renderConnections(state.connections);
     } catch (error) {
@@ -845,6 +942,7 @@
       state.activePending = null;
       state.notice = { tone: "error", text: humanizeError(error) };
       renderConnections(state.connections);
+      showClientMessage("Ошибка подключения", humanizeError(error), "error");
     }
   }
 
@@ -853,7 +951,7 @@
     if (!slug || !state.activePending) return;
     const accountIds = Array.from(form.querySelectorAll("input[name='account_id']:checked")).map((i) => i.value);
     if (!accountIds.length) {
-      toast("Выберите хотя бы один аккаунт.", "info");
+      showClientMessage("Нужно выбрать аккаунт", "Отметьте хотя бы один рекламный аккаунт, чтобы завершить подключение.", "warn");
       return;
     }
     setLoading(button, true);
@@ -864,30 +962,35 @@
       });
       state.dismissedPendingIds.add(state.activePending.pending_id);
       state.activePending = null;
-      state.notice = { tone: "success", text: "Аккаунты подключены. MCP tools теперь могут использовать эту платформу." };
+      state.pendingModalId = null;
+      closeClientModal();
+      state.notice = { tone: "success", text: "Аккаунты подключены. Теперь их можно использовать в AI-клиенте." };
       await loadConnections();
-      toast("Подключение сохранено.", "success");
+      showClientMessage("Аккаунт подключён", "Теперь AdForge MCP сможет использовать выбранные рекламные аккаунты в AI-клиенте.", "success");
     } catch (error) {
       if (handle401(error)) return;
       setLoading(button, false);
       state.notice = { tone: "error", text: humanizeError(error) };
       renderConnections(state.connections);
+      showClientMessage("Ошибка подключения", humanizeError(error), "error");
     }
   }
 
   async function disconnect(provider, button) {
-    if (!window.confirm("Отключить платформу и удалить ее сохраненное OAuth-подключение из hosted storage?")) return;
+    if (!window.confirm("Отключить эту рекламную платформу? При необходимости её можно подключить заново.")) return;
     setLoading(button, true);
     try {
       await api("/api/hosted/connections/disconnect", "POST", { provider });
       if (state.activePending?.provider === provider) state.activePending = null;
       state.notice = { tone: "success", text: "Платформа отключена." };
       await loadConnections();
+      showClientMessage("Аккаунт отключён", "Подключение платформы удалено. При необходимости его можно добавить заново.", "success");
     } catch (error) {
       if (handle401(error)) return;
       setLoading(button, false);
       state.notice = { tone: "error", text: humanizeError(error) };
       renderConnections(state.connections);
+      showClientMessage("Ошибка отключения", humanizeError(error), "error");
     }
   }
 
@@ -1156,9 +1259,9 @@
   function statusBadge(status, limited) {
     const map = {
       connected: ["Подключено", "ok"],
-      ready_to_connect: ["Доступно для подключения", "info"],
-      select_accounts: ["Выберите аккаунты", "warn"],
-      reconnect_required: ["Нужно переподключить", "warn"],
+      ready_to_connect: ["Не подключено", "info"],
+      select_accounts: ["Выберите аккаунт", "warn"],
+      reconnect_required: ["Нужно подключить заново", "warn"],
       provider_setup_required: ["Платформа настраивается", "warn"],
       credentials_missing: ["Платформа настраивается", "muted"],
       error: ["Ошибка подключения", "err"],
@@ -1169,36 +1272,36 @@
   }
 
   function statusHint(status, canConnect) {
-    if (status === "connected") return "Подключенные аккаунты доступны через hosted MCP tools.";
-    if (status === "select_accounts") return "OAuth завершен. Выберите аккаунты, чтобы закончить подключение.";
-    if (status === "reconnect_required") return "Время выбора аккаунтов истекло. Переподключите платформу.";
-    if (status === "provider_setup_required") return "OAuth-секреты есть, но приложение провайдера ещё проходит настройку redirect URL/client_id. Кнопка подключения временно закрыта.";
+    if (status === "connected") return "Аккаунт подключён и готов к работе в AI-клиенте.";
+    if (status === "select_accounts") return "Авторизация завершена. Выберите аккаунт, чтобы закончить подключение.";
+    if (status === "reconnect_required") return "Время выбора аккаунта истекло. Подключите платформу заново.";
+    if (status === "provider_setup_required") return "Мы заканчиваем настройку этой платформы. Подключение скоро станет доступно.";
     if (status === "credentials_missing") {
       return "Подключение этой платформы временно настраивается. Если нужно ускорить доступ, обратитесь к менеджеру AdForge.";
     }
-    if (status === "ready_to_connect") return "Платформа готова. Нажмите подключить и пройдите OAuth.";
-    return canConnect ? "Нажмите подключить и пройдите OAuth." : "Платформа временно настраивается.";
+    if (status === "ready_to_connect") return "Нажмите подключить и разрешите доступ к рекламному кабинету.";
+    return canConnect ? "Нажмите подключить и разрешите доступ к рекламному кабинету." : "Платформа временно настраивается.";
   }
 
   function statusLabel(status) {
     return {
-      mcp_ready: "MCP готов",
+      mcp_ready: "подключение готово",
       ready: "готово",
-      ok: "ok",
+      ok: "готово",
       connected: "подключено",
       not_connected: "не подключено",
-      pending_account_selection: "выберите аккаунты",
-      reconnect_required: "нужно переподключить",
-      token_expired: "токен истек",
+      pending_account_selection: "выберите аккаунт",
+      reconnect_required: "нужно подключить заново",
+      token_expired: "нужно подключить заново",
       env_missing: "платформа настраивается",
       provider_setup_required: "нужна настройка провайдера",
       platform_configuring: "платформа настраивается",
       ready_to_connect: "готово к подключению",
-      blocked_missing_credentials: "нет credentials",
+      blocked_missing_credentials: "платформа настраивается",
       blocked_provider_dashboard_check: "нужна проверка provider dashboard",
       blocked_authorize_url: "authorize URL заблокирован",
       blocked_public_disabled: "public OAuth выключен",
-      missing_env: "нет env",
+      missing_env: "платформа настраивается",
       not_checked: "не проверено",
       not_recorded: "не записывается",
       api_error: "ошибка API",
@@ -1401,6 +1504,52 @@
     if (window.location.search) {
       window.history.replaceState({}, "", window.location.pathname);
     }
+  }
+
+  function markMcpUrlCopied() {
+    state.mcpUrlCopied = true;
+    localStorage.setItem(MCP_URL_COPIED_KEY, "1");
+    if (state.section === "overview" && state.capabilities && state.connections) {
+      renderOverview(state.capabilities, state.connections);
+    }
+  }
+
+  function showClientMessage(title, message, tone = "info") {
+    showClientModal({
+      title,
+      subtitle: message,
+      body: "",
+      tone,
+      closeLabel: "Понятно",
+    });
+  }
+
+  function showClientModal({ title, subtitle = "", body = "", tone = "info", closeLabel = "Понятно" }) {
+    if (!el.clientModal) return;
+    el.clientModal.dataset.tone = tone;
+    el.clientModalTitle.textContent = title;
+    el.clientModalSubtitle.textContent = subtitle;
+    el.clientModalSubtitle.hidden = !subtitle;
+    el.clientModalBody.innerHTML = body || "";
+    el.clientModalActions.innerHTML = closeLabel
+      ? `<button type="button" class="btn btn--primary" data-client-modal-close>${esc(closeLabel)}</button>`
+      : "";
+    el.clientModalActions.querySelectorAll("[data-client-modal-close]").forEach((node) => {
+      node.addEventListener("click", () => closeClientModal());
+    });
+    el.clientModal.hidden = false;
+  }
+
+  function closeClientModal() {
+    if (!el.clientModal) return;
+    if (state.pendingModalId && state.activePending?.pending_id === state.pendingModalId) {
+      state.dismissedPendingIds.add(state.pendingModalId);
+      state.activePending = null;
+      state.pendingModalId = null;
+    }
+    el.clientModal.hidden = true;
+    el.clientModalBody.innerHTML = "";
+    el.clientModalActions.innerHTML = "";
   }
 
   function toast(message, tone = "info") {

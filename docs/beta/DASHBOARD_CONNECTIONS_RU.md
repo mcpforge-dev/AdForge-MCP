@@ -1,125 +1,108 @@
 # Dashboard Connections
 
-`Connections` - основной рабочий раздел dashboard. Через него beta-пользователь подключает рекламные платформы, выбирает аккаунты и проверяет готовность hosted MCP.
+`Connections` - основной клиентский раздел dashboard. Через него beta-пользователь подключает рекламные платформы, выбирает рекламные аккаунты и затем использует их в AI-клиенте через hosted AdForge MCP.
 
-Dashboard состоит из трёх разделов:
+Клиентский dashboard состоит из четырёх разделов:
 
-- `Overview` - статус сервиса, счётчики подключений, next steps и блок `Connect to MCP client` с MCP URL.
-- `Connections` - карточки платформ, OAuth, выбор аккаунтов, reconnect/disconnect.
-- `Diagnostics` - запуск полной диагностики (service, security, MCP, platforms).
+- `Начало работы` - понятный onboarding: подключить платформу, выбрать аккаунты, скопировать MCP URL, подключить MCP в AI-клиенте и задать первый вопрос.
+- `Подключения` - карточки рекламных платформ, OAuth-подключение, выбор аккаунтов и отключение платформ.
+- `MCP` - MCP URL, ключ доступа, инструкция подключения к Codex и примеры запросов.
+- `Профиль` - базовая информация аккаунта без role/workspace и других технических полей.
 
-В header всегда виден бейдж `Preview-only: ON` - опасные действия только предпросматриваются и не применяются к рекламным кабинетам.
+Diagnostics endpoints остаются в backend и admin/developer сценариях, но обычному клиенту диагностика не показывается как обязательный шаг.
 
-## Вход (token gate)
+## Безопасный режим
 
-1. Открыть dashboard URL, который выдала команда AdForge.
-2. На экране входа вставить beta token в поле `Beta access token` и нажать `Enter dashboard`.
-3. При неверном токене показывается `Invalid or missing beta token`.
+В интерфейсе используется клиентская формулировка `Безопасный режим`.
 
-Токен хранится только в браузере и нигде не отображается после входа. Кнопка `Sign out` в header очищает его.
+Это означает: AdForge MCP может анализировать рекламные аккаунты и показывать предварительный просмотр изменений. Реальные изменения в рекламных кабинетах без подтверждения не выполняются. Backend preview-only guardrails нельзя отключать для beta.
+
+## Вход
+
+1. Открыть dashboard URL.
+2. Зарегистрироваться или войти по email.
+3. Если используется старый beta fallback, ввести код доступа, который выдал менеджер AdForge.
 
 Пользователь не должен скачивать репозиторий, запускать локальный сервер или редактировать `.env`.
 
-## Hosted MCP block (Overview)
+## Начало работы
 
-В разделе `Overview`, блок `Connect to MCP client`:
+Главная страница показывает простой сценарий:
 
-- MCP URL, например `https://your-domain.com/mcp`;
-- кнопка `Copy MCP URL`;
-- пример заголовка авторизации `Authorization: Bearer <BETA_TOKEN>` (без реального токена).
+1. Подключите рекламную платформу.
+2. Выберите рекламные аккаунты.
+3. Скопируйте MCP URL.
+4. Подключите AdForge MCP в Codex или Claude.
+5. Перезапустите MCP / откройте новый чат.
+6. Спросите AI: `Какие рекламные аккаунты подключены?`
 
-Этот URL нужен для Codex, Claude или другого MCP-клиента. Beta token передаётся как Bearer authorization.
+После копирования MCP URL шаг визуально отмечается как выполненный.
 
-## Подключение Meta Ads
+## Подключение рекламной платформы
 
-1. В карточке `Meta Ads` нажать `Connect`.
-2. Пройти Meta OAuth.
-3. Подтвердить нужные разрешения.
-4. После возврата в dashboard выбрать рекламные аккаунты.
-5. Нажать сохранение выбора.
-6. Запустить `Run diagnostics`.
-7. Убедиться, что статус стал `MCP ready` или `connected`.
+1. В разделе `Подключения` нажать `Подключить` в карточке нужной платформы.
+2. Пройти OAuth у провайдера.
+3. После возврата в dashboard выбрать рекламные аккаунты в pop-up.
+4. Нажать `Подключить выбранные`.
+5. Дождаться pop-up `Аккаунт подключён`.
 
-## Подключение Google Ads
+Если аккаунты не найдены, dashboard показывает pop-up `Аккаунты не найдены` с понятным объяснением: нужно проверить доступ пользователя к рекламному кабинету.
 
-1. В карточке `Google Ads` нажать `Connect`.
-2. Пройти Google OAuth.
-3. Разрешить доступ к Google Ads.
-4. После callback выбрать customer accounts.
-5. Сохранить выбор.
-6. Запустить диагностику.
+## Account Selection Pop-Up
 
-Для Google Ads на сервере также должен быть настроен `AD_MCP_GOOGLE_ADS_DEVELOPER_TOKEN`.
+После успешного OAuth dashboard автоматически открывает pop-up:
 
-## Подключение TikTok Ads
+- заголовок `Выберите рекламный аккаунт`;
+- описание, что доступ к рекламному кабинету получен;
+- список аккаунтов с чекбоксами;
+- кнопки `Подключить выбранные` и `Закрыть`.
 
-1. В карточке `TikTok Ads` нажать `Connect`, если OAuth credentials настроены.
-2. Пройти TikTok OAuth.
-3. Выбрать доступные advertiser accounts.
-4. Сохранить подключение.
-
-В текущей beta TikTok connection flow может быть доступен, но campaigns/metrics могут возвращать `not_available`.
-
-## Подключение Yandex Direct
-
-1. В карточке `Yandex Direct` нажать `Connect`, если OAuth credentials настроены.
-2. Пройти Yandex OAuth.
-3. Выбрать доступные client logins.
-4. Сохранить подключение.
-
-В текущей beta Yandex connection flow может быть доступен, но campaigns/metrics могут возвращать `not_available`.
-
-## Account selection
-
-После успешного OAuth dashboard показывает pending selection:
-
-- provider;
-- список доступных аккаунтов;
-- checkbox для выбора;
-- кнопку сохранения.
-
-Если аккаунты не выбрать, MCP tools увидят платформу как `no_accounts_selected`.
+Пользователь больше не должен искать pending-блок выше или ниже по странице.
 
 ## Статусы карточек
 
-В карточке платформы статус показан бейджем:
+В клиентском UI используются человекочитаемые статусы:
 
-| Бейдж | Значение |
+| Статус | Значение |
 | --- | --- |
-| `Credentials missing` | OAuth credentials провайдера не настроены на сервере. Кнопка `Connect` заблокирована. |
-| `Ready to connect` | Credentials есть, можно запускать OAuth. |
-| `Select accounts` | OAuth прошёл, нужно выбрать аккаунты (pending selection). |
-| `Connected` | Подключение сохранено, аккаунты доступны MCP tools. |
-| `Reconnect required` | Pending selection истёк - нужно переподключить. |
-| `Limited beta` | Дополнительный бейдж для TikTok/Yandex: OAuth groundwork, campaigns/metrics могут быть `not_available`. |
-| `Error` | Последняя операция завершилась ошибкой (см. `Last error` в карточке). |
+| `Не подключено` | Платформа готова, но пользователь ещё не запускал подключение. |
+| `В процессе` | Идёт подключение или загрузка состояния. |
+| `Выберите аккаунт` | OAuth завершён, нужно выбрать рекламный аккаунт. |
+| `Подключено` | Аккаунты подключены и готовы к работе в AI-клиенте. |
+| `Ошибка подключения` | Подключение не удалось. |
+| `Нужно подключить заново` | Сессия выбора аккаунта истекла или доступ нужно обновить. |
+| `Платформа настраивается` | Команда AdForge ещё настраивает provider app/credentials. |
 
-Diagnostics-статусы платформ (`Run diagnostics`): `mcp_ready`, `env_missing`, `not_connected`, `token_expired`, `api_error`, `needs_setup`.
+Технические статусы вроде `OAuth secrets present`, `env missing`, `mcp_ready`, `provider env` и `diagnostics` не показываются обычному клиенту.
 
-## Reconnect
+## MCP
 
-Нажмите `Reconnect` в карточке платформы. Dashboard снова запустит OAuth flow и после callback предложит выбрать аккаунты.
+В разделе `MCP` пользователь видит:
+
+- MCP URL;
+- кнопку создания или обновления ключа доступа;
+- инструкцию подключения к Codex через Streamable HTTP;
+- примеры запросов для первого чата.
+
+Если Codex просит Header:
+
+```text
+Name: Authorization
+Value: Bearer <ваш ключ доступа>
+```
+
+Если Codex просит `Bearer token environment variable`, туда нужно вставлять имя переменной, например `ADFORGE_MCP_CLIENT_TOKEN`, а не сам ключ.
 
 ## Disconnect
 
-Нажмите `Disconnect` в карточке платформы. Backend удалит сохраненные tokens/accounts этой платформы из beta connection store.
+Кнопка `Отключить` удаляет подключение платформы на сервере. После этого пользователь видит pop-up `Аккаунт отключён`. Платформу можно подключить заново.
 
 ## Troubleshooting
 
-`env missing`: на сервере не заполнены OAuth env variables. Нужно заполнить `.env` на VPS/WPS и перезапустить сервисы.
+`Клиент не видит tools в AI-клиенте`: проверьте, что MCP URL указан как `https://mcp.holymedia.kz/mcp`, а ключ доступа передан через Header `Authorization` или корректную env-переменную.
 
-`invalid redirect URL`: redirect URI в приложении провайдера не совпадает с dashboard callback URL.
+`Аккаунты не найдены`: у пользователя нет доступа к рекламному кабинету или провайдер не вернул доступные accounts/client logins.
 
-`OAuth callback error`: provider вернул ошибку или state истек. Запустите reconnect.
+`Платформа настраивается`: credentials/provider dashboard ещё не готовы. Техническая причина должна быть видна в admin/diagnostics, но не в клиентском UI.
 
-`no accounts returned`: у пользователя нет доступных рекламных аккаунтов или не хватает permissions.
-
-`token expired`: переподключите платформу через reconnect.
-
-`provider API error`: запустите `Run diagnostics`, проверьте permissions, developer token и доступы в рекламном кабинете.
-
-`no accounts selected`: OAuth прошел, но аккаунты не были выбраны в pending selection.
-
-`MCP client sees no tools`: проверьте MCP URL, beta token и доступность `/api/diagnostics/mcp`.
-
-`diagnostics failed`: проверьте backend logs и endpoint `GET /api/diagnostics`.
+`Нужно подключить заново`: повторите OAuth-подключение и выберите аккаунты в pop-up.
