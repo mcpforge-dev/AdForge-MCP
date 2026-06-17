@@ -119,6 +119,55 @@ def test_oauth_diagnostics_marks_configured_provider(tmp_path: Path) -> None:
     assert "AD_MCP_GOOGLE_ADS_LOGIN_CUSTOMER_ID" in google["configured_optional_env"]
 
 
+def test_next_platform_oauth_stays_client_closed_until_publicly_enabled(tmp_path: Path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        public_base_url="https://mcp.holymedia.kz",
+        tiktok_oauth_app_id="tiktok-app-id",
+        tiktok_oauth_app_secret="tiktok-app-secret",
+        yandex_oauth_client_id="yandex-client-id",
+        yandex_oauth_client_secret="yandex-client-secret",
+    )
+    service = HostedConnectionService(settings)
+
+    connections = service.connections()
+    tiktok = next(platform for platform in connections["platforms"] if platform["provider"] == "tiktok_ads")
+    yandex = next(platform for platform in connections["platforms"] if platform["provider"] == "yandex_direct")
+    diagnostics = service.oauth_diagnostics()
+
+    assert tiktok["status"] == "provider_setup_required"
+    assert tiktok["oauth_credentials_configured"] is True
+    assert tiktok["oauth_configured"] is False
+    assert tiktok["oauth_public_enabled"] is False
+    assert yandex["status"] == "provider_setup_required"
+    assert yandex["oauth_credentials_configured"] is True
+    assert yandex["oauth_configured"] is False
+    assert yandex["oauth_public_enabled"] is False
+    assert "tiktok-app-secret" not in str(diagnostics)
+    assert "yandex-client-secret" not in str(diagnostics)
+    assert "https://mcp.holymedia.kz/oauth/tiktok/callback" in str(diagnostics)
+    assert "https://mcp.holymedia.kz/oauth/yandex/callback" in str(diagnostics)
+
+
+def test_next_platform_oauth_can_be_publicly_enabled_after_provider_dashboard_check(tmp_path: Path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        public_base_url="https://mcp.holymedia.kz",
+        tiktok_oauth_app_id="tiktok-app-id",
+        tiktok_oauth_app_secret="tiktok-app-secret",
+        tiktok_oauth_public_enabled=True,
+    )
+    service = HostedConnectionService(settings)
+
+    preview = service.oauth_start_preview("tiktok_ads")
+    info = service.oauth_authorization_info("tiktok_ads")
+
+    assert preview["status"] == "oauth_ready"
+    assert preview["public_connection_enabled"] is True
+    assert info["status"] == "oauth_ready"
+    assert "tiktok-app-secret" not in str(info)
+
+
 def test_import_local_provider_writes_hosted_store_without_exposing_secrets(tmp_path: Path) -> None:
     config = tmp_path / "ads_config.yaml"
     config.write_text(

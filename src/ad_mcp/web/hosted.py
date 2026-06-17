@@ -50,8 +50,20 @@ OAUTH_REQUIRED_ENV = {
 OAUTH_OPTIONAL_ENV = {
     "meta_ads": ("AD_MCP_META_OAUTH_API_VERSION", "AD_MCP_META_OAUTH_SCOPES"),
     "google_ads": ("AD_MCP_GOOGLE_ADS_LOGIN_CUSTOMER_ID", "AD_MCP_GOOGLE_ADS_API_VERSION", "AD_MCP_GOOGLE_OAUTH_SCOPES"),
-    "tiktok_ads": ("AD_MCP_TIKTOK_OAUTH_AUTH_URL", "AD_MCP_TIKTOK_OAUTH_TOKEN_URL", "AD_MCP_TIKTOK_OAUTH_ADVERTISER_GET_URL", "AD_MCP_TIKTOK_OAUTH_ADVERTISER_ID"),
-    "yandex_direct": ("AD_MCP_YANDEX_OAUTH_SCOPE", "AD_MCP_YANDEX_DIRECT_CLIENTS_URL", "AD_MCP_YANDEX_DIRECT_LOGIN", "AD_MCP_YANDEX_DIRECT_CLIENT_LOGIN"),
+    "tiktok_ads": (
+        "AD_MCP_TIKTOK_OAUTH_AUTH_URL",
+        "AD_MCP_TIKTOK_OAUTH_TOKEN_URL",
+        "AD_MCP_TIKTOK_OAUTH_ADVERTISER_GET_URL",
+        "AD_MCP_TIKTOK_OAUTH_ADVERTISER_ID",
+        "AD_MCP_TIKTOK_OAUTH_PUBLIC_ENABLED",
+    ),
+    "yandex_direct": (
+        "AD_MCP_YANDEX_OAUTH_SCOPE",
+        "AD_MCP_YANDEX_DIRECT_CLIENTS_URL",
+        "AD_MCP_YANDEX_DIRECT_LOGIN",
+        "AD_MCP_YANDEX_DIRECT_CLIENT_LOGIN",
+        "AD_MCP_YANDEX_OAUTH_PUBLIC_ENABLED",
+    ),
 }
 
 ENV_TO_SETTING = {
@@ -71,12 +83,32 @@ ENV_TO_SETTING = {
     "AD_MCP_TIKTOK_OAUTH_TOKEN_URL": "tiktok_oauth_token_url",
     "AD_MCP_TIKTOK_OAUTH_ADVERTISER_GET_URL": "tiktok_oauth_advertiser_get_url",
     "AD_MCP_TIKTOK_OAUTH_ADVERTISER_ID": "tiktok_oauth_advertiser_id",
+    "AD_MCP_TIKTOK_OAUTH_PUBLIC_ENABLED": "tiktok_oauth_public_enabled",
     "AD_MCP_YANDEX_OAUTH_CLIENT_ID": "yandex_oauth_client_id",
     "AD_MCP_YANDEX_OAUTH_CLIENT_SECRET": "yandex_oauth_client_secret",
     "AD_MCP_YANDEX_OAUTH_SCOPE": "yandex_oauth_scope",
     "AD_MCP_YANDEX_DIRECT_CLIENTS_URL": "yandex_direct_clients_url",
     "AD_MCP_YANDEX_DIRECT_LOGIN": "yandex_direct_login",
     "AD_MCP_YANDEX_DIRECT_CLIENT_LOGIN": "yandex_direct_client_login",
+    "AD_MCP_YANDEX_OAUTH_PUBLIC_ENABLED": "yandex_oauth_public_enabled",
+}
+
+OAUTH_PUBLIC_ENABLE_SETTINGS = {
+    "tiktok_ads": "tiktok_oauth_public_enabled",
+    "yandex_direct": "yandex_oauth_public_enabled",
+}
+
+OAUTH_PROVIDER_SETUP = {
+    "tiktok_ads": [
+        "TikTok for Business Developer: добавьте точный Redirect URL в приложение.",
+        "Redirect URL должен совпадать символ в символ: {redirect_url}",
+        "После проверки app_id/app_secret и redirect URL включите AD_MCP_TIKTOK_OAUTH_PUBLIC_ENABLED=true.",
+    ],
+    "yandex_direct": [
+        "Yandex OAuth: client_id должен быть именно ID OAuth-приложения, а не логин/номер рекламного аккаунта.",
+        "В OAuth-приложении добавьте Redirect URI: {redirect_url}",
+        "После проверки client_id/client_secret и direct:api scope включите AD_MCP_YANDEX_OAUTH_PUBLIC_ENABLED=true.",
+    ],
 }
 
 def _route_path(path: str) -> str:
@@ -120,8 +152,8 @@ class HostedConnectionService:
                 "token_env": "ADFORGE_MCP_CLIENT_TOKEN",
             },
             "client_notes": {
-                "codex": "Use the Streamable HTTP/custom MCP server option and set the URL plus bearer token.",
-                "claude": "Add AdForge MCP as a custom connector with Name and URL, then allow the requested tools.",
+                "codex": "Use Streamable HTTP/custom MCP. If Codex asks for a Bearer token environment variable, enter ADFORGE_MCP_CLIENT_TOKEN and store the raw token in that variable.",
+                "claude": "Add AdForge MCP as a custom connector with Name and URL, then use the personal Bearer token.",
                 "gemini": "Use the client-specific custom connector flow once available.",
             },
             "status": "transport_available",
@@ -189,13 +221,17 @@ class HostedConnectionService:
                 "message": "This platform is outside the first beta OAuth scope.",
             }
         service = self._oauth_service(provider)
-        configured = service.configured() if service is not None else False
+        credentials_configured = service.configured() if service is not None else False
+        public_enabled = self._oauth_public_enabled(provider)
+        ready = credentials_configured and public_enabled
         return {
             "provider": platform.provider,
             "label": platform.label,
-            "status": "oauth_ready" if configured else "oauth_not_configured",
+            "status": "oauth_ready" if ready else "oauth_not_configured",
+            "credentials_configured": credentials_configured,
+            "public_connection_enabled": public_enabled,
             "redirect_url": _join_url(self._public_base_url(), self._oauth_redirect_path(platform.provider)),
-            "message": "OAuth can start when app credentials are configured.",
+            "message": "OAuth can start when app credentials and provider dashboard settings are verified.",
         }
 
     def meta_oauth_redirect_url(self) -> str:
@@ -214,10 +250,12 @@ class HostedConnectionService:
 
     def oauth_redirect_url(self, provider: str) -> str:
         service = self._require_oauth_service(provider)
+        self._ensure_oauth_public(provider)
         return service.authorization_url()
 
     def oauth_authorization_info(self, provider: str) -> dict[str, Any]:
         service = self._require_oauth_service(provider)
+        self._ensure_oauth_public(provider)
         return {
             "provider": provider,
             "status": "oauth_ready",
@@ -269,6 +307,9 @@ class HostedConnectionService:
         active_pending = [item for item in pending_selections if item.get("status") == "pending_account_selection"]
         expired_pending = [item for item in pending_selections if item.get("status") == "expired"]
         has_oauth_connection = bool(hosted_accounts)
+        oauth_preview = self.oauth_start_preview(platform.provider)
+        oauth_credentials_configured = bool(oauth_preview.get("credentials_configured"))
+        oauth_public_enabled = bool(oauth_preview.get("public_connection_enabled"))
         if has_oauth_connection:
             status = "connected"
             source = "hosted_connection_store"
@@ -282,13 +323,15 @@ class HostedConnectionService:
             status = "development_configured"
             source = "local_connections_config"
             safe_accounts = local_safe_accounts
+        elif platform.oauth_target and oauth_credentials_configured and not oauth_public_enabled:
+            status = "provider_setup_required"
+            source = "none"
         elif platform.oauth_target:
             status = "not_connected"
             source = "none"
         else:
             status = "planned_later"
             source = "none"
-        oauth_preview = self.oauth_start_preview(platform.provider)
         missing_env = [
             name
             for name in OAUTH_REQUIRED_ENV.get(platform.provider, ())
@@ -305,17 +348,26 @@ class HostedConnectionService:
                 "status": "env_missing",
                 "message": "OAuth app credentials are missing on the server.",
             }
+        elif platform.oauth_target and oauth_credentials_configured and not oauth_public_enabled:
+            last_error = {
+                "status": "provider_dashboard_setup_required",
+                "message": "OAuth credentials exist, but provider dashboard settings must be verified before client connection is exposed.",
+            }
         diagnostic_status = status
         if status == "connected" and not missing_env:
             diagnostic_status = "mcp_ready"
         elif missing_env:
             diagnostic_status = "env_missing"
+        elif status == "provider_setup_required":
+            diagnostic_status = "provider_setup_required"
         return {
             "provider": platform.provider,
             "label": platform.label,
             "beta_priority": platform.beta_priority,
             "oauth_target": platform.oauth_target,
             "oauth_configured": oauth_preview.get("status") == "oauth_ready",
+            "oauth_credentials_configured": oauth_credentials_configured,
+            "oauth_public_enabled": oauth_public_enabled,
             "oauth_redirect_url": oauth_preview.get("redirect_url"),
             "status": status,
             "source": source,
@@ -345,10 +397,13 @@ class HostedConnectionService:
         configured_optional = [name for name in optional if str(getattr(self._settings, ENV_TO_SETTING[name], "") or "").strip()]
         platform_status = self._platform_status(platform)
         slug = OAUTH_PROVIDER_SLUGS[platform.provider]
+        public_enabled = self._oauth_public_enabled(platform.provider)
         return {
             "provider": platform.provider,
             "label": platform.label,
             "status": "configured" if service and service.configured() else "missing_env",
+            "client_visible_status": self._oauth_client_visible_status(platform.provider, missing_required),
+            "public_connection_enabled": public_enabled,
             "missing_required_env": missing_required,
             "configured_optional_env": configured_optional,
             "redirect_url": _join_url(self._public_base_url(), self._oauth_redirect_path(platform.provider)),
@@ -360,6 +415,7 @@ class HostedConnectionService:
             "connected_account_count": len(platform_status.get("accounts", [])),
             "pending_selection_count": len(platform_status.get("pending_selections", [])),
             "notes": self._oauth_provider_notes(platform.provider),
+            "setup_instructions": self._oauth_provider_setup(platform.provider),
         }
 
     def _oauth_provider_notes(self, provider: str) -> list[str]:
@@ -382,6 +438,28 @@ class HostedConnectionService:
             ],
         }
         return notes.get(provider, [])
+
+    def _oauth_public_enabled(self, provider: str) -> bool:
+        setting_name = OAUTH_PUBLIC_ENABLE_SETTINGS.get(provider)
+        if not setting_name:
+            return True
+        return bool(getattr(self._settings, setting_name))
+
+    def _ensure_oauth_public(self, provider: str) -> None:
+        if self._oauth_public_enabled(provider):
+            return
+        raise ValueError("Платформа настраивается. Мы откроем OAuth-подключение после проверки приложения провайдера.")
+
+    def _oauth_client_visible_status(self, provider: str, missing_required: list[str]) -> str:
+        if missing_required:
+            return "platform_configuring"
+        if not self._oauth_public_enabled(provider):
+            return "platform_configuring"
+        return "ready_to_connect"
+
+    def _oauth_provider_setup(self, provider: str) -> list[str]:
+        redirect_url = _join_url(self._public_base_url(), self._oauth_redirect_path(provider))
+        return [item.format(redirect_url=redirect_url) for item in OAUTH_PROVIDER_SETUP.get(provider, [])]
 
     def _oauth_service(self, provider: str):
         services = {

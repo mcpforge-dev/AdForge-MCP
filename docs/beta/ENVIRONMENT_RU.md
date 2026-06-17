@@ -73,8 +73,15 @@ https://your-domain.com/oauth/google/callback
 | `AD_MCP_TIKTOK_OAUTH_SCOPES` | Нет | Scopes, если требуются приложением. |
 | `AD_MCP_TIKTOK_OAUTH_ADVERTISER_ID` | Нет | Fallback advertiser id. |
 | `AD_MCP_TIKTOK_OAUTH_REDIRECT_PATH` | Да для TikTok | Обычно `/oauth/tiktok/callback`. |
+| `AD_MCP_TIKTOK_OAUTH_PUBLIC_ENABLED` | Нет | `true` только после проверки, что redirect URL добавлен в TikTok developer app. По умолчанию клиентская кнопка скрыта от OAuth-старта. |
 
 Campaigns/metrics для TikTok в текущей beta могут возвращать `not_available`.
+
+Для live-домена TikTok redirect URL должен совпадать символ в символ:
+
+```text
+https://mcp.holymedia.kz/oauth/tiktok/callback
+```
 
 ## Yandex Direct OAuth
 
@@ -89,8 +96,15 @@ Campaigns/metrics для TikTok в текущей beta могут возвращ
 | `AD_MCP_YANDEX_DIRECT_LOGIN` | Нет | Agency/login context. |
 | `AD_MCP_YANDEX_DIRECT_CLIENT_LOGIN` | Нет | Client login fallback. |
 | `AD_MCP_YANDEX_OAUTH_REDIRECT_PATH` | Да для Yandex | Обычно `/oauth/yandex/callback`. |
+| `AD_MCP_YANDEX_OAUTH_PUBLIC_ENABLED` | Нет | `true` только после проверки, что client_id принадлежит OAuth-приложению, client_secret верный, scope `direct:api` разрешен, redirect URI добавлен. |
 
 Campaigns/metrics для Yandex Direct в текущей beta могут возвращать `not_available`.
+
+Для live-домена Yandex redirect URI должен совпадать символ в символ:
+
+```text
+https://mcp.holymedia.kz/oauth/yandex/callback
+```
 
 ## ClickHouse
 

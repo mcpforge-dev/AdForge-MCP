@@ -365,6 +365,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     {
                         "database": self.auth.diagnostics(),
                         "service": self.diagnostics.overview(live=False),
+                        "oauth": self.hosted.oauth_diagnostics(),
                         "security": self.diagnostics.security(),
                     }
                 )

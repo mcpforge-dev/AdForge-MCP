@@ -487,7 +487,7 @@
         <div class="kv-row"><span>Создан</span><strong>${esc(formatTime(token?.created_at))}</strong></div>
         <div class="kv-row"><span>Последнее использование</span><strong>${esc(formatTime(token?.last_used_at))}</strong></div>
       </div>
-      <span>Используйте этот token в Codex или Claude как Bearer token. Raw token показывается только после создания или ротации.</span>
+      <span>Используйте этот token в Codex или Claude как Bearer token. Если Codex просит “Bearer token environment variable”, укажите имя переменной ADFORGE_MCP_CLIENT_TOKEN, а сам token сохраните в эту переменную. Raw token показывается только после создания или ротации.</span>
     `;
     el.mcpTokenActions.innerHTML = active
       ? `
@@ -646,10 +646,11 @@
     const summary = platform.diagnostic_summary || {};
     const limited = LIMITED_BETA.has(platform.provider);
     const canConnect = Boolean(platform.oauth_configured);
-    const connectLabel = !canConnect ? "Скоро доступно" : status === "connected" ? "Переподключить" : "Подключить";
+    const connectLabel = !canConnect ? "Платформа настраивается" : status === "connected" ? "Переподключить" : "Подключить";
 
     const metaBits = [
       `<span>Статус <strong>${canConnect ? "доступно" : "настраивается"}</strong></span>`,
+      `<span>OAuth <strong>${platform.oauth_credentials_configured ? "секреты есть" : "ждём настройки"}</strong></span>`,
       `<span>Аккаунты <strong>${accounts.length}</strong></span>`,
     ];
     if (summary.last_successful_update) {
@@ -674,6 +675,7 @@
         </div>
         <div class="platform-card__meta">${metaBits.join("")}</div>
         <p class="platform-card__hint">${esc(statusHint(status, canConnect))}</p>
+        ${status === "provider_setup_required" ? renderProviderSetupCallout(platform) : ""}
         ${accountsBlock}
         ${pending ? renderPendingCallout(platform, pending) : ""}
         ${expired && !pending ? renderExpiredCallout() : ""}
@@ -692,6 +694,15 @@
       <div class="account-row">
         <span>${esc(account.name || id || "Аккаунт")}</span>
         <span class="mono">${esc(id)}</span>
+      </div>
+    `;
+  }
+
+  function renderProviderSetupCallout(platform) {
+    return `
+      <div class="callout callout--warn">
+        <strong>Платформа настраивается</strong>
+        <span>Серверная конфигурация найдена, но перед подключением нужно сверить приложение провайдера. Технические детали доступны в админке, клиенту не нужно разбираться с ошибками TikTok/Yandex.</span>
       </div>
     `;
   }
@@ -1009,6 +1020,8 @@
       </tr>
     `).join("");
     const database = diagnostics.database || {};
+    const oauthProviders = diagnostics.oauth?.providers || [];
+    const oauthCards = oauthProviders.map(renderAdminOAuthCard).join("");
     el.adminContent.innerHTML = `
       <div class="diag-grid">
         <article class="card">
@@ -1030,12 +1043,15 @@
           ])}
         </article>
       </div>
+      ${oauthCards ? `<article class="card"><h3 class="card__title">OAuth setup</h3><div class="admin-oauth-grid">${oauthCards}</div></article>` : ""}
       <article class="card">
         <h3 class="card__title">Пользователи</h3>
-        <table class="admin-table">
-          <thead><tr><th>Пользователь</th><th>Роль</th><th>Статус</th><th>MCP token</th><th>Создан</th><th>Последний вход</th><th>Платформы</th><th>Действия</th></tr></thead>
-          <tbody>${rows || `<tr><td colspan="8">Пользователей пока нет.</td></tr>`}</tbody>
-        </table>
+        <div class="admin-table-wrap">
+          <table class="admin-table">
+            <thead><tr><th>Пользователь</th><th>Роль</th><th>Статус</th><th>MCP token</th><th>Создан</th><th>Последний вход</th><th>Платформы</th><th>Действия</th></tr></thead>
+            <tbody>${rows || `<tr><td colspan="8">Пользователей пока нет.</td></tr>`}</tbody>
+          </table>
+        </div>
       </article>
     `;
     el.adminContent.querySelectorAll("[data-admin-status]").forEach((button) => {
@@ -1050,6 +1066,27 @@
         updateAdminUser(button.dataset.adminTokenRevoke, {}, "/api/admin/users/mcp-token/revoke", button);
       });
     });
+  }
+
+  function renderAdminOAuthCard(provider) {
+    const ready = provider.client_visible_status === "ready_to_connect";
+    const missing = provider.missing_required_env || [];
+    const setup = provider.setup_instructions || [];
+    return `
+      <div class="admin-oauth-card">
+        <div class="admin-oauth-card__head">
+          <strong>${esc(provider.label || provider.provider)}</strong>
+          ${statusBadgeMarkup(ready ? "Готово клиенту" : "Платформа настраивается", ready ? "ok" : "warn")}
+        </div>
+        <div class="kv">
+          <div class="kv-row"><span>Env credentials</span><strong>${provider.status === "configured" ? "есть" : "не хватает"}</strong></div>
+          <div class="kv-row"><span>Public OAuth</span><strong>${provider.public_connection_enabled ? "включён" : "выключен"}</strong></div>
+          <div class="kv-row"><span>Redirect URL</span><strong class="mono">${esc(provider.redirect_url || "—")}</strong></div>
+        </div>
+        ${missing.length ? `<p class="card__hint">Не настроено: ${esc(missing.join(", "))}</p>` : ""}
+        ${setup.length ? `<ul class="list-plain">${setup.map((item) => `<li>${esc(item)}</li>`).join("")}</ul>` : ""}
+      </div>
+    `;
   }
 
   async function updateAdminUser(userId, payload, endpoint, button) {
@@ -1074,6 +1111,7 @@
     if (accounts.length) return "connected";
     if (pending.some((x) => x.status === "pending_account_selection")) return "select_accounts";
     if (pending.some((x) => x.status === "expired")) return "reconnect_required";
+    if (platform.oauth_credentials_configured && platform.oauth_public_enabled === false) return "provider_setup_required";
     if (missingEnv || !platform.oauth_configured) return "credentials_missing";
     return "ready_to_connect";
   }
@@ -1084,6 +1122,7 @@
       ready_to_connect: ["Доступно для подключения", "info"],
       select_accounts: ["Выберите аккаунты", "warn"],
       reconnect_required: ["Нужно переподключить", "warn"],
+      provider_setup_required: ["Платформа настраивается", "warn"],
       credentials_missing: ["Платформа настраивается", "muted"],
       error: ["Ошибка подключения", "err"],
     };
@@ -1096,6 +1135,7 @@
     if (status === "connected") return "Подключенные аккаунты доступны через hosted MCP tools.";
     if (status === "select_accounts") return "OAuth завершен. Выберите аккаунты, чтобы закончить подключение.";
     if (status === "reconnect_required") return "Время выбора аккаунтов истекло. Переподключите платформу.";
+    if (status === "provider_setup_required") return "OAuth-секреты есть, но приложение провайдера ещё проходит настройку redirect URL/client_id. Кнопка подключения временно закрыта.";
     if (status === "credentials_missing") {
       return "Подключение этой платформы временно настраивается. Если нужно ускорить доступ, обратитесь к менеджеру AdForge.";
     }
@@ -1114,6 +1154,7 @@
       reconnect_required: "нужно переподключить",
       token_expired: "токен истек",
       env_missing: "платформа настраивается",
+      provider_setup_required: "нужна настройка провайдера",
       api_error: "ошибка API",
       needs_setup: "нужна настройка",
       degraded: "частично работает",

@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     tiktok_oauth_advertiser_get_url: str = "https://business-api.tiktok.com/open_api/v1.3/oauth2/advertiser/get/"
     tiktok_oauth_scopes: str = ""
     tiktok_oauth_advertiser_id: str = ""
+    tiktok_oauth_public_enabled: bool = False
     tiktok_oauth_state_ttl_seconds: int = 900
     yandex_oauth_client_id: str = ""
     yandex_oauth_client_secret: str = ""
@@ -77,6 +78,7 @@ class Settings(BaseSettings):
     yandex_direct_clients_url: str = "https://api.direct.yandex.com/json/v5/clients"
     yandex_direct_login: str = ""
     yandex_direct_client_login: str = ""
+    yandex_oauth_public_enabled: bool = False
     yandex_oauth_state_ttl_seconds: int = 900
     connection_store_path: str = "tokens/connections.json"
     connections_fallback_to_local: bool = True
