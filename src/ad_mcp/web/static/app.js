@@ -697,15 +697,17 @@
     };
     const initials = (data.nickname || data.email || "A").trim().slice(0, 1).toUpperCase();
     el.profileCard.innerHTML = `
-      <div class="profile-layout">
-        <div class="profile-avatar">
+      <form id="avatar-form" class="profile-layout" aria-label="Загрузка фотографии профиля">
+        <label class="profile-avatar profile-avatar--button" title="Нажмите, чтобы загрузить фото">
+          <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp" hidden>
           ${data.avatar_url ? `<img src="${escAttr(data.avatar_url)}" alt="Аватар профиля">` : `<span>${esc(initials)}</span>`}
-        </div>
-        <div>
+        </label>
+        <div class="profile-layout__copy">
           <h3 class="card__title">Аккаунт</h3>
-          <p class="card__hint">Управляйте никнеймом, аватаром и паролем аккаунта.</p>
+          <p class="card__hint">Нажмите на аватар, чтобы загрузить фото. Никнейм и пароль можно изменить ниже.</p>
+          <span class="profile-avatar__hint">JPG, PNG или WEBP до 2 MB.</span>
         </div>
-      </div>
+      </form>
       <div class="grid-2 profile-grid">
         <form id="profile-form" class="card-lite">
           <h3 class="card__title">Профиль</h3>
@@ -722,16 +724,9 @@
           </div>
           <button type="submit" class="btn btn--primary btn--small">Сохранить профиль</button>
         </form>
-        <form id="avatar-form" class="card-lite">
-          <h3 class="card__title">Фотография</h3>
-          <p class="card__hint">JPG, PNG или WEBP до 2 MB. SVG, HTML и исполняемые файлы не принимаются.</p>
-          <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp" required>
-          <button type="submit" class="btn btn--secondary btn--small">Загрузить аватар</button>
-        </form>
-      </div>
-      <form id="change-password-form" class="card-lite profile-password-form">
-        <h3 class="card__title">Смена пароля</h3>
-        <div class="grid-3">
+        <form id="change-password-form" class="card-lite profile-password-form">
+          <h3 class="card__title">Смена пароля</h3>
+          <div class="profile-password-fields">
           <label class="field">
             <span class="field__label">Текущий пароль</span>
             <input name="current_password" type="password" autocomplete="current-password" required>
@@ -744,9 +739,10 @@
             <span class="field__label">Повторите новый пароль</span>
             <input name="confirm_password" type="password" autocomplete="new-password" required>
           </label>
-        </div>
-        <button type="submit" class="btn btn--primary btn--small">Изменить пароль</button>
-      </form>
+          </div>
+          <button type="submit" class="btn btn--primary btn--small">Изменить пароль</button>
+        </form>
+      </div>
     `;
     bindProfileForms();
   }
@@ -770,13 +766,20 @@
       }
     });
 
-    const avatarForm = document.getElementById("avatar-form");
-    avatarForm?.addEventListener("submit", async (event) => {
-      event.preventDefault();
+    const uploadAvatar = async (avatarForm) => {
       const fileInput = avatarForm.querySelector("input[name='avatar']");
       const file = fileInput?.files?.[0];
       if (!file) {
         showClientMessage("Файл не выбран", "Выберите JPG, PNG или WEBP изображение.", "warn");
+        return;
+      }
+      const allowedTypes = new Set(["image/jpeg", "image/png", "image/webp"]);
+      if (!allowedTypes.has(file.type)) {
+        showClientMessage("Неверный формат", "Загрузите JPG, PNG или WEBP изображение.", "warn");
+        return;
+      }
+      if (file.size > 2 * 1024 * 1024) {
+        showClientMessage("Файл слишком большой", "Максимальный размер фотографии профиля — 2 MB.", "warn");
         return;
       }
       const button = avatarForm.querySelector("button[type='submit']");
@@ -792,6 +795,14 @@
       } finally {
         setLoading(button, false);
       }
+    };
+    const avatarForm = document.getElementById("avatar-form");
+    avatarForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await uploadAvatar(avatarForm);
+    });
+    avatarForm?.querySelector("input[name='avatar']")?.addEventListener("change", async () => {
+      await uploadAvatar(avatarForm);
     });
 
     const passwordForm = document.getElementById("change-password-form");
