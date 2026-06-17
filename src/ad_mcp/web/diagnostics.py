@@ -323,6 +323,11 @@ class DiagnosticsService:
             "dangerous_debug_mode_enabled": False,
             "secrets_redacted": True,
             "tokens_returned": False,
+            "smtp_configured": self.settings.smtp_configured,
+            "profile_editing_enabled": True,
+            "avatar_upload_enabled": True,
+            "password_reset_enabled": self.settings.smtp_configured,
+            "password_change_enabled": True,
             "cors_policy": "same-origin",
             "cache_control": "no-store",
             "oauth_provider_env_present": {
@@ -417,6 +422,13 @@ class DiagnosticsService:
                 "secrets_redacted": True,
                 "tokens_returned": False,
                 "cache_control": security["cache_control"],
+            },
+            "account": {
+                "profile_editing_enabled": True,
+                "avatar_upload_enabled": True,
+                "password_change_enabled": True,
+                "password_reset_enabled": self.settings.smtp_configured,
+                "smtp_configured": self.settings.smtp_configured,
             },
             "diagnostics": {
                 "overview": "/api/diagnostics",

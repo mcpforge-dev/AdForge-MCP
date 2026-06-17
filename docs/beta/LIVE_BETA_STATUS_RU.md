@@ -11,6 +11,7 @@
 
 ## Dashboard UI
 
+- 2026-06-17: live UI обновлён до client dashboard onboarding (`6a3ec49`) и затем расширен account-функциями: профиль, никнейм, avatar upload, смена пароля и backend-ready SMTP password reset. Diagnostics скрыта из клиентской навигации; backend diagnostics остаётся для operator/admin. Для реальной отправки reset email нужно добавить SMTP env в `/etc/adforge-mcp/adforge-mcp.env` и перезапустить services.
 - 2026-06-13: web dashboard полностью переработан (UI/UX redesign, без изменений backend/OAuth/security). Структура: token gate → `Overview` → `Connections` → `Diagnostics`, постоянный бейдж `Preview-only: ON`, честные статусы платформ (`Credentials missing` / `Ready to connect` / `Select accounts` / `Connected` / `Reconnect required`, `Limited beta` для TikTok/Yandex), блок `Connect to MCP client` с `Copy MCP URL`, raw JSON только в accordion. API contract не менялся.
 
 ## Live deployment

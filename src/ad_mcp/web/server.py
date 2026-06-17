@@ -2,19 +2,21 @@ from __future__ import annotations
 
 import json
 import logging
+import mimetypes
 import secrets
 import uuid
 from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, quote, urlparse
 
 from ad_mcp.core.errors import AdMCPError, normalize_error
 from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
 from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore, AuthUser, AuthValidationError
 from ad_mcp.web.diagnostics import DiagnosticsService
+from ad_mcp.web.emailer import EmailDeliveryError, PasswordResetEmailer
 from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.service import MetaDashboardService
 
@@ -53,6 +55,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     hosted = HostedConnectionService()
     service = MetaDashboardService()
     auth = AuthStore()
+    emailer = PasswordResetEmailer()
     _omit_response_body = False
 
     def _set_default_headers(self) -> None:
@@ -111,6 +114,18 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         self.end_headers()
         if not self._omit_response_body:
             self.wfile.write(body)
+
+    def _send_avatar_file(self, filename: str) -> None:
+        clean = Path(filename).name
+        if clean != filename or not clean:
+            return self._error("Файл не найден.", HTTPStatus.NOT_FOUND, "not_found")
+        path = self.settings.profile_upload_path / "avatars" / clean
+        if not path.exists() or not path.is_file():
+            return self._error("Файл не найден.", HTTPStatus.NOT_FOUND, "not_found")
+        content_type = mimetypes.guess_type(path.name)[0] or "application/octet-stream"
+        if content_type not in {"image/jpeg", "image/png", "image/webp"}:
+            return self._error("Файл не найден.", HTTPStatus.NOT_FOUND, "not_found")
+        return self._send_file(path, content_type)
 
     def _redirect(self, location: str) -> None:
         self.send_response(HTTPStatus.FOUND)
@@ -312,6 +327,99 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             raise ValueError("Тело запроса слишком большое.")
         return json.loads(self.rfile.read(content_length).decode("utf-8"))
 
+    def _raw_body(self, max_bytes: int) -> bytes:
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("Некорректный Content-Length.") from exc
+        if content_length <= 0:
+            raise ValueError("Файл не выбран.")
+        if content_length > max_bytes:
+            raise ValueError("Файл слишком большой.")
+        return self.rfile.read(content_length)
+
+    def _reset_url(self, token: str) -> str:
+        return f"{self.settings.public_base_or_local_web_url}/reset-password?token={quote(token)}"
+
+    def _extract_avatar_upload(self) -> tuple[str, str, bytes]:
+        content_type = str(self.headers.get("Content-Type", "") or "")
+        marker = "boundary="
+        if "multipart/form-data" not in content_type or marker not in content_type:
+            raise ValueError("Загрузите файл через multipart/form-data.")
+        boundary = content_type.split(marker, 1)[1].strip().strip('"')
+        if not boundary:
+            raise ValueError("Некорректная форма загрузки.")
+        body = self._raw_body(self.settings.profile_max_avatar_bytes + 16_384)
+        boundary_bytes = f"--{boundary}".encode("utf-8")
+        for part in body.split(boundary_bytes):
+            part = part.strip(b"\r\n")
+            if not part or part == b"--" or b"\r\n\r\n" not in part:
+                continue
+            header_bytes, content = part.split(b"\r\n\r\n", 1)
+            if content.endswith(b"\r\n"):
+                content = content[:-2]
+            headers = header_bytes.decode("utf-8", errors="replace")
+            if 'name="avatar"' not in headers:
+                continue
+            filename = ""
+            for line in headers.splitlines():
+                if not line.lower().startswith("content-disposition:"):
+                    continue
+                for item in line.split(";"):
+                    item = item.strip()
+                    if item.startswith("filename="):
+                        filename = item.split("=", 1)[1].strip().strip('"')
+                        break
+            part_type = "application/octet-stream"
+            for line in headers.splitlines():
+                if line.lower().startswith("content-type:"):
+                    part_type = line.split(":", 1)[1].strip().lower()
+                    break
+            return filename, part_type, content
+        raise ValueError("Файл аватара не найден.")
+
+    def _validate_avatar(self, filename: str, content_type: str, content: bytes) -> str:
+        if not content:
+            raise ValueError("Файл пустой.")
+        if len(content) > self.settings.profile_max_avatar_bytes:
+            raise ValueError("Файл слишком большой. Максимальный размер — 2 MB.")
+        extension = Path(filename).suffix.lower()
+        allowed = {
+            ".jpg": "image/jpeg",
+            ".jpeg": "image/jpeg",
+            ".png": "image/png",
+            ".webp": "image/webp",
+        }
+        if extension not in allowed or content_type not in set(allowed.values()):
+            raise ValueError("Поддерживаются только JPG, PNG или WEBP.")
+        if allowed[extension] != content_type:
+            raise ValueError("Расширение файла не совпадает с типом изображения.")
+        if content_type == "image/jpeg" and not content.startswith(b"\xff\xd8\xff"):
+            raise ValueError("Файл не похож на JPG изображение.")
+        if content_type == "image/png" and not content.startswith(b"\x89PNG\r\n\x1a\n"):
+            raise ValueError("Файл не похож на PNG изображение.")
+        if content_type == "image/webp" and not (len(content) >= 12 and content[:4] == b"RIFF" and content[8:12] == b"WEBP"):
+            raise ValueError("Файл не похож на WEBP изображение.")
+        return ".jpg" if extension == ".jpeg" else extension
+
+    def _store_avatar(self, user: AuthUser) -> dict:
+        filename, content_type, content = self._extract_avatar_upload()
+        extension = self._validate_avatar(filename, content_type, content)
+        avatar_dir = self.settings.profile_upload_path / "avatars"
+        avatar_dir.mkdir(parents=True, exist_ok=True)
+        old_path = self.auth.avatar_path(user.id)
+        safe_name = f"{user.id}_{uuid.uuid4().hex}{extension}"
+        target = avatar_dir / safe_name
+        target.write_bytes(content)
+        try:
+            if old_path:
+                old = Path(old_path)
+                if old.exists() and old.is_file() and old.parent == avatar_dir and old.name != safe_name:
+                    old.unlink()
+        except OSError:
+            LOGGER.warning("Could not remove old avatar for user_id=%s", user.id)
+        return self.auth.set_avatar(user.id, avatar_url=f"/uploads/avatars/{safe_name}", avatar_path=str(target))
+
     def do_HEAD(self) -> None:  # noqa: N802
         self._omit_response_body = True
         try:
@@ -323,8 +431,10 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         route = parsed.path
         try:
-            if route in {"/", "/app", "/admin", "/login", "/register"}:
+            if route in {"/", "/app", "/admin", "/login", "/register", "/reset-password"}:
                 return self._send_file(STATIC_ROOT / "index.html", "text/html; charset=utf-8")
+            if route.startswith("/uploads/avatars/"):
+                return self._send_avatar_file(route.removeprefix("/uploads/avatars/"))
             if route in {"/health", "/healthz"}:
                 return self._send_json({"status": "ok", "service": "adforge-mcp-web"})
             if route == "/ready":
@@ -354,6 +464,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return
                 self.auth.ensure_schema()
                 return self._send_json({"token": self.auth.mcp_token_summary(user.id)})
+            if route == "/api/profile":
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                return self._send_json({"profile": self.auth.profile_summary(user.id)})
             if route == "/api/admin/users":
                 if not self._ensure_admin_user():
                     return
@@ -570,6 +686,70 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return
                 self.auth.revoke_session(self._session_token())
                 return self._send_auth_json({"ok": True}, clear_session=True)
+            if route == "/api/auth/forgot-password":
+                payload = self._json_body()
+                if not self.settings.auth_enabled:
+                    return self._error("Восстановление доступа временно отключено.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                if not self.emailer.configured():
+                    return self._send_json(
+                        {"error": "Отправка письма временно недоступна. Обратитесь к администратору.", "code": "smtp_not_configured"},
+                        HTTPStatus.SERVICE_UNAVAILABLE,
+                    )
+                self.auth.ensure_schema()
+                reset = self.auth.create_password_reset_token(str(payload.get("email", "")))
+                if reset:
+                    user, raw_token = reset
+                    try:
+                        self.emailer.send_password_reset(
+                            to_email=user.email,
+                            reset_url=self._reset_url(raw_token),
+                            ttl_minutes=self.settings.password_reset_ttl_minutes,
+                        )
+                    except EmailDeliveryError:
+                        return self._send_json(
+                            {"error": "Отправка письма временно недоступна. Обратитесь к администратору.", "code": "email_delivery_failed"},
+                            HTTPStatus.SERVICE_UNAVAILABLE,
+                        )
+                return self._send_json(
+                    {
+                        "ok": True,
+                        "message": "Если аккаунт с такой почтой существует, мы отправили ссылку для восстановления пароля.",
+                    }
+                )
+            if route == "/api/auth/reset-password":
+                payload = self._json_body()
+                if not self.settings.auth_enabled:
+                    return self._error("Восстановление доступа временно отключено.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                self.auth.ensure_schema()
+                user = self.auth.reset_password(
+                    str(payload.get("token", "")),
+                    str(payload.get("new_password", "")),
+                    str(payload.get("confirm_password", "")),
+                )
+                return self._send_json({"ok": True, "email": user.email})
+            if route == "/api/profile/change-password":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                payload = self._json_body()
+                self.auth.ensure_schema()
+                self.auth.change_password(
+                    user.id,
+                    str(payload.get("current_password", "")),
+                    str(payload.get("new_password", "")),
+                    str(payload.get("confirm_password", "")),
+                )
+                return self._send_json({"ok": True})
+            if route == "/api/profile/avatar":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                return self._send_json({"profile": self._store_avatar(user)})
             if route == "/api/mcp-token/create":
                 if not self._ensure_same_origin_session_post(route):
                     return
@@ -669,6 +849,27 @@ class AdsWebHandler(BaseHTTPRequestHandler):
 
         self._error("Route not found.", HTTPStatus.NOT_FOUND)
 
+    def do_PUT(self) -> None:  # noqa: N802
+        parsed = urlparse(self.path)
+        route = parsed.path
+        try:
+            if route == "/api/profile":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                payload = self._json_body()
+                self.auth.ensure_schema()
+                profile = self.auth.update_profile(user.id, nickname=str(payload.get("nickname", "")))
+                return self._send_json({"profile": profile})
+        except (AdMCPError, ValueError, KeyError, json.JSONDecodeError, RuntimeError) as exc:
+            return self._error(self._client_error_message(exc), code=self._client_error_code(exc))
+        except Exception as exc:  # noqa: BLE001
+            return self._unexpected_error("PUT", exc)
+
+        self._error("Route not found.", HTTPStatus.NOT_FOUND)
+
     def log_message(self, format: str, *args) -> None:  # noqa: A003
         return
 
@@ -682,6 +883,7 @@ def main() -> None:
     AdsWebHandler.hosted = HostedConnectionService(settings)
     AdsWebHandler.service = MetaDashboardService(settings)
     AdsWebHandler.auth = AuthStore(settings)
+    AdsWebHandler.emailer = PasswordResetEmailer(settings)
     if _api_token_required(settings) and not settings.web_api_token.strip():
         LOGGER.warning("AD_MCP_WEB_API_TOKEN is required for beta/production web API access but is not configured.")
     server = ThreadingHTTPServer((host, port), AdsWebHandler)

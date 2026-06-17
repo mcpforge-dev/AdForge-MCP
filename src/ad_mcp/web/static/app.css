@@ -884,6 +884,62 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   white-space: normal;
 }
 
+/* ---------- Profile ---------- */
+
+.profile-layout {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 16px;
+}
+
+.profile-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 22px;
+  border: 1px solid var(--border);
+  background: linear-gradient(135deg, rgba(124, 154, 255, 0.22), rgba(62, 207, 142, 0.12));
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  flex: none;
+}
+
+.profile-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.profile-avatar span {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.profile-grid {
+  align-items: stretch;
+  margin-bottom: 14px;
+}
+
+.card-lite {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-inset);
+  border-radius: var(--radius-small);
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.profile-password-form { margin-top: 14px; }
+
+.grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+}
+
 /* ---------- Connections ---------- */
 
 .platform-card { display: flex; flex-direction: column; gap: 12px; }
@@ -1093,6 +1149,7 @@ details.raw-json pre {
   .feature-grid { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
+  .grid-3 { grid-template-columns: 1fr; }
   .diag-grid { grid-template-columns: 1fr; }
   .admin-oauth-grid { grid-template-columns: 1fr; }
 }

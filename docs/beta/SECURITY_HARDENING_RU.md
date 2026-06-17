@@ -23,6 +23,10 @@ AD_MCP_WEB_API_TOKEN=replace-with-strong-beta-token
 - `GET /` - dashboard shell, сам API внутри требует beta token;
 - `GET /health` и `GET /healthz` - lightweight healthcheck;
 - `GET /ready` - readiness без секретов;
+- `POST /api/auth/forgot-password` - нейтральный password-reset запрос без раскрытия, существует email или нет;
+- `POST /api/auth/reset-password` - смена пароля по одноразовому reset token;
+- `GET /reset-password` - shell формы нового пароля;
+- `GET /uploads/avatars/<file>` - только безопасные avatar image files из контролируемой директории;
 - OAuth callback endpoints:
   - `/oauth/meta/callback`;
   - `/oauth/google/callback`;
@@ -33,7 +37,7 @@ OAuth callbacks публичные, потому что провайдер до�
 
 ## Protected endpoints
 
-Все `GET /api/*` и `POST /api/*` требуют beta token:
+Большинство `GET /api/*` и `POST /api/*` требуют beta token или email-session. Исключения перечислены в Public endpoints и не раскрывают секреты:
 
 - hosted connections;
 - OAuth authorize-url/pending/select;
@@ -42,6 +46,7 @@ OAuth callbacks публичные, потому что провайдер до�
 - platform/account/campaign/metrics responses;
 - Meta dashboard/API endpoints;
 - preview endpoints.
+- profile endpoints (`GET/PUT /api/profile`, `POST /api/profile/change-password`, `POST /api/profile/avatar`) требуют email-session и same-origin для изменяющих действий.
 
 Hosted MCP endpoint `/mcp` тоже должен требовать bearer token.
 
@@ -85,6 +90,24 @@ Pending selection:
 - `developer_token`;
 - `Authorization` / bearer values;
 - OAuth `code` в error/log text.
+
+## Password reset и avatars
+
+Password reset:
+
+- raw reset token отправляется только по email;
+- в базе хранится hash reset token;
+- token одноразовый и имеет TTL;
+- ответ `forgot-password` не раскрывает, существует email или нет;
+- SMTP password не возвращается diagnostics/capabilities.
+
+Avatar upload:
+
+- разрешены только JPG/PNG/WEBP;
+- проверяются extension, MIME type и magic bytes;
+- оригинальное имя файла не используется;
+- physical upload path не возвращается клиенту;
+- SVG/HTML/JS/исполняемые файлы запрещены.
 
 ## Preview-only protection
 

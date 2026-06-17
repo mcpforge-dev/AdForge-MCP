@@ -119,6 +119,11 @@
   }
 
   async function boot() {
+    if (window.location.pathname === "/reset-password") {
+      showLanding();
+      showResetPasswordModal(new URLSearchParams(window.location.search).get("token") || "");
+      return;
+    }
     if (window.location.pathname === "/admin") {
       enterAdmin();
       return;
@@ -176,11 +181,8 @@
     el.authTabs.forEach((tab) => tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode)));
     el.authPasswordToggle.addEventListener("click", () => togglePasswordVisibility());
     el.authForgot.addEventListener("click", () => {
-      showClientMessage(
-        "Восстановление пароля готовится",
-        "Мы подключим email-восстановление после настройки SMTP. Сейчас обратитесь к менеджеру AdForge, чтобы безопасно восстановить доступ.",
-        "info",
-      );
+      closeAuth();
+      showForgotPasswordModal();
     });
     el.authSuccessApp.addEventListener("click", async () => {
       closeAuth();
@@ -312,6 +314,93 @@
 
   function hideAuthError() {
     el.authError.hidden = true;
+  }
+
+  function showForgotPasswordModal() {
+    showClientModal({
+      title: "Восстановление пароля",
+      subtitle: "Введите email, который привязан к аккаунту AdForge MCP.",
+      body: `
+        <form id="forgot-password-form" class="auth-form">
+          <label class="field">
+            <span class="field__label">Email</span>
+            <input name="email" type="email" autocomplete="email" placeholder="name@company.com" required>
+          </label>
+          <p class="modal__hint">Мы не показываем, существует аккаунт с такой почтой или нет.</p>
+          <button type="submit" class="btn btn--primary btn--block">Отправить ссылку</button>
+        </form>
+      `,
+      closeLabel: "",
+    });
+    const form = document.getElementById("forgot-password-form");
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      setLoading(button, true);
+      try {
+        await api("/api/auth/forgot-password", "POST", { email: form.email.value.trim() });
+        showClientMessage(
+          "Проверьте почту",
+          "Если аккаунт с такой почтой существует, мы отправили ссылку для восстановления пароля.",
+          "success",
+        );
+      } catch (error) {
+        showClientMessage("Не удалось отправить письмо", humanizeError(error), "error");
+      } finally {
+        setLoading(button, false);
+      }
+    });
+  }
+
+  function showResetPasswordModal(token) {
+    showClientModal({
+      title: "Новый пароль",
+      subtitle: "Введите новый пароль для аккаунта AdForge MCP.",
+      body: `
+        <form id="reset-password-form" class="auth-form">
+          <input name="token" type="hidden" value="${escAttr(token)}">
+          <label class="field">
+            <span class="field__label">Новый пароль</span>
+            <input name="new_password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Повторите пароль</span>
+            <input name="confirm_password" type="password" autocomplete="new-password" placeholder="Повторите пароль" required>
+          </label>
+          <button type="submit" class="btn btn--primary btn--block">Сменить пароль</button>
+        </form>
+      `,
+      closeLabel: "",
+    });
+    const form = document.getElementById("reset-password-form");
+    form?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = form.querySelector("button[type='submit']");
+      const newPassword = form.new_password.value;
+      const confirmPassword = form.confirm_password.value;
+      if (newPassword !== confirmPassword) {
+        showClientMessage("Пароли не совпадают", "Повторите новый пароль ещё раз.", "warn");
+        return;
+      }
+      setLoading(button, true);
+      try {
+        await api("/api/auth/reset-password", "POST", {
+          token: form.token.value,
+          new_password: newPassword,
+          confirm_password: confirmPassword,
+        });
+        window.history.replaceState({}, "", "/");
+        showClientMessage("Пароль изменён", "Теперь можно войти с новым паролем.", "success");
+        window.setTimeout(() => {
+          closeClientModal();
+          openAuth("login");
+        }, 900);
+      } catch (error) {
+        showClientMessage("Ссылка не сработала", humanizeError(error), "error");
+      } finally {
+        setLoading(button, false);
+      }
+    });
   }
 
   /* ---------- token gate ---------- */
@@ -576,17 +665,16 @@
   }
 
   async function loadProfile() {
-    if (!state.connections) {
-      try {
-        state.connections = await api("/api/hosted/connections");
-      } catch (error) {
-        /* Profile still renders the account block if connection stats are unavailable. */
-      }
+    try {
+      const payload = await api("/api/profile");
+      renderProfile(payload.profile || null);
+    } catch (error) {
+      if (handle401(error)) return;
+      el.profileCard.innerHTML = errorState(humanizeError(error));
     }
-    renderProfile();
   }
 
-  function renderProfile() {
+  function renderProfile(profile = null) {
     const user = state.user;
     if (!user) {
       el.profileCard.innerHTML = `
@@ -597,23 +685,138 @@
       el.profileCard.querySelector("[data-auth-open]").addEventListener("click", () => openAuth("login"));
       return;
     }
-    const platforms = state.connections?.platforms || [];
-    const connectedPlatforms = platforms.filter((p) => (p.accounts || []).length > 0);
-    const connectedAccounts = connectedPlatforms.reduce((sum, p) => sum + (p.accounts || []).length, 0);
+    const data = profile || {
+      email: user.email,
+      nickname: user.name || "",
+      avatar_url: "",
+      account_status: user.status,
+      connected_platforms: [],
+      connected_platforms_count: 0,
+      connected_ad_accounts_count: 0,
+      created_at: null,
+    };
+    const initials = (data.nickname || data.email || "A").trim().slice(0, 1).toUpperCase();
     el.profileCard.innerHTML = `
-      <h3 class="card__title">Аккаунт</h3>
-      <div class="kv">
-        <div class="kv-row"><span>Никнейм</span><strong>${esc(user.name || "—")}</strong></div>
-        <div class="kv-row"><span>Email</span><strong>${esc(user.email)}</strong></div>
-        <div class="kv-row"><span>Статус аккаунта</span><strong>${esc(user.status === "active" ? "Активен" : user.status || "—")}</strong></div>
-        <div class="kv-row"><span>Подключённые платформы</span><strong>${esc(connectedPlatforms.map((p) => providerLabel(p.provider)).join(", ") || "Нет")}</strong></div>
-        <div class="kv-row"><span>Рекламные аккаунты</span><strong>${connectedAccounts}</strong></div>
+      <div class="profile-layout">
+        <div class="profile-avatar">
+          ${data.avatar_url ? `<img src="${escAttr(data.avatar_url)}" alt="Аватар профиля">` : `<span>${esc(initials)}</span>`}
+        </div>
+        <div>
+          <h3 class="card__title">Аккаунт</h3>
+          <p class="card__hint">Управляйте никнеймом, аватаром и паролем аккаунта.</p>
+        </div>
       </div>
-      <div class="callout">
-        <strong>Редактирование профиля</strong>
-        <span>Никнейм, аватар, смена пароля и восстановление доступа будут подключены отдельным безопасным этапом с backend-хранилищем и email-настройками.</span>
+      <div class="grid-2 profile-grid">
+        <form id="profile-form" class="card-lite">
+          <h3 class="card__title">Профиль</h3>
+          <label class="field">
+            <span class="field__label">Никнейм</span>
+            <input name="nickname" type="text" maxlength="80" value="${escAttr(data.nickname || "")}" required>
+          </label>
+          <div class="kv">
+            <div class="kv-row"><span>Email</span><strong>${esc(data.email)}</strong></div>
+            <div class="kv-row"><span>Статус аккаунта</span><strong>${esc(data.account_status === "active" ? "Активен" : data.account_status || "—")}</strong></div>
+            <div class="kv-row"><span>Дата регистрации</span><strong>${esc(formatTime(data.created_at))}</strong></div>
+            <div class="kv-row"><span>Подключённые платформы</span><strong>${esc((data.connected_platforms || []).map(providerLabel).join(", ") || "Нет")}</strong></div>
+            <div class="kv-row"><span>Рекламные аккаунты</span><strong>${esc(data.connected_ad_accounts_count ?? 0)}</strong></div>
+          </div>
+          <button type="submit" class="btn btn--primary btn--small">Сохранить профиль</button>
+        </form>
+        <form id="avatar-form" class="card-lite">
+          <h3 class="card__title">Фотография</h3>
+          <p class="card__hint">JPG, PNG или WEBP до 2 MB. SVG, HTML и исполняемые файлы не принимаются.</p>
+          <input name="avatar" type="file" accept="image/jpeg,image/png,image/webp" required>
+          <button type="submit" class="btn btn--secondary btn--small">Загрузить аватар</button>
+        </form>
       </div>
+      <form id="change-password-form" class="card-lite profile-password-form">
+        <h3 class="card__title">Смена пароля</h3>
+        <div class="grid-3">
+          <label class="field">
+            <span class="field__label">Текущий пароль</span>
+            <input name="current_password" type="password" autocomplete="current-password" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Новый пароль</span>
+            <input name="new_password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Повторите новый пароль</span>
+            <input name="confirm_password" type="password" autocomplete="new-password" required>
+          </label>
+        </div>
+        <button type="submit" class="btn btn--primary btn--small">Изменить пароль</button>
+      </form>
     `;
+    bindProfileForms();
+  }
+
+  function bindProfileForms() {
+    const profileForm = document.getElementById("profile-form");
+    profileForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const button = profileForm.querySelector("button[type='submit']");
+      setLoading(button, true);
+      try {
+        const payload = await api("/api/profile", "PUT", { nickname: profileForm.nickname.value });
+        state.user = state.user ? { ...state.user, name: payload.profile.nickname } : state.user;
+        renderUserPill();
+        renderProfile(payload.profile);
+        showClientMessage("Профиль сохранён", "Никнейм обновлён.", "success");
+      } catch (error) {
+        showClientMessage("Не удалось сохранить профиль", humanizeError(error), "error");
+      } finally {
+        setLoading(button, false);
+      }
+    });
+
+    const avatarForm = document.getElementById("avatar-form");
+    avatarForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      const fileInput = avatarForm.querySelector("input[name='avatar']");
+      const file = fileInput?.files?.[0];
+      if (!file) {
+        showClientMessage("Файл не выбран", "Выберите JPG, PNG или WEBP изображение.", "warn");
+        return;
+      }
+      const button = avatarForm.querySelector("button[type='submit']");
+      const body = new FormData();
+      body.append("avatar", file);
+      setLoading(button, true);
+      try {
+        const payload = await api("/api/profile/avatar", "POST", body);
+        renderProfile(payload.profile);
+        showClientMessage("Аватар загружен", "Фотография профиля обновлена.", "success");
+      } catch (error) {
+        showClientMessage("Ошибка загрузки файла", humanizeError(error), "error");
+      } finally {
+        setLoading(button, false);
+      }
+    });
+
+    const passwordForm = document.getElementById("change-password-form");
+    passwordForm?.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (passwordForm.new_password.value !== passwordForm.confirm_password.value) {
+        showClientMessage("Пароли не совпадают", "Повторите новый пароль ещё раз.", "warn");
+        return;
+      }
+      const button = passwordForm.querySelector("button[type='submit']");
+      setLoading(button, true);
+      try {
+        await api("/api/profile/change-password", "POST", {
+          current_password: passwordForm.current_password.value,
+          new_password: passwordForm.new_password.value,
+          confirm_password: passwordForm.confirm_password.value,
+        });
+        passwordForm.reset();
+        showClientMessage("Пароль изменён", "Теперь используйте новый пароль при следующем входе.", "success");
+      } catch (error) {
+        showClientMessage("Не удалось изменить пароль", humanizeError(error), "error");
+      } finally {
+        setLoading(button, false);
+      }
+    });
   }
 
   /* ---------- overview ---------- */
@@ -1368,8 +1571,14 @@
     const headers = { Accept: "application/json" };
     const token = getToken();
     if (token) headers.Authorization = `Bearer ${token}`;
-    if (body) headers["Content-Type"] = "application/json";
-    const response = await fetch(path, { method, headers, credentials: "same-origin", body: body ? JSON.stringify(body) : undefined });
+    const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+    if (body && !isFormData) headers["Content-Type"] = "application/json";
+    const response = await fetch(path, {
+      method,
+      headers,
+      credentials: "same-origin",
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
+    });
     const text = await response.text();
     let payload = {};
     if (text) {

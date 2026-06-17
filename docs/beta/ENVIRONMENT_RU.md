@@ -26,6 +26,32 @@ Diagnostics может показывать env variables только как `p
 | `AD_MCP_CONNECTIONS_CONFIG` | Нет | Local fallback config path для developers/server bootstrap. |
 | `AD_MCP_POLICY_CONFIG` | Нет | Safety policy config path. |
 
+## Account, SMTP и avatar upload
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| `AD_MCP_SMTP_HOST` | Да для email reset | SMTP host. Значение не показывать клиенту. |
+| `AD_MCP_SMTP_PORT` | Нет | Обычно `587` для STARTTLS или `465` для SSL. |
+| `AD_MCP_SMTP_USERNAME` | Нет | SMTP username, если провайдер требует auth. |
+| `AD_MCP_SMTP_PASSWORD` | Да при SMTP auth | SMTP password/app password. Не коммитить и не выводить в логи. |
+| `AD_MCP_SMTP_FROM_EMAIL` | Да для email reset | From email, например `noreply@your-domain.com`. |
+| `AD_MCP_SMTP_FROM_NAME` | Нет | По умолчанию `AdForge MCP`. |
+| `AD_MCP_SMTP_USE_TLS` | Нет | `true` для STARTTLS. |
+| `AD_MCP_SMTP_USE_SSL` | Нет | `true` для SMTP SSL. Не включать одновременно с TLS, если провайдер этого не требует. |
+| `AD_MCP_PASSWORD_RESET_TTL_MINUTES` | Нет | TTL reset-ссылки, по умолчанию `30`. |
+| `AD_MCP_PROFILE_UPLOAD_DIR` | Да для avatar upload | Директория аватаров, для VPS обычно `/var/lib/adforge-mcp/uploads`. |
+| `AD_MCP_PROFILE_MAX_AVATAR_BYTES` | Нет | Максимальный размер аватара, по умолчанию `2097152` (2 MB). |
+
+Если SMTP не настроен, reset-password endpoint возвращает клиенту понятное сообщение, что отправка письма временно недоступна. Reset token хранится только как hash, действует ограниченное время и используется один раз.
+
+Для upload directory на VPS:
+
+```bash
+sudo mkdir -p /var/lib/adforge-mcp/uploads
+sudo chown -R adforge:adforge /var/lib/adforge-mcp/uploads
+sudo chmod 750 /var/lib/adforge-mcp/uploads
+```
+
 ## Meta Ads OAuth
 
 | Variable | Required | Description |

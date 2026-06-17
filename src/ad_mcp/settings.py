@@ -39,6 +39,17 @@ class Settings(BaseSettings):
     auth_allow_public_registration: bool = True
     auth_registration_code: str = ""
     initial_admin_email: str = ""
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_username: str = ""
+    smtp_password: str = ""
+    smtp_from_email: str = ""
+    smtp_from_name: str = "AdForge MCP"
+    smtp_use_tls: bool = True
+    smtp_use_ssl: bool = False
+    password_reset_ttl_minutes: int = 30
+    profile_upload_dir: str = "/var/lib/adforge-mcp/uploads"
+    profile_max_avatar_bytes: int = 2_097_152
     preview_only: bool = True
     public_base_url: str = ""
     mcp_public_url: str = ""
@@ -108,6 +119,17 @@ class Settings(BaseSettings):
     @property
     def connection_store_file(self) -> Path:
         return self.project_root / self.connection_store_path
+
+    @property
+    def smtp_configured(self) -> bool:
+        return bool(self.smtp_host.strip() and self.smtp_from_email.strip())
+
+    @property
+    def profile_upload_path(self) -> Path:
+        path = Path(self.profile_upload_dir)
+        if not path.is_absolute():
+            path = self.project_root / path
+        return path
 
     @property
     def effective_database_url(self) -> str:

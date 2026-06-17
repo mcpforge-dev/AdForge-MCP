@@ -84,6 +84,25 @@ Env variables показываются только как `present` или `mis
 
 OAuth state подписывается, имеет TTL и используется одноразово. Pending selection доступен только через закрытый `/api/hosted/oauth/<provider>/pending`.
 
+## Password reset и профиль
+
+Восстановление пароля работает через email:
+
+- `POST /api/auth/forgot-password` возвращает нейтральный ответ и не раскрывает, существует email или нет;
+- reset token генерируется как raw value только для письма, в базе хранится только hash;
+- reset token имеет TTL (`AD_MCP_PASSWORD_RESET_TTL_MINUTES`) и используется один раз;
+- после успешной смены пароля старые reset tokens и активные sessions пользователя инвалидируются;
+- SMTP secrets не возвращаются в API и не должны попадать в логи.
+
+Avatar upload:
+
+- принимает только JPG, PNG и WEBP;
+- проверяет расширение, MIME type и magic bytes;
+- не использует оригинальное имя файла как путь;
+- хранит файлы в контролируемой директории `AD_MCP_PROFILE_UPLOAD_DIR`;
+- не принимает SVG/HTML/JS/исполняемые файлы;
+- возвращает только безопасный `avatar_url`, без physical server path.
+
 ## Security diagnostics
 
 Проверить posture можно через:
