@@ -221,7 +221,7 @@
           <pre class="code-block">Authorization: Bearer &lt;ВАШ_MCP_TOKEN&gt;</pre>
           <div class="callout">
             <strong>Подсказка для Codex</strong>
-            <span>Если в настройках Codex поле называется “Bearer token environment variable”, туда нужно ввести имя переменной <code>ADFORGE_MCP_CLIENT_TOKEN</code>, а сам token сохранить в этой переменной окружения. Если клиент просит прямое значение заголовка, используйте <code>Authorization: Bearer &lt;ВАШ_MCP_TOKEN&gt;</code>.</span>
+            <span>В поле “Bearer token environment variable” нельзя вставлять сам token. Введите туда только имя переменной <code>ADFORGE_MCP_CLIENT_TOKEN</code>, а raw token сохраните в эту переменную окружения и перезапустите Codex. Если клиент просит прямой заголовок, используйте <code>Authorization: Bearer &lt;ВАШ_MCP_TOKEN&gt;</code>. Если token попал в скриншот или чат, сгенерируйте новый token.</span>
           </div>
         </article>
       </section>

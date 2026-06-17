@@ -488,7 +488,7 @@
         <div class="kv-row"><span>Создан</span><strong>${esc(formatTime(token?.created_at))}</strong></div>
         <div class="kv-row"><span>Последнее использование</span><strong>${esc(formatTime(token?.last_used_at))}</strong></div>
       </div>
-      <span>Используйте этот token в Codex или Claude как Bearer token. Если Codex просит “Bearer token environment variable”, укажите имя переменной ADFORGE_MCP_CLIENT_TOKEN, а сам token сохраните в эту переменную. Raw token показывается только после создания или ротации.</span>
+      <span>Используйте этот token в Codex или Claude как Bearer token. Если Codex просит “Bearer token environment variable”, не вставляйте туда raw token: укажите только имя переменной ADFORGE_MCP_CLIENT_TOKEN, сохраните token в эту переменную и перезапустите Codex. Raw token показывается только после создания или ротации.</span>
     `;
     el.mcpTokenActions.innerHTML = active
       ? `

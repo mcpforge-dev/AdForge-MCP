@@ -17,7 +17,29 @@
 4. Указать имя: `AdForge MCP`.
 5. Выбрать HTTP/Streamable HTTP transport, если интерфейс клиента дает выбор.
 6. Указать URL hosted endpoint: `https://your-domain.com/mcp`.
-7. Передать персональный MCP token как bearer header:
+7. Передать персональный MCP token одним из двух способов.
+
+### Вариант A: поле Bearer token environment variable
+
+Если Codex показывает поле `Bearer token environment variable`, туда нужно вставить не сам token, а имя переменной окружения:
+
+```text
+ADFORGE_MCP_CLIENT_TOKEN
+```
+
+Сам raw token нужно сохранить в этой переменной окружения на компьютере, где запущен Codex, затем полностью перезапустить Codex.
+
+PowerShell пример:
+
+```powershell
+setx ADFORGE_MCP_CLIENT_TOKEN "<PERSONAL_MCP_TOKEN>"
+```
+
+После `setx` новое значение увидят только новые процессы, поэтому Codex нужно закрыть и открыть заново.
+
+### Вариант B: прямой HTTP header
+
+Если Codex или другой MCP-клиент просит прямой заголовок, используйте:
 
 ```http
 Authorization: Bearer <PERSONAL_MCP_TOKEN>
@@ -25,6 +47,8 @@ Authorization: Bearer <PERSONAL_MCP_TOKEN>
 
 8. Сохранить сервер.
 9. Проверить, что tools AdForge MCP появились в списке.
+
+Важно: если token попал в скриншот, чат или лог, его нужно сразу заменить через dashboard: `/app` -> `MCP` -> `Сгенерировать новый token`.
 
 UI Codex может меняться. Важны не названия кнопок, а параметры подключения: server name, hosted MCP endpoint и bearer token.
 
@@ -60,7 +84,9 @@ UI Codex может меняться. Важны не названия кноп�
 Проверьте:
 
 - MCP URL скопирован из dashboard без лишних пробелов;
-- personal MCP token передан через `Authorization: Bearer ...`;
+- если использовано поле `Bearer token environment variable`, в нем стоит имя переменной `ADFORGE_MCP_CLIENT_TOKEN`, а не raw token;
+- Codex был перезапущен после `setx` или изменения переменных окружения;
+- personal MCP token передан через `Authorization: Bearer ...` или через корректную env-переменную;
 - dashboard показывает `MCP ready`;
 - endpoint `/api/diagnostics/mcp` доступен через dashboard API;
 - hosted MCP process запущен на сервере.
