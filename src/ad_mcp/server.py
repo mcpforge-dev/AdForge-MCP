@@ -106,7 +106,15 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
         "tiktok_ads": TikTokAdsProvider(config=provider_configs["tiktok_ads"]),
         "yandex_direct": YandexDirectProvider(config=provider_configs["yandex_direct"]),
     }
-    registry = CapabilityRegistry(providers=providers)
+
+    def refresh_runtime_provider_configs() -> None:
+        nonlocal provider_configs, provider_sources
+        provider_configs, provider_sources = load_runtime_provider_configs(settings)
+        for provider, config in provider_configs.items():
+            if provider in providers:
+                providers[provider].config = config
+
+    registry = CapabilityRegistry(providers=providers, refresh=refresh_runtime_provider_configs)
     preview_manager = PreviewManager()
     auth_manager = AuthManager(
         secrets_dir=settings.project_root / "secrets",
@@ -152,6 +160,7 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
 
     @mcp.tool(name="get_beta_diagnostics")
     def get_beta_diagnostics() -> dict:
+        refresh_runtime_provider_configs()
         return {
             "status": "ok",
             "environment": settings.env,

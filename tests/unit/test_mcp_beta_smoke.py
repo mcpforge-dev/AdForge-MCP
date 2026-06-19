@@ -14,6 +14,12 @@ def _json_tool_payload(result: list[TextContent]) -> dict:
     return json.loads(result[0].text)
 
 
+def _json_tool_items(result: list[TextContent]) -> list[dict]:
+    if isinstance(result, tuple):
+        result = result[0]
+    return [json.loads(item.text) for item in result if isinstance(item, TextContent)]
+
+
 @pytest.mark.asyncio
 async def test_beta_diagnostics_tool_is_registered_and_safe() -> None:
     mcp = create_server()
@@ -56,6 +62,35 @@ async def test_beta_diagnostics_reads_accounts_from_hosted_connection_store(tmp_
 
     assert payload["config"]["connection_store"]["provider_sources"]["meta_ads"] == "hosted_connection_store"
     assert payload["providers"]["meta_ads"]["accounts"] == [{"name": "Hosted Meta", "account_id": "hosted_123", "status": "connected"}]
+
+
+@pytest.mark.asyncio
+async def test_mcp_discovery_refreshes_hosted_connections_without_restart(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = HostedConnectionStore(settings.connection_store_file)
+    mcp = create_server(settings)
+
+    empty_accounts = await mcp.call_tool("list_accounts", {"provider": "meta_ads"})
+    assert empty_accounts[0] == []
+
+    store.save_provider_config(
+        "meta_ads",
+        {
+            "provider": "meta_ads",
+            "accounts": [{"name": "Fresh Meta", "account_id": "act_fresh", "status": "connected", "access_token": "secret"}],
+        },
+    )
+
+    accounts = _json_tool_items(await mcp.call_tool("list_accounts", {"provider": "meta_ads"}))
+    diagnostics = _json_tool_payload(await mcp.call_tool("get_beta_diagnostics", {}))
+
+    assert accounts == [{"provider": "meta_ads", "name": "Fresh Meta", "account_id": "act_fresh", "status": "connected"}]
+    assert diagnostics["providers"]["meta_ads"]["account_count"] == 1
+    assert diagnostics["config"]["connection_store"]["provider_sources"]["meta_ads"] == "hosted_connection_store"
 
 
 @pytest.mark.asyncio
