@@ -7,6 +7,7 @@ from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from ad_mcp.core.connection_store import HostedConnectionStore
 from ad_mcp.settings import Settings
 from ad_mcp.web.auth_store import AuthStore
 from ad_mcp.web.diagnostics import DiagnosticsService
@@ -427,6 +428,92 @@ def test_user_mcp_token_lifecycle_returns_raw_only_once_and_stores_hash(tmp_path
     assert all(len(row[0]) == 64 for row in rows)
     assert all(raw_token != row[0] for row in rows)
     assert any(raw_token.startswith(row[1]) for row in rows)
+
+
+def test_hosted_connections_are_isolated_between_user_sessions_and_profile_counts(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    user_a = store.create_user(email="a@example.com", name="User A", password="super-secret")
+    user_b = store.create_user(email="b@example.com", name="User B", password="super-secret")
+    connection_store = HostedConnectionStore(settings.connection_store_file)
+    pending_a = connection_store.save_oauth_pending(
+        "tiktok_ads",
+        [{"name": "TikTok A", "account_id": "tt_a", "advertiser_id": "tt_a"}],
+        credentials={"access_token": "token-a"},
+        workspace_id=user_a.workspace_id,
+        user_id=user_a.id,
+    )
+    pending_b = connection_store.save_oauth_pending(
+        "meta_ads",
+        [{"name": "Meta B", "account_id": "act_b"}],
+        credentials={"access_token": "token-b"},
+        workspace_id=user_b.workspace_id,
+        user_id=user_b.id,
+    )
+    base_url, close = _serve(settings)
+    try:
+        _login_a_status, _login_a, cookie_a = _post_json(base_url, "/api/auth/login", {"email": "a@example.com", "password": "super-secret"})
+        _login_b_status, _login_b, cookie_b = _post_json(base_url, "/api/auth/login", {"email": "b@example.com", "password": "super-secret"})
+
+        before_a_status, before_a = _get_json_with_cookie(base_url, "/api/hosted/connections", cookie_a)
+        before_b_status, before_b = _get_json_with_cookie(base_url, "/api/hosted/connections", cookie_b)
+        select_a_status, select_a, _ = _post_json(
+            base_url,
+            "/api/hosted/oauth/tiktok/select",
+            {"pending_id": pending_a["pending_id"], "account_ids": ["tt_a"]},
+            cookie_a,
+            origin=base_url,
+        )
+        after_a_status, after_a = _get_json_with_cookie(base_url, "/api/hosted/connections", cookie_a)
+        after_b_status, after_b = _get_json_with_cookie(base_url, "/api/hosted/connections", cookie_b)
+        profile_a_status, profile_a = _get_json_with_cookie(base_url, "/api/profile", cookie_a)
+        profile_b_status, profile_b = _get_json_with_cookie(base_url, "/api/profile", cookie_b)
+        select_b_status, select_b, _ = _post_json(
+            base_url,
+            "/api/hosted/oauth/meta/select",
+            {"pending_id": pending_b["pending_id"], "account_ids": ["act_b"]},
+            cookie_b,
+            origin=base_url,
+        )
+        final_a_status, final_a = _get_json_with_cookie(base_url, "/api/hosted/connections", cookie_a)
+        final_b_status, final_b = _get_json_with_cookie(base_url, "/api/hosted/connections", cookie_b)
+    finally:
+        close()
+
+    assert before_a_status == before_b_status == 200
+    tiktok_a_before = next(platform for platform in before_a["platforms"] if platform["provider"] == "tiktok_ads")
+    tiktok_b_before = next(platform for platform in before_b["platforms"] if platform["provider"] == "tiktok_ads")
+    meta_b_before = next(platform for platform in before_b["platforms"] if platform["provider"] == "meta_ads")
+    assert tiktok_a_before["pending_selections"][0]["pending_id"] == pending_a["pending_id"]
+    assert tiktok_b_before["pending_selections"] == []
+    assert meta_b_before["pending_selections"][0]["pending_id"] == pending_b["pending_id"]
+    assert "token-a" not in str(before_a)
+    assert "token-b" not in str(before_b)
+    assert select_a_status == 200
+    assert select_a["accounts"][0]["account_id"] == "tt_a"
+    tiktok_a_after = next(platform for platform in after_a["platforms"] if platform["provider"] == "tiktok_ads")
+    tiktok_b_after = next(platform for platform in after_b["platforms"] if platform["provider"] == "tiktok_ads")
+    assert after_a_status == after_b_status == 200
+    assert len(tiktok_a_after["accounts"]) == 1
+    assert tiktok_b_after["accounts"] == []
+    assert profile_a_status == profile_b_status == 200
+    assert profile_a["profile"]["connected_ad_accounts_count"] == 1
+    assert profile_b["profile"]["connected_ad_accounts_count"] == 0
+    assert select_b_status == 200
+    assert select_b["accounts"][0]["account_id"] == "act_b"
+    meta_a_final = next(platform for platform in final_a["platforms"] if platform["provider"] == "meta_ads")
+    meta_b_final = next(platform for platform in final_b["platforms"] if platform["provider"] == "meta_ads")
+    assert final_a_status == final_b_status == 200
+    assert meta_a_final["accounts"] == []
+    assert len(meta_b_final["accounts"]) == 1
 
 
 def test_admin_can_see_token_status_and_revoke_without_raw_token(tmp_path) -> None:

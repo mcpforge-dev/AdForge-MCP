@@ -148,6 +148,14 @@ class HostedConnectionService:
     def _public_base_url(self) -> str:
         return self._settings.public_base_or_local_web_url
 
+    def _workspace_id(self, user: Any | None = None) -> str | None:
+        value = getattr(user, "workspace_id", None)
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
+    def _user_id(self, user: Any | None = None) -> str | None:
+        value = getattr(user, "id", None)
+        return value.strip() if isinstance(value, str) and value.strip() else None
+
     def mcp_connection_info(self) -> dict[str, Any]:
         endpoint_path = self._settings.mcp_route_path
         public_url = self._settings.public_mcp_url
@@ -170,12 +178,14 @@ class HostedConnectionService:
             "message": "Hosted Streamable HTTP MCP transport is available at this URL.",
         }
 
-    def connections(self) -> dict[str, Any]:
-        platforms = [self._platform_status(platform) for platform in PLATFORMS]
+    def connections(self, user: Any | None = None) -> dict[str, Any]:
+        workspace_id = self._workspace_id(user)
+        platforms = [self._platform_status(platform, workspace_id=workspace_id) for platform in PLATFORMS]
         return {
             "mode": "hosted_oauth_beta",
             "mcp": self.mcp_connection_info(),
             "connection_store": self._store.status() | {"path": self._settings.connection_store_path},
+            "storage_scope": "workspace" if workspace_id else "global_compatibility_store",
             "platforms": platforms,
         }
 
@@ -199,8 +209,8 @@ class HostedConnectionService:
         return {
             "mode": "oauth_end_to_end_readiness",
             "public_base_url": self._public_base_url(),
-            "storage_scope": "global_compatibility_store",
-            "workspace_scoping": "limited_until_connection_store_migration",
+            "storage_scope": "workspace_for_user_sessions_and_personal_mcp",
+            "workspace_scoping": "enabled_for_dashboard_oauth",
             "summary": {
                 "platform_count": len(platforms),
                 "ready_to_connect": ready_count,
@@ -220,7 +230,7 @@ class HostedConnectionService:
                 query["pending_id"] = str(payload["pending_id"])
         return f"/?{urlencode(query)}"
 
-    def import_local_provider(self, provider: str) -> dict[str, Any]:
+    def import_local_provider(self, provider: str, user: Any | None = None) -> dict[str, Any]:
         if provider not in {platform.provider for platform in PLATFORMS}:
             return {"provider": provider, "status": "unsupported_provider"}
         if not self._settings.connections_config_path.exists():
@@ -229,7 +239,13 @@ class HostedConnectionService:
         accounts = provider_config.get("accounts", [])
         if not accounts:
             return {"provider": provider, "status": "no_local_accounts"}
-        saved = self._store.save_provider_config(provider, provider_config, source="local_import")
+        saved = self._store.save_provider_config(
+            provider,
+            provider_config,
+            source="local_import",
+            workspace_id=self._workspace_id(user),
+            user_id=self._user_id(user),
+        )
         return {
             "provider": provider,
             "status": "imported",
@@ -263,52 +279,62 @@ class HostedConnectionService:
             "message": "OAuth can start when app credentials and provider dashboard settings are verified.",
         }
 
-    def meta_oauth_redirect_url(self) -> str:
-        return self._meta_oauth.authorization_url()
+    def meta_oauth_redirect_url(self, user: Any | None = None) -> str:
+        return self._meta_oauth.authorization_url(workspace_id=self._workspace_id(user), user_id=self._user_id(user))
 
     def meta_oauth_callback(self, query: dict[str, str]) -> dict[str, Any]:
         return self._meta_oauth.handle_callback(query)
 
-    def meta_oauth_pending(self, pending_id: str) -> dict[str, Any]:
-        return self._meta_oauth.pending_selection(pending_id)
+    def meta_oauth_pending(self, pending_id: str, user: Any | None = None) -> dict[str, Any]:
+        return self._meta_oauth.pending_selection(pending_id, workspace_id=self._workspace_id(user))
 
-    def meta_oauth_select(self, payload: dict[str, Any]) -> dict[str, Any]:
+    def meta_oauth_select(self, payload: dict[str, Any], user: Any | None = None) -> dict[str, Any]:
         pending_id = str(payload["pending_id"])
         account_ids = payload.get("account_ids") or []
-        return self._meta_oauth.select_accounts(pending_id, [str(item) for item in account_ids])
+        return self._meta_oauth.select_accounts(
+            pending_id,
+            [str(item) for item in account_ids],
+            workspace_id=self._workspace_id(user),
+            user_id=self._user_id(user),
+        )
 
-    def oauth_redirect_url(self, provider: str) -> str:
+    def oauth_redirect_url(self, provider: str, user: Any | None = None) -> str:
         service = self._require_oauth_service(provider)
         self._ensure_oauth_public(provider)
-        return service.authorization_url()
+        return service.authorization_url(workspace_id=self._workspace_id(user), user_id=self._user_id(user))
 
-    def oauth_authorization_info(self, provider: str) -> dict[str, Any]:
+    def oauth_authorization_info(self, provider: str, user: Any | None = None) -> dict[str, Any]:
         service = self._require_oauth_service(provider)
         self._ensure_oauth_public(provider)
         return {
             "provider": provider,
             "status": "oauth_ready",
-            "authorization_url": service.authorization_url(),
+            "authorization_url": service.authorization_url(workspace_id=self._workspace_id(user), user_id=self._user_id(user)),
         }
 
     def oauth_callback(self, provider: str, query: dict[str, str]) -> dict[str, Any]:
         service = self._require_oauth_service(provider)
         return service.handle_callback(query)
 
-    def oauth_pending(self, provider: str, pending_id: str) -> dict[str, Any]:
+    def oauth_pending(self, provider: str, pending_id: str, user: Any | None = None) -> dict[str, Any]:
         service = self._require_oauth_service(provider)
-        return service.pending_selection(pending_id)
+        return service.pending_selection(pending_id, workspace_id=self._workspace_id(user))
 
-    def oauth_select(self, provider: str, payload: dict[str, Any]) -> dict[str, Any]:
+    def oauth_select(self, provider: str, payload: dict[str, Any], user: Any | None = None) -> dict[str, Any]:
         service = self._require_oauth_service(provider)
         pending_id = str(payload["pending_id"])
         account_ids = payload.get("account_ids") or []
-        return service.select_accounts(pending_id, [str(item) for item in account_ids])
+        return service.select_accounts(
+            pending_id,
+            [str(item) for item in account_ids],
+            workspace_id=self._workspace_id(user),
+            user_id=self._user_id(user),
+        )
 
-    def disconnect_provider(self, provider: str) -> dict[str, Any]:
+    def disconnect_provider(self, provider: str, user: Any | None = None) -> dict[str, Any]:
         if provider not in {platform.provider for platform in PLATFORMS}:
             raise ValueError(f"Unsupported provider: {provider}")
-        disconnected = self._store.disconnect_provider(provider)
+        disconnected = self._store.disconnect_provider(provider, workspace_id=self._workspace_id(user))
         return {"provider": provider, "status": "disconnected", "accounts": disconnected["accounts"]}
 
     def mcp_transport_placeholder(self) -> dict[str, Any]:
@@ -319,8 +345,8 @@ class HostedConnectionService:
             "mcp": info,
         }
 
-    def _platform_status(self, platform: PlatformDescriptor) -> dict[str, Any]:
-        hosted_config = self._store.provider_config(platform.provider)
+    def _platform_status(self, platform: PlatformDescriptor, workspace_id: str | None = None) -> dict[str, Any]:
+        hosted_config = self._store.provider_config(platform.provider, workspace_id=workspace_id)
         hosted_accounts = hosted_config.get("accounts", [])
         store_data = self._store.read()
         stored_connection = (
@@ -332,7 +358,7 @@ class HostedConnectionService:
         accounts = provider_config.get("accounts", [])
         safe_accounts = [safe_account_summary(account) for account in hosted_accounts if isinstance(account, dict)]
         local_safe_accounts = [safe_account_summary(account) for account in accounts if isinstance(account, dict)]
-        pending_selections = self._store.pending_selections(platform.provider)
+        pending_selections = self._store.pending_selections(platform.provider, workspace_id=workspace_id)
         active_pending = [item for item in pending_selections if item.get("status") == "pending_account_selection"]
         expired_pending = [item for item in pending_selections if item.get("status") == "expired"]
         has_oauth_connection = bool(hosted_accounts)
@@ -486,7 +512,7 @@ class HostedConnectionService:
             "last_oauth_attempt_status": "not_recorded",
             "last_callback_status": "not_recorded",
             "last_provider_error": "not_recorded",
-            "storage_limitation": "OAuth connections currently use the global compatibility connection store; full user/workspace scoping needs a separate migration.",
+            "storage_limitation": "Dashboard OAuth uses workspace-scoped storage for signed-in users; old beta-token fallback may still use the global compatibility store.",
             "client_status": "Доступно для подключения" if connect_enabled else "Платформа временно недоступна",
             "admin_status": platform_status["diagnostic_summary"]["status"],
             "required_operator_action": self._operator_actions(platform.provider, missing_required, public_enabled, blockers),

@@ -1086,6 +1086,37 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .pending-card { border-color: rgba(124, 154, 255, 0.4); }
 
+.pending-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.pending-select-all {
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text);
+  cursor: pointer;
+  display: inline-flex;
+  font-size: 13.5px;
+  font-weight: 600;
+  gap: 8px;
+  padding: 7px 11px;
+  user-select: none;
+}
+
+.pending-select-all input { accent-color: var(--accent-strong); }
+
+.pending-count {
+  color: var(--text-muted);
+  font-size: 13px;
+  margin-left: auto;
+}
+
 .pending-list { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
 
 .pending-option {
@@ -1261,6 +1292,10 @@ details.raw-json pre {
   .platform-card__head { flex-direction: column; }
   .platform-card__actions .btn { flex: 1 1 180px; }
   .account-row { align-items: flex-start; flex-direction: column; }
+  .pending-toolbar { align-items: stretch; flex-direction: column; }
+  .pending-select-all,
+  .pending-toolbar .btn { justify-content: center; width: 100%; }
+  .pending-count { margin-left: 0; text-align: center; }
   .mcp-url-row, .token-secret-row { flex-direction: column; }
   .prompt-list { grid-template-columns: 1fr; }
   .admin-table { min-width: 760px; }

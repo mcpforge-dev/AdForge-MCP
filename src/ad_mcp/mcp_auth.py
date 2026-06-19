@@ -6,6 +6,7 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
+from ad_mcp.runtime_context import set_current_workspace_id
 from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore
 
 
@@ -19,6 +20,7 @@ class StaticBearerTokenVerifier:
         self._auth_store = auth_store
 
     async def verify_token(self, token: str) -> AccessToken | None:
+        set_current_workspace_id(None)
         if self._token and secrets.compare_digest(token, self._token):
             return AccessToken(token=token, client_id="adforge-beta-client", scopes=[MCP_SCOPE])
         if not self._settings:
@@ -31,6 +33,7 @@ class StaticBearerTokenVerifier:
             return None
         if not user:
             return None
+        set_current_workspace_id(user.workspace_id)
         return AccessToken(token=token, client_id=f"adforge-user:{user.id}", scopes=[MCP_SCOPE])
 
 

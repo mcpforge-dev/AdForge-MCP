@@ -65,6 +65,61 @@ providers:
     assert configs["meta_ads"]["accounts"][0]["name"] == "Hosted Meta"
 
 
+def test_connection_store_isolates_accounts_by_workspace(tmp_path: Path) -> None:
+    settings = Settings(project_root=tmp_path, connection_store_path="tokens/connections.json", connections_fallback_to_local=False)
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": [{"name": "Workspace A Meta", "account_id": "act_a"}]},
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+    store.save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": [{"name": "Workspace B Meta", "account_id": "act_b"}]},
+        workspace_id="workspace-b",
+        user_id="user-b",
+    )
+
+    configs_a, sources_a = load_runtime_provider_configs(settings, workspace_id="workspace-a")
+    configs_b, sources_b = load_runtime_provider_configs(settings, workspace_id="workspace-b")
+    configs_empty, sources_empty = load_runtime_provider_configs(settings, workspace_id="workspace-empty")
+    configs_global, sources_global = load_runtime_provider_configs(settings)
+
+    assert sources_a["meta_ads"] == "hosted_connection_store_scoped"
+    assert configs_a["meta_ads"]["accounts"][0]["account_id"] == "act_a"
+    assert sources_b["meta_ads"] == "hosted_connection_store_scoped"
+    assert configs_b["meta_ads"]["accounts"][0]["account_id"] == "act_b"
+    assert sources_empty["meta_ads"] == "empty"
+    assert configs_empty["meta_ads"]["accounts"] == []
+    assert sources_global["meta_ads"] == "empty"
+    assert configs_global["meta_ads"]["accounts"] == []
+
+
+def test_scoped_runtime_configs_do_not_fallback_to_local_config(tmp_path: Path) -> None:
+    local_config = tmp_path / "ads_config.yaml"
+    local_config.write_text(
+        """
+providers:
+  meta_ads:
+    provider: meta_ads
+    accounts:
+      - name: Local Meta
+        account_id: local_1
+""",
+        encoding="utf-8",
+    )
+    settings = Settings(project_root=tmp_path, connections_config="ads_config.yaml", connection_store_path="tokens/connections.json")
+
+    scoped_configs, scoped_sources = load_runtime_provider_configs(settings, workspace_id="workspace-a")
+    global_configs, global_sources = load_runtime_provider_configs(settings)
+
+    assert scoped_sources["meta_ads"] == "empty"
+    assert scoped_configs["meta_ads"]["accounts"] == []
+    assert global_sources["meta_ads"] == "local_connections_config"
+    assert global_configs["meta_ads"]["accounts"][0]["account_id"] == "local_1"
+
+
 def test_runtime_provider_configs_can_disable_local_fallback(tmp_path: Path) -> None:
     local_config = tmp_path / "ads_config.yaml"
     local_config.write_text(

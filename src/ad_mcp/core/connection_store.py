@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from ad_mcp.core.config_loader import load_provider_from_connections
+from ad_mcp.runtime_context import current_workspace_id
 
 if TYPE_CHECKING:
     from ad_mcp.settings import Settings
@@ -117,6 +118,30 @@ def _stored_account(provider: str, account: dict[str, Any]) -> dict[str, Any]:
     return stored
 
 
+def _clean_scope_id(value: str | None) -> str | None:
+    return value.strip() if isinstance(value, str) and value.strip() else None
+
+
+def _scope_root(data: dict[str, Any], workspace_id: str | None = None, *, create: bool = False) -> dict[str, Any]:
+    clean_workspace = _clean_scope_id(workspace_id)
+    if not clean_workspace:
+        return data
+    workspaces = data.setdefault("workspaces", {}) if create else data.get("workspaces", {})
+    if not isinstance(workspaces, dict):
+        if not create:
+            return {}
+        workspaces = {}
+        data["workspaces"] = workspaces
+    workspace = workspaces.setdefault(clean_workspace, {}) if create else workspaces.get(clean_workspace, {})
+    if not isinstance(workspace, dict):
+        if not create:
+            return {}
+        workspace = {}
+        workspaces[clean_workspace] = workspace
+    workspace["workspace_id"] = clean_workspace
+    return workspace
+
+
 class HostedConnectionStore:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -133,9 +158,10 @@ class HostedConnectionStore:
             "version": data.get("version") if isinstance(data, dict) else None,
         }
 
-    def provider_config(self, provider: str) -> dict[str, Any]:
+    def provider_config(self, provider: str, workspace_id: str | None = None) -> dict[str, Any]:
         data = self.read()
-        connection = (data.get("connections", {}) if isinstance(data.get("connections", {}), dict) else {}).get(provider, {})
+        root = _scope_root(data, workspace_id)
+        connection = (root.get("connections", {}) if isinstance(root.get("connections", {}), dict) else {}).get(provider, {})
         if not isinstance(connection, dict):
             return {"provider": provider, "accounts": []}
         config = {key: value for key, value in connection.items() if key not in {"accounts", "created_at", "updated_at", "source"}}
@@ -144,18 +170,19 @@ class HostedConnectionStore:
         config["accounts"] = [_runtime_account(provider, account) for account in accounts if isinstance(account, dict)]
         return config
 
-    def safe_provider_status(self, provider: str) -> dict[str, Any]:
-        config = self.provider_config(provider)
+    def safe_provider_status(self, provider: str, workspace_id: str | None = None) -> dict[str, Any]:
+        config = self.provider_config(provider, workspace_id=workspace_id)
         return {
             "provider": provider,
             "accounts": [safe_account_summary(account) for account in config.get("accounts", [])],
         }
 
-    def pending_selections(self, provider: str) -> list[dict[str, Any]]:
+    def pending_selections(self, provider: str, workspace_id: str | None = None) -> list[dict[str, Any]]:
         data = self.read()
+        root = _scope_root(data, workspace_id)
         provider_pending = (
-            data.get("oauth_pending", {})
-            if isinstance(data.get("oauth_pending", {}), dict)
+            root.get("oauth_pending", {})
+            if isinstance(root.get("oauth_pending", {}), dict)
             else {}
         ).get(provider, {})
         if not isinstance(provider_pending, dict):
@@ -181,43 +208,56 @@ class HostedConnectionStore:
             )
         return selections
 
-    def disconnect_provider(self, provider: str) -> dict[str, Any]:
+    def disconnect_provider(self, provider: str, workspace_id: str | None = None) -> dict[str, Any]:
         if provider not in PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
         if "_error" in data:
             data = {}
-        connections = data.get("connections", {}) if isinstance(data.get("connections", {}), dict) else {}
-        pending_root = data.get("oauth_pending", {}) if isinstance(data.get("oauth_pending", {}), dict) else {}
+        root = _scope_root(data, workspace_id, create=True)
+        connections = root.get("connections", {}) if isinstance(root.get("connections", {}), dict) else {}
+        pending_root = root.get("oauth_pending", {}) if isinstance(root.get("oauth_pending", {}), dict) else {}
         connections.pop(provider, None)
         pending_root.pop(provider, None)
-        data["connections"] = connections
-        data["oauth_pending"] = pending_root
+        root["connections"] = connections
+        root["oauth_pending"] = pending_root
         data["version"] = int(data.get("version") or 1)
         self._write(data)
-        return self.safe_provider_status(provider)
+        return self.safe_provider_status(provider, workspace_id=workspace_id)
 
-    def save_provider_config(self, provider: str, provider_config: dict[str, Any], source: str = "dashboard_oauth") -> dict[str, Any]:
+    def save_provider_config(
+        self,
+        provider: str,
+        provider_config: dict[str, Any],
+        source: str = "dashboard_oauth",
+        workspace_id: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
         if provider not in PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
         if "_error" in data:
             data = {}
-        connections = data.setdefault("connections", {})
+        root = _scope_root(data, workspace_id, create=True)
+        connections = root.setdefault("connections", {})
         if not isinstance(connections, dict):
             connections = {}
-            data["connections"] = connections
+            root["connections"] = connections
         previous = connections.get(provider, {}) if isinstance(connections.get(provider, {}), dict) else {}
         stored = {key: value for key, value in provider_config.items() if key not in {"accounts"}}
         stored["provider"] = provider
         stored["source"] = source
+        if _clean_scope_id(workspace_id):
+            stored["workspace_id"] = _clean_scope_id(workspace_id)
+        if _clean_scope_id(user_id):
+            stored["user_id"] = _clean_scope_id(user_id)
         stored["created_at"] = previous.get("created_at") or _now_iso()
         stored["updated_at"] = _now_iso()
         stored["accounts"] = [_stored_account(provider, account) for account in provider_config.get("accounts", []) if isinstance(account, dict)]
         connections[provider] = stored
         data["version"] = int(data.get("version") or 1)
         self._write(data)
-        return self.safe_provider_status(provider)
+        return self.safe_provider_status(provider, workspace_id=workspace_id)
 
     def save_oauth_pending(
         self,
@@ -226,16 +266,19 @@ class HostedConnectionStore:
         credentials: dict[str, Any],
         ttl_seconds: int = 900,
         source: str = "dashboard_oauth",
+        workspace_id: str | None = None,
+        user_id: str | None = None,
     ) -> dict[str, Any]:
         if provider not in PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
         if "_error" in data:
             data = {}
-        pending_root = data.setdefault("oauth_pending", {})
+        root = _scope_root(data, workspace_id, create=True)
+        pending_root = root.setdefault("oauth_pending", {})
         if not isinstance(pending_root, dict):
             pending_root = {}
-            data["oauth_pending"] = pending_root
+            root["oauth_pending"] = pending_root
         provider_pending = pending_root.setdefault(provider, {})
         if not isinstance(provider_pending, dict):
             provider_pending = {}
@@ -245,6 +288,8 @@ class HostedConnectionStore:
         provider_pending[pending_id] = {
             "provider": provider,
             "source": source,
+            "workspace_id": _clean_scope_id(workspace_id),
+            "user_id": _clean_scope_id(user_id),
             "created_at": _now_iso(),
             "expires_at": _expires_iso(ttl_seconds),
             "credentials": dict(credentials),
@@ -252,9 +297,16 @@ class HostedConnectionStore:
         }
         data["version"] = int(data.get("version") or 1)
         self._write(data)
-        return self.pending_selection(provider, pending_id)
+        return self.pending_selection(provider, pending_id, workspace_id=workspace_id)
 
-    def save_oauth_state(self, provider: str, state_id: str, ttl_seconds: int = 900) -> None:
+    def save_oauth_state(
+        self,
+        provider: str,
+        state_id: str,
+        ttl_seconds: int = 900,
+        workspace_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
         if provider not in PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         if not state_id:
@@ -262,10 +314,11 @@ class HostedConnectionStore:
         data = self.read()
         if "_error" in data:
             data = {}
-        state_root = data.setdefault("oauth_states", {})
+        root = _scope_root(data, workspace_id, create=True)
+        state_root = root.setdefault("oauth_states", {})
         if not isinstance(state_root, dict):
             state_root = {}
-            data["oauth_states"] = state_root
+            root["oauth_states"] = state_root
         provider_states = state_root.setdefault(provider, {})
         if not isinstance(provider_states, dict):
             provider_states = {}
@@ -274,17 +327,20 @@ class HostedConnectionStore:
             provider_states.pop(expired_id, None)
         provider_states[state_id] = {
             "provider": provider,
+            "workspace_id": _clean_scope_id(workspace_id),
+            "user_id": _clean_scope_id(user_id),
             "created_at": _now_iso(),
             "expires_at": _expires_iso(ttl_seconds),
         }
         data["version"] = int(data.get("version") or 1)
         self._write(data)
 
-    def consume_oauth_state(self, provider: str, state_id: str) -> None:
+    def consume_oauth_state(self, provider: str, state_id: str, workspace_id: str | None = None) -> None:
         if provider not in PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
-        state_root = data.get("oauth_states", {}) if isinstance(data.get("oauth_states", {}), dict) else {}
+        root = _scope_root(data, workspace_id)
+        state_root = root.get("oauth_states", {}) if isinstance(root.get("oauth_states", {}), dict) else {}
         provider_states = state_root.get(provider, {}) if isinstance(state_root.get(provider, {}), dict) else {}
         record = provider_states.get(state_id)
         if not isinstance(record, dict):
@@ -296,8 +352,8 @@ class HostedConnectionStore:
         provider_states.pop(state_id, None)
         self._write(data)
 
-    def pending_selection(self, provider: str, pending_id: str) -> dict[str, Any]:
-        pending = self._pending(provider, pending_id)
+    def pending_selection(self, provider: str, pending_id: str, workspace_id: str | None = None) -> dict[str, Any]:
+        pending = self._pending(provider, pending_id, workspace_id=workspace_id)
         accounts = pending.get("accounts", [])
         return {
             "provider": provider,
@@ -307,11 +363,18 @@ class HostedConnectionStore:
             "accounts": [safe_account_summary(_runtime_account(provider, account)) for account in accounts if isinstance(account, dict)],
         }
 
-    def select_pending_accounts(self, provider: str, pending_id: str, account_ids: list[str]) -> dict[str, Any]:
+    def select_pending_accounts(
+        self,
+        provider: str,
+        pending_id: str,
+        account_ids: list[str],
+        workspace_id: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
         selected_ids = {str(account_id).strip() for account_id in account_ids if str(account_id).strip()}
         if not selected_ids:
             raise ValueError("At least one account_id must be selected.")
-        pending = self._pending(provider, pending_id)
+        pending = self._pending(provider, pending_id, workspace_id=workspace_id)
         credentials = pending.get("credentials", {}) if isinstance(pending.get("credentials"), dict) else {}
         selected_accounts: list[dict[str, Any]] = []
         for stored_account in pending.get("accounts", []):
@@ -326,23 +389,30 @@ class HostedConnectionStore:
                 selected_accounts.append(account)
         if not selected_accounts:
             raise ValueError("Selected account_ids were not found in pending OAuth discovery.")
-        status = self.save_provider_config(provider, {"provider": provider, "accounts": selected_accounts}, source="dashboard_oauth")
+        status = self.save_provider_config(
+            provider,
+            {"provider": provider, "accounts": selected_accounts},
+            source="dashboard_oauth",
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
         # Completing an OAuth selection makes older pending records for the same provider stale.
-        self._remove_all_pending(provider)
+        self._remove_all_pending(provider, workspace_id=workspace_id)
         return {"provider": provider, "status": "connected", "accounts": status["accounts"]}
 
-    def _pending(self, provider: str, pending_id: str) -> dict[str, Any]:
+    def _pending(self, provider: str, pending_id: str, workspace_id: str | None = None) -> dict[str, Any]:
         data = self.read()
+        root = _scope_root(data, workspace_id)
         pending = (
-            data.get("oauth_pending", {})
-            if isinstance(data.get("oauth_pending", {}), dict)
+            root.get("oauth_pending", {})
+            if isinstance(root.get("oauth_pending", {}), dict)
             else {}
         ).get(provider, {})
         record = pending.get(pending_id) if isinstance(pending, dict) else None
         if not isinstance(record, dict):
             raise ValueError("OAuth pending selection was not found.")
         if self._pending_expired(record):
-            self._remove_pending(provider, pending_id)
+            self._remove_pending(provider, pending_id, workspace_id=workspace_id)
             raise ValueError("OAuth pending selection expired.")
         return record
 
@@ -355,19 +425,21 @@ class HostedConnectionStore:
         except ValueError:
             return True
 
-    def _remove_pending(self, provider: str, pending_id: str) -> None:
+    def _remove_pending(self, provider: str, pending_id: str, workspace_id: str | None = None) -> None:
         data = self.read()
-        pending_root = data.get("oauth_pending", {}) if isinstance(data.get("oauth_pending", {}), dict) else {}
+        root = _scope_root(data, workspace_id)
+        pending_root = root.get("oauth_pending", {}) if isinstance(root.get("oauth_pending", {}), dict) else {}
         provider_pending = pending_root.get(provider, {}) if isinstance(pending_root.get(provider, {}), dict) else {}
         provider_pending.pop(pending_id, None)
         self._write(data)
 
-    def _remove_all_pending(self, provider: str) -> None:
+    def _remove_all_pending(self, provider: str, workspace_id: str | None = None) -> None:
         data = self.read()
-        pending_root = data.get("oauth_pending", {}) if isinstance(data.get("oauth_pending", {}), dict) else {}
+        root = _scope_root(data, workspace_id)
+        pending_root = root.get("oauth_pending", {}) if isinstance(root.get("oauth_pending", {}), dict) else {}
         if isinstance(pending_root, dict):
             pending_root.pop(provider, None)
-            data["oauth_pending"] = pending_root
+            root["oauth_pending"] = pending_root
         self._write(data)
 
     def _write(self, data: dict[str, Any]) -> None:
@@ -377,15 +449,23 @@ class HostedConnectionStore:
         tmp_path.replace(self.path)
 
 
-def load_runtime_provider_configs(settings: "Settings") -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
+def load_runtime_provider_configs(
+    settings: "Settings",
+    workspace_id: str | None = None,
+) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
     store = HostedConnectionStore(settings.connection_store_file)
+    scoped_workspace_id = _clean_scope_id(workspace_id) or current_workspace_id()
     configs: dict[str, dict[str, Any]] = {}
     sources: dict[str, str] = {}
     for provider in PROVIDER_NAMES:
-        hosted_config = store.provider_config(provider)
+        hosted_config = store.provider_config(provider, workspace_id=scoped_workspace_id)
         if hosted_config.get("accounts"):
             configs[provider] = hosted_config
-            sources[provider] = "hosted_connection_store"
+            sources[provider] = "hosted_connection_store_scoped" if scoped_workspace_id else "hosted_connection_store"
+            continue
+        if scoped_workspace_id:
+            configs[provider] = {"provider": provider, "accounts": []}
+            sources[provider] = "empty"
             continue
         if settings.connections_fallback_to_local:
             local_config = load_provider_from_connections(settings.connections_config_path, provider)

@@ -4,6 +4,7 @@ import pytest
 from mcp.types import TextContent
 
 from ad_mcp.core.connection_store import HostedConnectionStore
+from ad_mcp.runtime_context import workspace_scope
 from ad_mcp.server import create_server
 from ad_mcp.settings import Settings
 
@@ -91,6 +92,44 @@ async def test_mcp_discovery_refreshes_hosted_connections_without_restart(tmp_pa
     assert accounts == [{"provider": "meta_ads", "name": "Fresh Meta", "account_id": "act_fresh", "status": "connected"}]
     assert diagnostics["providers"]["meta_ads"]["account_count"] == 1
     assert diagnostics["config"]["connection_store"]["provider_sources"]["meta_ads"] == "hosted_connection_store"
+
+
+@pytest.mark.asyncio
+async def test_mcp_tools_are_scoped_to_current_workspace(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": [{"name": "User A Meta", "account_id": "act_a", "status": "connected"}]},
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+    store.save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": [{"name": "User B Meta", "account_id": "act_b", "status": "connected"}]},
+        workspace_id="workspace-b",
+        user_id="user-b",
+    )
+    mcp = create_server(settings)
+
+    with workspace_scope("workspace-a"):
+        accounts_a = _json_tool_items(await mcp.call_tool("list_accounts", {"provider": "meta_ads"}))
+        platforms_a = _json_tool_payload(await mcp.call_tool("list_connected_platforms", {}))
+    with workspace_scope("workspace-b"):
+        accounts_b = _json_tool_items(await mcp.call_tool("list_accounts", {"provider": "meta_ads"}))
+        platforms_b = _json_tool_payload(await mcp.call_tool("list_connected_platforms", {}))
+    with workspace_scope("workspace-empty"):
+        accounts_empty = _json_tool_items(await mcp.call_tool("list_accounts", {"provider": "meta_ads"}))
+
+    assert accounts_a == [{"provider": "meta_ads", "name": "User A Meta", "account_id": "act_a", "status": "connected"}]
+    assert next(item for item in platforms_a["platforms"] if item["platform"] == "meta_ads")["account_count"] == 1
+    assert accounts_b == [{"provider": "meta_ads", "name": "User B Meta", "account_id": "act_b", "status": "connected"}]
+    assert next(item for item in platforms_b["platforms"] if item["platform"] == "meta_ads")["account_count"] == 1
+    assert accounts_empty == []
 
 
 @pytest.mark.asyncio

@@ -54,7 +54,7 @@ class BasePartnerOAuthService(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def authorization_url(self) -> str:
+    def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
         raise NotImplementedError
 
     @abstractmethod
@@ -65,11 +65,23 @@ class BasePartnerOAuthService(ABC):
     def handle_callback(self, query: dict[str, str]) -> dict[str, Any]:
         raise NotImplementedError
 
-    def pending_selection(self, pending_id: str) -> dict[str, Any]:
-        return self._store.pending_selection(self.provider, pending_id)
+    def pending_selection(self, pending_id: str, workspace_id: str | None = None) -> dict[str, Any]:
+        return self._store.pending_selection(self.provider, pending_id, workspace_id=workspace_id)
 
-    def select_accounts(self, pending_id: str, account_ids: list[str]) -> dict[str, Any]:
-        return self._store.select_pending_accounts(self.provider, pending_id, account_ids)
+    def select_accounts(
+        self,
+        pending_id: str,
+        account_ids: list[str],
+        workspace_id: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        return self._store.select_pending_accounts(
+            self.provider,
+            pending_id,
+            account_ids,
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
 
     def _ensure_configured(self, missing: str) -> None:
         if not self.configured():
@@ -92,10 +104,25 @@ class BasePartnerOAuthService(ABC):
         signature = hmac.new(self._signing_secret(), body.encode("ascii"), hashlib.sha256).digest()
         return f"{body}.{_b64_encode(signature)}"
 
-    def _new_state(self, redirect_uri: str) -> str:
+    def _new_state(self, redirect_uri: str, workspace_id: str | None = None, user_id: str | None = None) -> str:
         state_id = uuid4().hex
-        self._store.save_oauth_state(self.provider, state_id, self.state_ttl_seconds)
-        return self._sign_state({"provider": self.provider, "iat": int(time.time()), "jti": state_id, "redirect_uri": redirect_uri})
+        self._store.save_oauth_state(
+            self.provider,
+            state_id,
+            self.state_ttl_seconds,
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
+        return self._sign_state(
+            {
+                "provider": self.provider,
+                "iat": int(time.time()),
+                "jti": state_id,
+                "redirect_uri": redirect_uri,
+                "workspace_id": workspace_id,
+                "user_id": user_id,
+            }
+        )
 
     def _verify_state(self, state: str) -> dict[str, Any]:
         try:
@@ -121,7 +148,7 @@ class BasePartnerOAuthService(ABC):
         if int(time.time()) - issued_at > self.state_ttl_seconds:
             raise PartnerOAuthError("OAuth state expired.")
         try:
-            self._store.consume_oauth_state(self.provider, state_id)
+            self._store.consume_oauth_state(self.provider, state_id, workspace_id=str(payload.get("workspace_id") or "") or None)
         except ValueError as exc:
             raise PartnerOAuthError(str(exc)) from exc
         return payload
@@ -186,12 +213,12 @@ class GoogleOAuthService(BasePartnerOAuthService):
     def redirect_uri(self) -> str:
         return f"{self._settings.public_base_or_local_web_url}{self._settings.google_oauth_redirect_path}"
 
-    def authorization_url(self) -> str:
+    def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
         self._ensure_configured(
             "AD_MCP_GOOGLE_OAUTH_CLIENT_ID, AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET and AD_MCP_GOOGLE_ADS_DEVELOPER_TOKEN"
         )
         redirect_uri = self.redirect_uri()
-        state = self._new_state(redirect_uri)
+        state = self._new_state(redirect_uri, workspace_id=workspace_id, user_id=user_id)
         query = urlencode(
             {
                 "client_id": self._settings.google_oauth_client_id.strip(),
@@ -240,6 +267,8 @@ class GoogleOAuthService(BasePartnerOAuthService):
             },
             ttl_seconds=self.state_ttl_seconds,
             source="google_oauth",
+            workspace_id=str(state_payload.get("workspace_id") or "") or None,
+            user_id=str(state_payload.get("user_id") or "") or None,
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
 
@@ -355,10 +384,10 @@ class TikTokOAuthService(BasePartnerOAuthService):
     def redirect_uri(self) -> str:
         return f"{self._settings.public_base_or_local_web_url}{self._settings.tiktok_oauth_redirect_path}"
 
-    def authorization_url(self) -> str:
+    def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
         self._ensure_configured("AD_MCP_TIKTOK_OAUTH_APP_ID and AD_MCP_TIKTOK_OAUTH_APP_SECRET")
         redirect_uri = self.redirect_uri()
-        state = self._new_state(redirect_uri)
+        state = self._new_state(redirect_uri, workspace_id=workspace_id, user_id=user_id)
         params: dict[str, str] = {
             "app_id": self._settings.tiktok_oauth_app_id.strip(),
             "redirect_uri": redirect_uri,
@@ -371,7 +400,7 @@ class TikTokOAuthService(BasePartnerOAuthService):
 
     def handle_callback(self, query: dict[str, str]) -> dict[str, Any]:
         self._ensure_configured("AD_MCP_TIKTOK_OAUTH_APP_ID and AD_MCP_TIKTOK_OAUTH_APP_SECRET")
-        self._verify_state(str(query.get("state", "") or "").strip())
+        state_payload = self._verify_state(str(query.get("state", "") or "").strip())
         if query.get("error"):
             raise PartnerOAuthError(_redact_oauth_error(query.get("error_description") or query["error"]))
         auth_code = str(query.get("auth_code") or query.get("code") or "").strip()
@@ -414,6 +443,8 @@ class TikTokOAuthService(BasePartnerOAuthService):
             },
             ttl_seconds=self.state_ttl_seconds,
             source="tiktok_oauth",
+            workspace_id=str(state_payload.get("workspace_id") or "") or None,
+            user_id=str(state_payload.get("user_id") or "") or None,
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
 
@@ -478,10 +509,10 @@ class YandexOAuthService(BasePartnerOAuthService):
     def redirect_uri(self) -> str:
         return f"{self._settings.public_base_or_local_web_url}{self._settings.yandex_oauth_redirect_path}"
 
-    def authorization_url(self) -> str:
+    def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
         self._ensure_configured("AD_MCP_YANDEX_OAUTH_CLIENT_ID and AD_MCP_YANDEX_OAUTH_CLIENT_SECRET")
         redirect_uri = self.redirect_uri()
-        state = self._new_state(redirect_uri)
+        state = self._new_state(redirect_uri, workspace_id=workspace_id, user_id=user_id)
         query = urlencode(
             {
                 "response_type": "code",
@@ -533,6 +564,8 @@ class YandexOAuthService(BasePartnerOAuthService):
             },
             ttl_seconds=self.state_ttl_seconds,
             source="yandex_oauth",
+            workspace_id=str(state_payload.get("workspace_id") or "") or None,
+            user_id=str(state_payload.get("user_id") or "") or None,
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
 

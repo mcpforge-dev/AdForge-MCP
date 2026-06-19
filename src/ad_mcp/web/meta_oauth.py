@@ -47,12 +47,27 @@ class MetaOAuthService:
     def configured(self) -> bool:
         return bool(self._settings.meta_oauth_app_id.strip() and self._settings.meta_oauth_app_secret.strip())
 
-    def authorization_url(self) -> str:
+    def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
         self._ensure_configured()
         redirect_uri = self.redirect_uri()
         state_id = uuid4().hex
-        state = self._sign_state({"provider": META_PROVIDER, "iat": int(time.time()), "jti": state_id, "redirect_uri": redirect_uri})
-        self._store.save_oauth_state(META_PROVIDER, state_id, self._settings.meta_oauth_state_ttl_seconds)
+        state = self._sign_state(
+            {
+                "provider": META_PROVIDER,
+                "iat": int(time.time()),
+                "jti": state_id,
+                "redirect_uri": redirect_uri,
+                "workspace_id": workspace_id,
+                "user_id": user_id,
+            }
+        )
+        self._store.save_oauth_state(
+            META_PROVIDER,
+            state_id,
+            self._settings.meta_oauth_state_ttl_seconds,
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
         query = urlencode(
             {
                 "client_id": self._settings.meta_oauth_app_id.strip(),
@@ -92,14 +107,28 @@ class MetaOAuthService:
             },
             ttl_seconds=self._settings.meta_oauth_state_ttl_seconds,
             source="meta_oauth",
+            workspace_id=str(state_payload.get("workspace_id") or "") or None,
+            user_id=str(state_payload.get("user_id") or "") or None,
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
 
-    def pending_selection(self, pending_id: str) -> dict[str, Any]:
-        return self._store.pending_selection(META_PROVIDER, pending_id)
+    def pending_selection(self, pending_id: str, workspace_id: str | None = None) -> dict[str, Any]:
+        return self._store.pending_selection(META_PROVIDER, pending_id, workspace_id=workspace_id)
 
-    def select_accounts(self, pending_id: str, account_ids: list[str]) -> dict[str, Any]:
-        return self._store.select_pending_accounts(META_PROVIDER, pending_id, account_ids)
+    def select_accounts(
+        self,
+        pending_id: str,
+        account_ids: list[str],
+        workspace_id: str | None = None,
+        user_id: str | None = None,
+    ) -> dict[str, Any]:
+        return self._store.select_pending_accounts(
+            META_PROVIDER,
+            pending_id,
+            account_ids,
+            workspace_id=workspace_id,
+            user_id=user_id,
+        )
 
     def _api_version(self) -> str:
         version = self._settings.meta_oauth_api_version.strip() or "v20.0"
@@ -144,7 +173,7 @@ class MetaOAuthService:
         if int(time.time()) - issued_at > self._settings.meta_oauth_state_ttl_seconds:
             raise MetaOAuthError("Meta OAuth state expired.")
         try:
-            self._store.consume_oauth_state(META_PROVIDER, state_id)
+            self._store.consume_oauth_state(META_PROVIDER, state_id, workspace_id=str(payload.get("workspace_id") or "") or None)
         except ValueError as exc:
             raise MetaOAuthError(str(exc)) from exc
         return payload

@@ -516,43 +516,43 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             if route == "/api/hosted/mcp-connection":
                 return self._send_json(self.hosted.mcp_connection_info())
             if route == "/api/hosted/connections":
-                return self._send_json(self.hosted.connections())
+                return self._send_json(self.hosted.connections(self._session_user()))
             if route == "/api/hosted/oauth/diagnostics":
                 return self._send_json(self.hosted.oauth_diagnostics())
             if route == "/api/hosted/oauth/readiness":
                 return self._send_json(self.hosted.oauth_readiness())
             if route == "/api/hosted/oauth/meta/start":
-                return self._redirect(self.hosted.meta_oauth_redirect_url())
+                return self._redirect(self.hosted.meta_oauth_redirect_url(self._session_user()))
             if route == "/api/hosted/oauth/meta/diagnostics":
                 return self._send_json(self.hosted.oauth_diagnostics("meta_ads"))
             if route == "/api/hosted/oauth/meta/authorize-url":
-                return self._send_json(self.hosted.oauth_authorization_info("meta_ads"))
+                return self._send_json(self.hosted.oauth_authorization_info("meta_ads", self._session_user()))
             if route == "/api/hosted/oauth/meta/pending":
-                return self._send_json(self.hosted.meta_oauth_pending(str(query["pending_id"])))
+                return self._send_json(self.hosted.meta_oauth_pending(str(query["pending_id"]), self._session_user()))
             if route == "/api/hosted/oauth/google/start":
-                return self._redirect(self.hosted.oauth_redirect_url("google_ads"))
+                return self._redirect(self.hosted.oauth_redirect_url("google_ads", self._session_user()))
             if route == "/api/hosted/oauth/google/diagnostics":
                 return self._send_json(self.hosted.oauth_diagnostics("google_ads"))
             if route == "/api/hosted/oauth/google/authorize-url":
-                return self._send_json(self.hosted.oauth_authorization_info("google_ads"))
+                return self._send_json(self.hosted.oauth_authorization_info("google_ads", self._session_user()))
             if route == "/api/hosted/oauth/google/pending":
-                return self._send_json(self.hosted.oauth_pending("google_ads", str(query["pending_id"])))
+                return self._send_json(self.hosted.oauth_pending("google_ads", str(query["pending_id"]), self._session_user()))
             if route == "/api/hosted/oauth/tiktok/start":
-                return self._redirect(self.hosted.oauth_redirect_url("tiktok_ads"))
+                return self._redirect(self.hosted.oauth_redirect_url("tiktok_ads", self._session_user()))
             if route == "/api/hosted/oauth/tiktok/diagnostics":
                 return self._send_json(self.hosted.oauth_diagnostics("tiktok_ads"))
             if route == "/api/hosted/oauth/tiktok/authorize-url":
-                return self._send_json(self.hosted.oauth_authorization_info("tiktok_ads"))
+                return self._send_json(self.hosted.oauth_authorization_info("tiktok_ads", self._session_user()))
             if route == "/api/hosted/oauth/tiktok/pending":
-                return self._send_json(self.hosted.oauth_pending("tiktok_ads", str(query["pending_id"])))
+                return self._send_json(self.hosted.oauth_pending("tiktok_ads", str(query["pending_id"]), self._session_user()))
             if route == "/api/hosted/oauth/yandex/start":
-                return self._redirect(self.hosted.oauth_redirect_url("yandex_direct"))
+                return self._redirect(self.hosted.oauth_redirect_url("yandex_direct", self._session_user()))
             if route == "/api/hosted/oauth/yandex/diagnostics":
                 return self._send_json(self.hosted.oauth_diagnostics("yandex_direct"))
             if route == "/api/hosted/oauth/yandex/authorize-url":
-                return self._send_json(self.hosted.oauth_authorization_info("yandex_direct"))
+                return self._send_json(self.hosted.oauth_authorization_info("yandex_direct", self._session_user()))
             if route == "/api/hosted/oauth/yandex/pending":
-                return self._send_json(self.hosted.oauth_pending("yandex_direct", str(query["pending_id"])))
+                return self._send_json(self.hosted.oauth_pending("yandex_direct", str(query["pending_id"]), self._session_user()))
 
             if route == "/api/meta/dashboard":
                 return self._send_json(self.service.dashboard(account_id=account_id, end_date=end_date))
@@ -814,17 +814,42 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return
             payload = self._json_body()
             if route == "/api/hosted/connections/import-local":
-                return self._send_json(self.hosted.import_local_provider(str(payload["provider"])))
+                user = self._session_user()
+                result = self.hosted.import_local_provider(str(payload["provider"]), user)
+                if user:
+                    self.auth.record_platform_connection(user, str(payload["provider"]), result.get("accounts", []))
+                return self._send_json(result)
             if route == "/api/hosted/connections/disconnect":
-                return self._send_json(self.hosted.disconnect_provider(str(payload["provider"])))
+                user = self._session_user()
+                provider = str(payload["provider"])
+                result = self.hosted.disconnect_provider(provider, user)
+                if user:
+                    self.auth.mark_platform_disconnected(user, provider)
+                return self._send_json(result)
             if route == "/api/hosted/oauth/meta/select":
-                return self._send_json(self.hosted.meta_oauth_select(payload))
+                user = self._session_user()
+                result = self.hosted.meta_oauth_select(payload, user)
+                if user:
+                    self.auth.record_platform_connection(user, "meta_ads", result.get("accounts", []))
+                return self._send_json(result)
             if route == "/api/hosted/oauth/google/select":
-                return self._send_json(self.hosted.oauth_select("google_ads", payload))
+                user = self._session_user()
+                result = self.hosted.oauth_select("google_ads", payload, user)
+                if user:
+                    self.auth.record_platform_connection(user, "google_ads", result.get("accounts", []))
+                return self._send_json(result)
             if route == "/api/hosted/oauth/tiktok/select":
-                return self._send_json(self.hosted.oauth_select("tiktok_ads", payload))
+                user = self._session_user()
+                result = self.hosted.oauth_select("tiktok_ads", payload, user)
+                if user:
+                    self.auth.record_platform_connection(user, "tiktok_ads", result.get("accounts", []))
+                return self._send_json(result)
             if route == "/api/hosted/oauth/yandex/select":
-                return self._send_json(self.hosted.oauth_select("yandex_direct", payload))
+                user = self._session_user()
+                result = self.hosted.oauth_select("yandex_direct", payload, user)
+                if user:
+                    self.auth.record_platform_connection(user, "yandex_direct", result.get("accounts", []))
+                return self._send_json(result)
             if route == "/api/meta/preview/clone-campaign":
                 return self._send_json(
                     self.service.preview_clone_campaign(

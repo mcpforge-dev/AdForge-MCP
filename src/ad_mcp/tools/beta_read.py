@@ -13,6 +13,7 @@ from ad_mcp.core.connection_store import (
 )
 from ad_mcp.core.models import DateRange, ReportRequest
 from ad_mcp.core.policy import PolicyManager
+from ad_mcp.runtime_context import current_workspace_id
 from ad_mcp.settings import Settings
 from ad_mcp.tools._shared import validate_provider_account
 
@@ -217,11 +218,12 @@ def build_beta_read_tools(
 
     def list_connected_platforms() -> dict:
         provider_configs, provider_sources = _refresh_runtime_connections(registry, settings)
+        workspace_id = current_workspace_id()
         platforms: list[dict[str, Any]] = []
         for provider in PROVIDER_NAMES:
             accounts = provider_configs.get(provider, {}).get("accounts", [])
             capabilities = registry.get_capabilities(provider)
-            pending = store.pending_selections(provider)
+            pending = store.pending_selections(provider, workspace_id=workspace_id)
             platforms.append(
                 {
                     "platform": provider,

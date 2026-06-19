@@ -500,6 +500,93 @@ class AuthStore:
             )
         return self.profile_summary(user_id)
 
+    def record_platform_connection(self, user: AuthUser, platform: str, accounts: list[dict[str, Any]]) -> None:
+        platform = platform.strip()
+        if not platform:
+            raise AuthValidationError("Platform is required.")
+        timestamp = _now()
+        workspace_id = user.workspace_id or ""
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT id
+                FROM platform_connections
+                WHERE user_id = ? AND platform = ? AND COALESCE(workspace_id, '') = ?
+                ORDER BY created_at ASC
+                LIMIT 1
+                """,
+                (user.id, platform, workspace_id),
+            )
+            connection_id = str(row["id"]) if row else uuid.uuid4().hex
+            if row:
+                self._execute(
+                    connection,
+                    """
+                    UPDATE platform_connections
+                    SET status = 'connected', updated_at = ?, last_success_at = ?, last_error_code = NULL, last_error_message = NULL
+                    WHERE id = ?
+                    """,
+                    (timestamp, timestamp, connection_id),
+                )
+            else:
+                self._execute(
+                    connection,
+                    """
+                    INSERT INTO platform_connections
+                      (id, workspace_id, user_id, platform, status, created_at, updated_at, last_success_at)
+                    VALUES (?, ?, ?, ?, 'connected', ?, ?, ?)
+                    """,
+                    (connection_id, user.workspace_id, user.id, platform, timestamp, timestamp, timestamp),
+                )
+            self._execute(connection, "DELETE FROM selected_ad_accounts WHERE connection_id = ?", (connection_id,))
+            for account in accounts:
+                account_id = str(
+                    account.get("account_id")
+                    or account.get("customer_id")
+                    or account.get("advertiser_id")
+                    or account.get("direct_client_login")
+                    or ""
+                ).strip()
+                if not account_id:
+                    continue
+                account_name = str(account.get("name") or account_id)
+                self._execute(
+                    connection,
+                    """
+                    INSERT INTO selected_ad_accounts
+                      (id, connection_id, platform, account_id, account_name, status, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, 'active', ?, ?)
+                    """,
+                    (uuid.uuid4().hex, connection_id, platform, account_id, account_name, timestamp, timestamp),
+                )
+
+    def mark_platform_disconnected(self, user: AuthUser, platform: str) -> None:
+        timestamp = _now()
+        workspace_id = user.workspace_id or ""
+        with self._connect() as connection:
+            rows = self._query_all(
+                connection,
+                """
+                SELECT id
+                FROM platform_connections
+                WHERE user_id = ? AND platform = ? AND COALESCE(workspace_id, '') = ?
+                """,
+                (user.id, platform, workspace_id),
+            )
+            for row in rows:
+                connection_id = str(row["id"])
+                self._execute(
+                    connection,
+                    "UPDATE selected_ad_accounts SET status = 'inactive', updated_at = ? WHERE connection_id = ?",
+                    (timestamp, connection_id),
+                )
+                self._execute(
+                    connection,
+                    "UPDATE platform_connections SET status = 'disconnected', updated_at = ? WHERE id = ?",
+                    (timestamp, connection_id),
+                )
+
     def avatar_path(self, user_id: str) -> str:
         with self._connect() as connection:
             row = self._query_one(connection, "SELECT avatar_path FROM user_profiles WHERE user_id = ?", (user_id,))

@@ -7,6 +7,7 @@
 
   const TOKEN_KEY = "ad_mcp_web_api_token";
   const MCP_URL_COPIED_KEY = "adforge_mcp_url_copied";
+  const ACTIVE_SECTION_KEY = "adforge_active_section";
 
   const PROVIDER_SLUG = {
     meta_ads: "meta",
@@ -543,7 +544,8 @@
       loadConnections().then(() => loadPending(returnedProvider, pendingId));
       return;
     }
-    setSection(requested && isKnownSection(requested) ? requested : "overview");
+    const savedSection = localStorage.getItem(ACTIVE_SECTION_KEY) || "";
+    setSection(requested && isKnownSection(requested) ? requested : savedSection && isKnownSection(savedSection) ? savedSection : "overview");
   }
 
   function isKnownSection(section) {
@@ -552,6 +554,11 @@
 
   function setSection(section) {
     state.section = isKnownSection(section) ? section : "overview";
+    try {
+      localStorage.setItem(ACTIVE_SECTION_KEY, state.section);
+    } catch (error) {
+      /* ignore */
+    }
     el.navTabs.forEach((tab) => tab.classList.toggle("is-active", tab.dataset.nav === state.section));
     el.sections.forEach((node) => {
       node.hidden = node.dataset.section !== state.section;
@@ -1045,6 +1052,16 @@
       : emptyState("Аккаунты не найдены. Проверьте, что у пользователя есть доступ к рекламному кабинету.");
     return `
         <form id="pending-form" data-provider="${escAttr(pending.provider)}" data-pending-id="${escAttr(pending.pending_id)}">
+          ${accounts.length ? `
+          <div class="pending-toolbar">
+            <label class="pending-select-all">
+              <input type="checkbox" data-select-all checked>
+              <span>Все</span>
+            </label>
+            <button type="button" class="btn btn--ghost btn--small" data-clear-pending>Снять все</button>
+            <span class="pending-count" data-pending-count>Выбрано ${accounts.length} из ${accounts.length}</span>
+          </div>
+          ` : ""}
           <div class="pending-list">${options}</div>
           <div class="pending-actions">
             <button type="submit" class="btn btn--primary" ${accounts.length ? "" : "disabled"}>Подключить выбранные</button>
@@ -1113,7 +1130,46 @@
           closePendingModal(true);
         });
       }
+      bindPendingSelectionControls(form);
     }
+  }
+
+  function bindPendingSelectionControls(form) {
+    const checkboxes = Array.from(form.querySelectorAll("input[name='account_id']"));
+    const selectAll = form.querySelector("[data-select-all]");
+    const clearButton = form.querySelector("[data-clear-pending]");
+    const count = form.querySelector("[data-pending-count]");
+    const submit = form.querySelector("button[type='submit']");
+    if (!checkboxes.length) return;
+
+    const sync = () => {
+      const selected = checkboxes.filter((input) => input.checked).length;
+      if (selectAll) {
+        selectAll.checked = selected === checkboxes.length;
+        selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
+      }
+      if (count) count.textContent = `Выбрано ${selected} из ${checkboxes.length}`;
+      if (submit) submit.disabled = selected === 0;
+    };
+
+    if (selectAll) {
+      selectAll.addEventListener("change", () => {
+        checkboxes.forEach((input) => {
+          input.checked = selectAll.checked;
+        });
+        sync();
+      });
+    }
+    if (clearButton) {
+      clearButton.addEventListener("click", () => {
+        checkboxes.forEach((input) => {
+          input.checked = false;
+        });
+        sync();
+      });
+    }
+    checkboxes.forEach((input) => input.addEventListener("change", sync));
+    sync();
   }
 
   function closePendingModal(dismiss = false) {
