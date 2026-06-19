@@ -8,6 +8,8 @@
   const TOKEN_KEY = "ad_mcp_web_api_token";
   const MCP_URL_COPIED_KEY = "adforge_mcp_url_copied";
   const ACTIVE_SECTION_KEY = "adforge_active_section";
+  const WELCOME_SEEN_KEY = "adforge_welcome_seen";
+  const DISMISSED_PENDING_KEY_PREFIX = "adforge_dismissed_pending:";
 
   const PROVIDER_SLUG = {
     meta_ads: "meta",
@@ -19,11 +21,11 @@
   const PROVIDER_DESC = {
     meta_ads: "Кампании, статусы, бюджеты и базовые метрики из Meta Ads.",
     google_ads: "Кампании, статусы, бюджеты и базовые метрики из Google Ads.",
-    tiktok_ads: "Ограниченная beta-поддержка: подключение готовится, чтение кампаний может быть недоступно.",
-    yandex_direct: "Ограниченная beta-поддержка: подключение готовится, чтение кампаний может быть недоступно.",
+    tiktok_ads: "Кабинеты, статусы и базовые данные из TikTok Ads после подключения.",
+    yandex_direct: "Кабинеты, кампании и базовые данные из Yandex Direct после подключения.",
   };
 
-  const LIMITED_BETA = new Set(["tiktok_ads", "yandex_direct"]);
+  const TEST_MODE = new Set(["meta_ads", "google_ads"]);
 
   const state = {
     section: "overview",
@@ -35,6 +37,7 @@
     activePending: null,
     dismissedPendingIds: new Set(),
     pendingModalId: null,
+    pendingWelcome: null,
     mcpUrlCopied: localStorage.getItem(MCP_URL_COPIED_KEY) === "1",
     notice: null,
     diagnosticsRun: false,
@@ -130,7 +133,27 @@
       return;
     }
     if (window.location.pathname === "/") {
+      try {
+        await loadMeSilently();
+        if (state.user && hasDashboardRouteIntent()) {
+          await loadCapabilities();
+          enterApp();
+          return;
+        }
+        if (state.user) {
+          await loadCapabilities();
+          window.history.replaceState({}, "", "/app");
+          enterApp();
+          return;
+        }
+      } catch (error) {
+        state.user = null;
+      }
       showLanding();
+      if (hasDashboardRouteIntent()) {
+        openAuth("login");
+        showAuthError("Сессия истекла во время подключения. Войдите ещё раз и продолжите выбор аккаунтов.");
+      }
       return;
     }
     try {
@@ -189,6 +212,7 @@
       closeAuth();
       await loadCapabilities();
       window.history.replaceState({}, "", "/app");
+      state.pendingWelcome = "register";
       enterApp();
     });
     el.authForm.addEventListener("submit", async (event) => {
@@ -224,6 +248,7 @@
         }
         await loadCapabilities();
         window.history.replaceState({}, "", "/app");
+        state.pendingWelcome = "login";
         enterApp();
       } catch (error) {
         showAuthError(humanizeError(error));
@@ -546,6 +571,48 @@
     }
     const savedSection = localStorage.getItem(ACTIVE_SECTION_KEY) || "";
     setSection(requested && isKnownSection(requested) ? requested : savedSection && isKnownSection(savedSection) ? savedSection : "overview");
+    maybeShowWelcome();
+  }
+
+  function maybeShowWelcome() {
+    const kind = state.pendingWelcome;
+    state.pendingWelcome = null;
+    if (!kind) return;
+    try {
+      if (sessionStorage.getItem(WELCOME_SEEN_KEY) === "1") return;
+      sessionStorage.setItem(WELCOME_SEEN_KEY, "1");
+    } catch (error) {
+      /* ignore */
+    }
+    window.setTimeout(() => showWelcomeModal(kind), 120);
+  }
+
+  function showWelcomeModal(kind) {
+    const isRegister = kind === "register";
+    showClientModal({
+      title: isRegister ? "Добро пожаловать в AdForge MCP" : "С возвращением в AdForge MCP",
+      subtitle: isRegister
+        ? "Первый шаг простой: подключите рекламную платформу, выберите кабинеты и скопируйте MCP URL для AI-клиента."
+        : "Кабинет готов к работе. Можно перейти к подключениям или продолжить с текущего раздела.",
+      body: `
+        <div class="welcome-card">
+          <strong>${isRegister ? "Что сделать дальше" : "Быстрый старт"}</strong>
+          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте AdForge MCP в Codex или Claude." : "Если нужно проверить кабинеты, откройте раздел подключений. Все опасные действия остаются в безопасном preview-режиме."}</span>
+        </div>
+      `,
+      closeLabel: "",
+    });
+    el.clientModalActions.innerHTML = `
+      <button type="button" class="btn btn--primary" data-welcome-connections>Перейти к подключениям</button>
+      <button type="button" class="btn btn--secondary" data-client-modal-close>Продолжить работу</button>
+    `;
+    el.clientModalActions.querySelector("[data-welcome-connections]")?.addEventListener("click", () => {
+      closeClientModal();
+      setSection("connections");
+    });
+    el.clientModalActions.querySelectorAll("[data-client-modal-close]").forEach((node) => {
+      node.addEventListener("click", () => closeClientModal());
+    });
   }
 
   function isKnownSection(section) {
@@ -731,24 +798,11 @@
           </div>
           <button type="submit" class="btn btn--primary btn--small">Сохранить профиль</button>
         </form>
-        <form id="change-password-form" class="card-lite profile-password-form">
-          <h3 class="card__title">Смена пароля</h3>
-          <div class="profile-password-fields">
-          <label class="field">
-            <span class="field__label">Текущий пароль</span>
-            <input name="current_password" type="password" autocomplete="current-password" required>
-          </label>
-          <label class="field">
-            <span class="field__label">Новый пароль</span>
-            <input name="new_password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" required>
-          </label>
-          <label class="field">
-            <span class="field__label">Повторите новый пароль</span>
-            <input name="confirm_password" type="password" autocomplete="new-password" required>
-          </label>
-          </div>
-          <button type="submit" class="btn btn--primary btn--small">Изменить пароль</button>
-        </form>
+        <div class="card-lite profile-password-form">
+          <h3 class="card__title">Пароль</h3>
+          <p class="card__hint">Поля смены пароля открываются отдельно, чтобы профиль оставался аккуратным.</p>
+          <button id="open-change-password" type="button" class="btn btn--secondary btn--small">Сменить пароль</button>
+        </div>
       </div>
     `;
     bindProfileForms();
@@ -812,6 +866,32 @@
       await uploadAvatar(avatarForm);
     });
 
+    document.getElementById("open-change-password")?.addEventListener("click", () => showChangePasswordModal());
+  }
+
+  function showChangePasswordModal() {
+    showClientModal({
+      title: "Сменить пароль",
+      subtitle: "Введите текущий пароль и новый пароль для аккаунта.",
+      body: `
+        <form id="change-password-form" class="auth-form">
+          <label class="field">
+            <span class="field__label">Текущий пароль</span>
+            <input name="current_password" type="password" autocomplete="current-password" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Новый пароль</span>
+            <input name="new_password" type="password" autocomplete="new-password" placeholder="Минимум 8 символов" required>
+          </label>
+          <label class="field">
+            <span class="field__label">Повторите новый пароль</span>
+            <input name="confirm_password" type="password" autocomplete="new-password" required>
+          </label>
+          <button type="submit" class="btn btn--primary btn--block">Сохранить новый пароль</button>
+        </form>
+      `,
+      closeLabel: "",
+    });
     const passwordForm = document.getElementById("change-password-form");
     passwordForm?.addEventListener("submit", async (event) => {
       event.preventDefault();
@@ -937,7 +1017,7 @@
       );
       if (!stillExists) state.activePending = null;
     }
-    if (!state.activePending && pending && !state.dismissedPendingIds.has(pending.pending_id)) {
+    if (!state.activePending && pending && !isPendingDismissed(pending.pending_id)) {
       state.activePending = pending;
     }
   }
@@ -953,7 +1033,7 @@
   function renderPlatformCard(platform) {
     const status = resolveStatus(platform);
     const accounts = platform.accounts || [];
-    const limited = LIMITED_BETA.has(platform.provider);
+    const testMode = TEST_MODE.has(platform.provider);
     const canConnect = Boolean(platform.oauth_configured);
     const connectLabel = !canConnect ? "Платформа настраивается" : status === "connected" ? "Переподключить" : "Подключить";
 
@@ -973,7 +1053,7 @@
             <h3 class="platform-card__name">${esc(platform.label || platform.provider)}</h3>
             <p class="platform-card__desc">${esc(PROVIDER_DESC[platform.provider] || "")}</p>
           </div>
-          ${statusBadge(status, limited)}
+          ${statusBadge(status, testMode)}
         </div>
         <div class="platform-card__meta">${metaBits.join("")}</div>
         <p class="platform-card__hint">${esc(statusHint(status, canConnect))}</p>
@@ -1031,7 +1111,7 @@
       <div class="callout">
         <strong>Нужно выбрать рекламные аккаунты</strong>
         <span>Мы получили доступ к кабинету и нашли аккаунты: ${count}. Нажмите, чтобы выбрать нужные.</span>
-        <button type="button" class="btn btn--secondary btn--small" data-pending="${escAttr(platform.provider)}" data-pending-id="${escAttr(pending.pending_id)}">Выбрать аккаунты</button>
+        <button type="button" class="btn btn--secondary btn--small" data-pending="${escAttr(platform.provider)}" data-pending-id="${escAttr(pending.pending_id)}">Продолжить выбор аккаунтов</button>
       </div>
     `;
   }
@@ -1134,6 +1214,17 @@
     }
   }
 
+  function hasDashboardRouteIntent() {
+    const params = new URLSearchParams(window.location.search);
+    return Boolean(
+      params.get("section") ||
+      params.get("pending_id") ||
+      params.get("provider") ||
+      params.get("oauth_error") ||
+      params.get("status"),
+    );
+  }
+
   function bindPendingSelectionControls(form) {
     const checkboxes = Array.from(form.querySelectorAll("input[name='account_id']"));
     const selectAll = form.querySelector("[data-select-all]");
@@ -1172,9 +1263,29 @@
     sync();
   }
 
+  function rememberDismissedPending(pendingId) {
+    if (!pendingId) return;
+    state.dismissedPendingIds.add(pendingId);
+    try {
+      sessionStorage.setItem(`${DISMISSED_PENDING_KEY_PREFIX}${pendingId}`, "1");
+    } catch (error) {
+      /* ignore */
+    }
+  }
+
+  function isPendingDismissed(pendingId) {
+    if (!pendingId) return false;
+    if (state.dismissedPendingIds.has(pendingId)) return true;
+    try {
+      return sessionStorage.getItem(`${DISMISSED_PENDING_KEY_PREFIX}${pendingId}`) === "1";
+    } catch (error) {
+      return false;
+    }
+  }
+
   function closePendingModal(dismiss = false) {
     if (dismiss && state.activePending?.pending_id) {
-      state.dismissedPendingIds.add(state.activePending.pending_id);
+      rememberDismissedPending(state.activePending.pending_id);
     }
     state.pendingModalId = null;
     state.activePending = null;
@@ -1230,7 +1341,7 @@
         pending_id: state.activePending.pending_id,
         account_ids: accountIds,
       });
-      state.dismissedPendingIds.add(state.activePending.pending_id);
+      rememberDismissedPending(state.activePending.pending_id);
       state.activePending = null;
       state.pendingModalId = null;
       closeClientModal();
@@ -1526,7 +1637,7 @@
     return "ready_to_connect";
   }
 
-  function statusBadge(status, limited) {
+  function statusBadge(status, testMode) {
     const map = {
       connected: ["Подключено", "ok"],
       ready_to_connect: ["Не подключено", "info"],
@@ -1537,8 +1648,8 @@
       error: ["Ошибка подключения", "err"],
     };
     const [label, tone] = map[status] || ["Статус неизвестен", "muted"];
-    const limitedChip = limited ? `<span class="badge badge--muted">Ограниченная beta</span>` : "";
-    return `<div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end">${limitedChip}<span class="badge badge--${tone}">${esc(label)}</span></div>`;
+    const modeChip = testMode ? `<span class="badge badge--info">Тестовый режим</span>` : "";
+    return `<div class="status-badge-group">${modeChip}<span class="badge badge--${tone}">${esc(label)}</span></div>`;
   }
 
   function statusHint(status, canConnect) {
@@ -1675,6 +1786,7 @@
         state.user = null;
         showLanding();
         openAuth("login");
+        showAuthError("Сессия истекла. Войдите ещё раз, чтобы продолжить работу в кабинете.");
       } else {
         showGate("Сессия истекла или код доступа неверный. Введите код доступа еще раз.");
       }
@@ -1819,7 +1931,7 @@
   function closeClientModal() {
     if (!el.clientModal) return;
     if (state.pendingModalId && state.activePending?.pending_id === state.pendingModalId) {
-      state.dismissedPendingIds.add(state.pendingModalId);
+      rememberDismissedPending(state.pendingModalId);
       state.activePending = null;
       state.pendingModalId = null;
     }

@@ -322,6 +322,37 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .feature-grid h2 { font-size: 16px; margin-bottom: 7px; }
 .feature-grid p { color: var(--text-muted); font-size: 14px; }
 
+.question-strip {
+  margin-top: 14px;
+  border: 1px solid rgba(124, 154, 255, 0.22);
+  border-radius: 18px;
+  background:
+    radial-gradient(circle at 82% 18%, rgba(62, 207, 142, 0.12), transparent 30%),
+    rgba(18, 21, 27, 0.72);
+  display: grid;
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.12fr);
+  gap: 18px;
+  padding: 22px;
+}
+
+.question-strip h2 { font-size: 22px; margin: 3px 0 7px; }
+.question-strip p { color: var(--text-muted); font-size: 14px; }
+
+.question-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.question-list span {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  background: var(--bg-inset);
+  color: var(--text);
+  font-size: 13.5px;
+  padding: 11px 12px;
+}
+
 .modal {
   position: fixed;
   inset: 0;
@@ -366,13 +397,21 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   background: rgba(255, 255, 255, 0.02);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 22px;
+  font-size: 0;
   line-height: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 0;
   z-index: 2;
+}
+
+.modal__close::before {
+  content: "×";
+  display: block;
+  font-size: 22px;
+  line-height: 1;
+  transform: translateY(-1px);
 }
 
 .modal__close:hover { color: var(--text); border-color: var(--border); }
@@ -397,7 +436,11 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 }
 
 .auth-tab {
+  align-items: center;
   flex: 1;
+  display: inline-flex;
+  justify-content: center;
+  min-width: 0;
   border: 0;
   background: transparent;
   color: var(--text-muted);
@@ -682,7 +725,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 }
 
 .tabs-shell {
-  width: min(var(--shell-width), calc(100% - 48px));
+  width: min(calc(var(--shell-width) - 48px), calc(100% - 48px));
   margin: 14px auto 0;
   display: flex;
   align-items: center;
@@ -691,6 +734,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 }
 
 .tabs-bar {
+  flex: 0 1 auto;
   min-width: 0;
   display: flex;
   gap: 6px;
@@ -700,6 +744,11 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   border: 1px solid var(--border-soft);
   border-radius: 999px;
   background: rgba(18, 21, 27, 0.78);
+}
+
+.tabs-shell .badge {
+  flex: none;
+  margin-left: auto;
 }
 
 .nav-tab {
@@ -1066,6 +1115,13 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .platform-card__actions { display: flex; flex-wrap: wrap; gap: 8px; }
 
+.status-badge-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
 .callout {
   border: 1px solid var(--border);
   border-radius: var(--radius-small);
@@ -1082,6 +1138,19 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .callout--warn { border-color: rgba(245, 183, 89, 0.35); }
 
 .callout .btn { align-self: flex-start; }
+
+.welcome-card {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-inset);
+  border-radius: var(--radius-small);
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+}
+
+.welcome-card strong { color: var(--text); }
 
 /* Pending account selection */
 
@@ -1246,6 +1315,8 @@ details.raw-json pre {
 @media (max-width: 860px) {
   .hero { grid-template-columns: 1fr; min-height: auto; }
   .feature-grid { grid-template-columns: 1fr; }
+  .question-strip { grid-template-columns: 1fr; }
+  .question-list { grid-template-columns: 1fr; }
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
   .grid-2 { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr; }
@@ -1278,6 +1349,7 @@ details.raw-json pre {
   .user-pill { flex: 1 1 auto; min-width: 0; max-width: none; padding-inline: 9px; }
   .tabs-shell { width: calc(100% - 28px); align-items: stretch; flex-direction: column; margin-top: 10px; }
   .tabs-bar { width: 100%; border-radius: var(--radius-small); }
+  .tabs-shell .badge { align-self: flex-start; margin-left: 0; }
   .nav-tab { flex: 0 0 auto; }
   .main { padding: 20px 14px 40px; }
   .card { padding: 16px; }
