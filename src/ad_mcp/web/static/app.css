@@ -347,7 +347,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: 16px;
-  padding: 32px 24px 24px;
+  padding: 58px 24px 24px;
   box-shadow: 0 28px 84px rgba(0,0,0,0.42);
 }
 
@@ -367,10 +367,12 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   color: var(--text-muted);
   cursor: pointer;
   font-size: 22px;
-  line-height: 34px;
-  display: grid;
-  place-items: center;
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   padding: 0;
+  z-index: 2;
 }
 
 .modal__close:hover { color: var(--text); border-color: var(--border); }
@@ -389,7 +391,6 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   gap: 4px;
   padding: 4px;
   margin: 0 0 18px;
-  padding-right: 42px;
   background: var(--bg-inset);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-small);
@@ -777,7 +778,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .grid-2 {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
   align-items: start;
 }
@@ -1257,15 +1258,12 @@ details.raw-json pre {
   .modal { padding: 12px; align-items: start; }
   .modal__panel {
     max-height: calc(100vh - 24px);
-    padding: 34px 18px 20px;
+    padding: 56px 18px 20px;
     border-radius: 14px;
   }
   .modal__close {
     right: 12px;
     top: 12px;
-  }
-  .auth-tabs {
-    padding-right: 38px;
   }
   .site-header { height: auto; padding: 14px 0; align-items: flex-start; }
   .site-nav { flex-wrap: wrap; justify-content: flex-end; }
