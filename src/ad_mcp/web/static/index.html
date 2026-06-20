@@ -249,25 +249,25 @@
           <div id="mcp-token-actions" class="token-actions"></div>
           <div class="setup-card">
             <h3 class="card__title">2. Выберите AI-клиент</h3>
-            <div class="client-grid">
-              <div class="client-card">
+            <div class="client-grid" role="tablist" aria-label="AI-клиенты для AdForge MCP">
+              <button type="button" class="client-card is-active" role="tab" aria-selected="true" data-mcp-client-tab="codex">
                 <span class="client-card__badge client-card__badge--ok">Готово</span>
                 <h4>Codex</h4>
                 <p>Самый быстрый сценарий: Streamable HTTP, MCP URL и персональный Bearer token.</p>
-              </div>
-              <div class="client-card">
-                <span class="client-card__badge client-card__badge--ok">Готово при поддержке token</span>
+              </button>
+              <button type="button" class="client-card" role="tab" aria-selected="false" data-mcp-client-tab="claude">
+                <span class="client-card__badge client-card__badge--warn">OAuth для Claude.ai</span>
                 <h4>Claude</h4>
-                <p>Подходит для Claude-клиентов/API с remote MCP URL и access token. Если Claude.ai просит OAuth, используйте OAuth-сценарий.</p>
-              </div>
-              <div class="client-card client-card--blocked">
+                <p>Claude API/token-ready, но Claude.ai custom connector из вашего скрина требует OAuth, а не raw Bearer token.</p>
+              </button>
+              <button type="button" class="client-card client-card--blocked" role="tab" aria-selected="false" data-mcp-client-tab="chatgpt">
                 <span class="client-card__badge client-card__badge--warn">Нужен OAuth</span>
                 <h4>ChatGPT</h4>
                 <p>Для полноценного ChatGPT Apps/connector подключения нужен OAuth 2.1. Мы не открываем /mcp без auth и не просим вставлять raw token в небезопасное место.</p>
-              </div>
+              </button>
             </div>
           </div>
-          <div class="setup-card">
+          <div class="setup-card ai-client-panel is-active" data-mcp-client-panel="codex" role="tabpanel">
             <h3 class="card__title">3. Быстрый сценарий для Codex</h3>
             <ol class="setup-list">
               <li>Откройте Codex и перейдите в Settings / Настройки.</li>
@@ -278,19 +278,35 @@
               <li>Сохраните сервер, перезапустите MCP-подключение и откройте новый чат.</li>
             </ol>
           </div>
+          <div class="setup-card ai-client-panel" data-mcp-client-panel="claude" role="tabpanel" hidden>
+            <h3 class="card__title">3. Подключение Claude</h3>
+            <div class="ai-client-notes">
+              <p><strong>Что есть в Claude сейчас:</strong> форма принимает <code>Name</code>, <code>Remote MCP server URL</code> и optional OAuth Client ID/Secret.</p>
+              <div class="client-fields">
+                <div><span>Name</span><code>AdForge MCP</code></div>
+                <div><span>Remote MCP server URL</span><code>https://mcp.holymedia.kz/mcp</code></div>
+                <div><span>OAuth Client ID</span><code>пока оставить пустым</code></div>
+                <div><span>OAuth Client Secret</span><code>пока оставить пустым</code></div>
+              </div>
+              <p><strong>Важно:</strong> персональный MCP token нельзя вставлять в OAuth Client Secret. Это другое поле и другой протокол.</p>
+              <p><strong>Чтобы Claude.ai заработал на 100%:</strong> следующим этапом добавляем OAuth authorization server для MCP: discovery metadata, authorize/token endpoints, PKCE, scopes и привязку к вашему аккаунту AdForge.</p>
+              <p><strong>Что уже работает:</strong> Claude API или другой Claude-клиент, который поддерживает remote MCP URL плюс <code>authorization_token</code>/<code>Authorization: Bearer ...</code>.</p>
+            </div>
+          </div>
+          <div class="setup-card ai-client-panel" data-mcp-client-panel="chatgpt" role="tabpanel" hidden>
+            <h3 class="card__title">3. Подключение ChatGPT</h3>
+            <div class="ai-client-notes">
+              <p><strong>ChatGPT Apps/connector:</strong> для пользовательских рекламных данных нужен OAuth 2.1. Мы не будем делать no-auth endpoint и не будем просить клиента вставлять raw token в небезопасное место.</p>
+              <p><strong>Безопасный путь:</strong> OAuth authorization server, PKCE, scopes, revoke/rotate, audit и отдельное тестирование ChatGPT Developer Mode / Apps flow.</p>
+              <p><strong>Сейчас:</strong> используйте Codex, либо Claude/API-клиент с Bearer token. `/mcp` остаётся закрытым и без token отвечает 401.</p>
+            </div>
+          </div>
           <div class="callout">
             <strong>Подсказка по безопасности</strong>
             <span>Если клиент показывает поле “Bearer token environment variable”, туда нельзя вставлять сам ключ. Введите имя переменной <code>ADFORGE_MCP_CLIENT_TOKEN</code>, а ключ сохраните в эту переменную окружения. Если ключ попал в скриншот или чат, сгенерируйте новый.</span>
           </div>
-          <div class="setup-card">
-            <h3 class="card__title">4. Claude и ChatGPT</h3>
-            <div class="ai-client-notes">
-              <p><strong>Claude:</strong> добавьте custom remote MCP connector/server с URL выше. Если интерфейс поддерживает token/header, передайте <code>Authorization: Bearer &lt;ваш ключ&gt;</code>.</p>
-              <p><strong>ChatGPT:</strong> текущий endpoint не публикуем как no-auth connector. Для безопасного клиентского сценария нужен OAuth 2.1 authorization server с PKCE, scopes и revoke/rotate. Это следующий отдельный этап.</p>
-            </div>
-          </div>
           <div class="prompt-card">
-            <h3 class="card__title">5. Проверьте в новом чате</h3>
+            <h3 class="card__title">4. Проверьте в новом чате</h3>
             <div class="prompt-list">
               <code>Какие рекламные аккаунты подключены?</code>
               <code>Покажи кампании в Яндекс Директ</code>

@@ -33,14 +33,29 @@ ADFORGE_MCP_CLIENT_TOKEN
 
 ## Claude
 
-Статус: готово для Claude-клиентов/API, которые поддерживают remote MCP URL и access token.
+Статус: Claude API/клиенты с access token готовы; Claude.ai custom connector требует OAuth для 100% self-serve подключения.
 
-1. Добавить custom remote MCP connector/server.
-2. Указать URL hosted endpoint.
-3. Если интерфейс просит token/header, передать персональный MCP token как Bearer access token.
-4. После сохранения открыть новый чат и включить connector/tools, если клиент это требует.
+В Claude.ai форме `Add custom connector`:
 
-Для Claude.ai custom connectors интерфейс может требовать OAuth-настройки на стороне организации или аккаунта. В таком случае используйте OAuth-сценарий, а не отключение авторизации на `/mcp`.
+1. `Name`: `AdForge MCP`.
+2. `Remote MCP server URL`: `https://your-domain.com/mcp`.
+3. `OAuth Client ID`: пока оставить пустым.
+4. `OAuth Client Secret`: пока оставить пустым.
+
+Персональный MCP token нельзя вставлять в `OAuth Client Secret`: это не тот тип секрета.
+
+Для Claude API или MCP-клиента, который поддерживает token, используйте:
+
+```json
+{
+  "type": "url",
+  "url": "https://your-domain.com/mcp",
+  "name": "adforge-mcp",
+  "authorization_token": "<PERSONAL_MCP_TOKEN>"
+}
+```
+
+Для полного Claude.ai сценария нужен OAuth authorization server. Нельзя отключать авторизацию на `/mcp` ради удобного подключения.
 
 ## ChatGPT
 

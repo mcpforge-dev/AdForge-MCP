@@ -105,6 +105,8 @@
     el.copyMcpToken = document.getElementById("copy-mcp-token");
     el.copyMcpAuthHeader = document.getElementById("copy-mcp-auth-header");
     el.mcpTokenActions = document.getElementById("mcp-token-actions");
+    el.mcpClientTabs = Array.from(document.querySelectorAll("[data-mcp-client-tab]"));
+    el.mcpClientPanels = Array.from(document.querySelectorAll("[data-mcp-client-panel]"));
     el.profileCard = document.getElementById("profile-card");
     el.userPill = document.getElementById("user-pill");
     el.connectionsNotice = document.getElementById("connections-notice");
@@ -495,6 +497,12 @@
       window.history.replaceState({}, "", "/app");
       boot();
     });
+    el.mcpClientTabs.forEach((tab) => {
+      const select = () => setMcpClientTab(tab.dataset.mcpClientTab);
+      tab.addEventListener("click", select);
+      tab.addEventListener("mouseenter", select);
+      tab.addEventListener("focus", select);
+    });
     el.connectionsRefresh.addEventListener("click", () => loadConnections());
     el.diagRun.addEventListener("click", () => runDiagnostics());
     document.querySelectorAll("[data-client-modal-close]").forEach((node) => {
@@ -525,6 +533,20 @@
       if (!token) return;
       await copyText(`Bearer ${token}`);
       showClientMessage("Bearer значение скопировано", "В AI-клиенте добавьте Header: Name Authorization, Value Bearer + ваш ключ доступа.", "success");
+    });
+  }
+
+  function setMcpClientTab(client) {
+    if (!client) return;
+    el.mcpClientTabs.forEach((tab) => {
+      const active = tab.dataset.mcpClientTab === client;
+      tab.classList.toggle("is-active", active);
+      tab.setAttribute("aria-selected", active ? "true" : "false");
+    });
+    el.mcpClientPanels.forEach((panel) => {
+      const active = panel.dataset.mcpClientPanel === client;
+      panel.classList.toggle("is-active", active);
+      panel.hidden = !active;
     });
   }
 

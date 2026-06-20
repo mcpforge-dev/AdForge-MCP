@@ -962,16 +962,38 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 }
 
 .client-card {
+  appearance: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-small);
   background: rgba(255, 255, 255, 0.025);
   padding: 12px;
   min-width: 0;
+  transition: border-color 0.16s ease, background 0.16s ease, transform 0.16s ease, box-shadow 0.16s ease;
 }
 
 .client-card--blocked {
   border-color: rgba(245, 183, 89, 0.35);
   background: rgba(245, 183, 89, 0.06);
+}
+
+.client-card:hover,
+.client-card:focus-visible,
+.client-card.is-active {
+  border-color: rgba(124, 154, 255, 0.55);
+  background: rgba(124, 154, 255, 0.08);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.18);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.client-card--blocked:hover,
+.client-card--blocked:focus-visible,
+.client-card--blocked.is-active {
+  border-color: rgba(245, 183, 89, 0.62);
+  background: rgba(245, 183, 89, 0.09);
 }
 
 .client-card__badge {
@@ -1010,6 +1032,42 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.ai-client-panel { animation: panel-in 0.16s ease; }
+
+.client-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.client-fields div {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 10px;
+  min-width: 0;
+}
+
+.client-fields span {
+  display: block;
+  color: var(--text-faint);
+  font-size: 12px;
+  margin-bottom: 5px;
+}
+
+.client-fields code {
+  display: block;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .prompt-list {
@@ -1379,6 +1437,7 @@ details.raw-json pre {
   .grid-2 { grid-template-columns: 1fr; }
   .grid-3 { grid-template-columns: 1fr; }
   .client-grid { grid-template-columns: 1fr; }
+  .client-fields { grid-template-columns: 1fr; }
   .diag-grid { grid-template-columns: 1fr; }
   .admin-oauth-grid { grid-template-columns: 1fr; }
   .profile-grid { grid-template-columns: 1fr; }
