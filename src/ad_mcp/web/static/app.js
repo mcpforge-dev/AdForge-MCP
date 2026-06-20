@@ -1550,6 +1550,9 @@
           ${kvGrid([
             ["Preview-only", boolValue(diagnostics.security?.preview_only, true)],
             ["API token configured", boolValue(diagnostics.security?.beta_token_configured, true)],
+            ["Secure cookies", boolValue(diagnostics.security?.auth_secure_cookies, true)],
+            ["Auth rate limit", boolValue(diagnostics.security?.auth_rate_limit_enabled, true)],
+            ["Public registration", boolValue(diagnostics.security?.public_registration_enabled)],
             ["Secrets redacted", boolValue(diagnostics.security?.secrets_redacted, true)],
           ])}
         </article>

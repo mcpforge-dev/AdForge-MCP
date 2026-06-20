@@ -68,6 +68,34 @@ def test_custom_beta_token_header_authorizes_request() -> None:
     assert _request_token_is_valid(_Headers({"X-AD-MCP-BETA-TOKEN": "secret-token"}), settings) is True
 
 
+def test_auth_login_rate_limit_blocks_repeated_failures(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        auth_login_rate_limit=2,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    store.create_user(email="client@example.com", name="Client", password="right-password")
+    base_url, close = _serve(settings)
+    try:
+        first_status, first, _ = _post_json(base_url, "/api/auth/login", {"email": "client@example.com", "password": "wrong"})
+        second_status, second, _ = _post_json(base_url, "/api/auth/login", {"email": "client@example.com", "password": "wrong-again"})
+        blocked_status, blocked, _ = _post_json(base_url, "/api/auth/login", {"email": "client@example.com", "password": "right-password"})
+    finally:
+        close()
+
+    assert first_status == 400
+    assert second_status == 400
+    assert first["code"] == second["code"] == "validation_error"
+    assert blocked_status == 429
+    assert blocked["code"] == "rate_limited"
+
+
 class _FakeEmailer(PasswordResetEmailer):
     def __init__(self, configured: bool = True) -> None:
         self._configured = configured
@@ -82,6 +110,7 @@ class _FakeEmailer(PasswordResetEmailer):
 
 def _serve(settings: Settings, *, emailer: PasswordResetEmailer | None = None):
     previous = (AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service, AdsWebHandler.auth, AdsWebHandler.emailer)
+    AdsWebHandler.reset_rate_limits()
     AdsWebHandler.settings = settings
     AdsWebHandler.diagnostics = DiagnosticsService(settings)
     AdsWebHandler.hosted = HostedConnectionService(settings)
@@ -98,6 +127,7 @@ def _serve(settings: Settings, *, emailer: PasswordResetEmailer | None = None):
         server.server_close()
         thread.join(timeout=2)
         AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service, AdsWebHandler.auth, AdsWebHandler.emailer = previous
+        AdsWebHandler.reset_rate_limits()
 
     return base_url, close
 
@@ -639,6 +669,40 @@ def test_password_reset_flow_is_neutral_hashed_one_time_and_updates_password(tmp
     assert row[1]
 
 
+def test_forgot_password_rate_limit_blocks_email_flood(tmp_path) -> None:
+    database_path = tmp_path / "auth.db"
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{database_path.as_posix()}",
+        public_base_url="https://adforge.example",
+        smtp_host="smtp.example",
+        smtp_from_email="noreply@example.com",
+        auth_password_reset_rate_limit=2,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    store.create_user(email="client@example.com", name="Client", password="old-password")
+    emailer = _FakeEmailer(configured=True)
+    base_url, close = _serve(settings, emailer=emailer)
+    try:
+        first_status, first, _ = _post_json(base_url, "/api/auth/forgot-password", {"email": "client@example.com"})
+        second_status, second, _ = _post_json(base_url, "/api/auth/forgot-password", {"email": "client@example.com"})
+        blocked_status, blocked, _ = _post_json(base_url, "/api/auth/forgot-password", {"email": "client@example.com"})
+    finally:
+        close()
+
+    assert first_status == 200
+    assert second_status == 200
+    assert first["message"] == second["message"]
+    assert blocked_status == 429
+    assert blocked["code"] == "rate_limited"
+    assert len(emailer.messages) == 2
+
+
 def test_forgot_password_handles_missing_smtp_without_user_enumeration(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
@@ -928,5 +992,8 @@ def test_security_capabilities_expose_account_flags_without_secrets(tmp_path) ->
     assert capabilities["account"]["password_reset_enabled"] is True
     assert security_status == 200
     assert security["smtp_configured"] is True
+    assert security["auth_rate_limit_enabled"] is True
+    assert "auth_rate_limit_enabled" in capabilities["security"]
+    assert "public_registration_enabled" in capabilities["account"]
     assert "smtp-password" not in str(capabilities)
     assert "smtp-password" not in str(security)

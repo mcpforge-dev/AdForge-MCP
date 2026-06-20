@@ -4,6 +4,8 @@ import json
 import logging
 import mimetypes
 import secrets
+import threading
+import time
 import uuid
 from http import HTTPStatus
 from http.cookies import SimpleCookie
@@ -57,6 +59,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     auth = AuthStore()
     emailer = PasswordResetEmailer()
     _omit_response_body = False
+    _rate_limit_lock = threading.Lock()
+    _rate_limit_hits: dict[str, list[float]] = {}
 
     def _set_default_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -160,6 +164,45 @@ class AdsWebHandler(BaseHTTPRequestHandler):
 
     def _error(self, message: str, status: HTTPStatus = HTTPStatus.BAD_REQUEST, code: str = "bad_request") -> None:
         self._send_json({"error": message, "code": code}, status)
+
+    @classmethod
+    def reset_rate_limits(cls) -> None:
+        with cls._rate_limit_lock:
+            cls._rate_limit_hits = {}
+
+    def _client_ip(self) -> str:
+        peer = str(self.client_address[0] if self.client_address else "")
+        forwarded_for = str(self.headers.get("X-Forwarded-For", "") or "").split(",", 1)[0].strip()
+        if peer in {"127.0.0.1", "::1"} and forwarded_for:
+            return forwarded_for[:80]
+        return peer[:80] or "unknown"
+
+    def _rate_limit_key(self, scope: str, identifier: str = "") -> str:
+        clean_identifier = identifier.strip().lower()[:160]
+        return f"{scope}:{self._client_ip()}:{clean_identifier}"
+
+    def _ensure_rate_limit(self, scope: str, *, identifier: str = "", limit: int | None = None) -> bool:
+        max_hits = max(1, int(limit or 1))
+        window = max(30, int(self.settings.auth_rate_limit_window_seconds))
+        now = time.monotonic()
+        cutoff = now - window
+        key = self._rate_limit_key(scope, identifier)
+        with self._rate_limit_lock:
+            hits = [hit for hit in self._rate_limit_hits.get(key, []) if hit >= cutoff]
+            if len(hits) >= max_hits:
+                self._rate_limit_hits[key] = hits
+                self._send_json(
+                    {
+                        "error": "Слишком много попыток. Подождите несколько минут и попробуйте снова.",
+                        "code": "rate_limited",
+                    },
+                    HTTPStatus.TOO_MANY_REQUESTS,
+                    {"Retry-After": str(window)},
+                )
+                return False
+            hits.append(now)
+            self._rate_limit_hits[key] = hits
+        return True
 
     def _session_token(self) -> str:
         raw_cookie = str(self.headers.get("Cookie", "") or "")
@@ -649,6 +692,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 payload = self._json_body()
                 if not self.settings.auth_enabled:
                     return self._error("Регистрация временно отключена.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                if not self._ensure_rate_limit(
+                    "auth_register",
+                    identifier=str(payload.get("email", "")),
+                    limit=self.settings.auth_registration_rate_limit,
+                ):
+                    return
                 registration_code = str(payload.get("access_code") or payload.get("registration_code") or "").strip()
                 configured_code = self.settings.auth_registration_code.strip()
                 if configured_code and not secrets.compare_digest(registration_code, configured_code):
@@ -681,6 +730,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 payload = self._json_body()
                 if not self.settings.auth_enabled:
                     return self._error("Вход временно отключён.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                if not self._ensure_rate_limit("auth_login", identifier=str(payload.get("email", "")), limit=self.settings.auth_login_rate_limit):
+                    return
                 self.auth.ensure_schema()
                 user = self.auth.authenticate(str(payload.get("email", "")), str(payload.get("password", "")))
                 token, _session_id = self.auth.create_session(
@@ -698,6 +749,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 payload = self._json_body()
                 if not self.settings.auth_enabled:
                     return self._error("Восстановление доступа временно отключено.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                if not self._ensure_rate_limit(
+                    "auth_forgot_password",
+                    identifier=str(payload.get("email", "")),
+                    limit=self.settings.auth_password_reset_rate_limit,
+                ):
+                    return
                 if not self.emailer.configured():
                     return self._send_json(
                         {"error": "Отправка письма временно недоступна. Обратитесь к администратору.", "code": "smtp_not_configured"},
@@ -728,6 +785,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 payload = self._json_body()
                 if not self.settings.auth_enabled:
                     return self._error("Восстановление доступа временно отключено.", HTTPStatus.SERVICE_UNAVAILABLE, "auth_disabled")
+                if not self._ensure_rate_limit(
+                    "auth_reset_password",
+                    identifier=str(payload.get("token", ""))[:24],
+                    limit=self.settings.auth_password_reset_rate_limit,
+                ):
+                    return
                 self.auth.ensure_schema()
                 user = self.auth.reset_password(
                     str(payload.get("token", "")),
@@ -742,6 +805,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if not user:
                     return
                 payload = self._json_body()
+                if not self._ensure_rate_limit(
+                    "auth_change_password",
+                    identifier=user.id,
+                    limit=self.settings.auth_password_change_rate_limit,
+                ):
+                    return
                 self.auth.ensure_schema()
                 self.auth.change_password(
                     user.id,

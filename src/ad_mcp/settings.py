@@ -39,6 +39,11 @@ class Settings(BaseSettings):
     auth_allow_public_registration: bool = True
     auth_registration_code: str = ""
     initial_admin_email: str = ""
+    auth_rate_limit_window_seconds: int = 900
+    auth_login_rate_limit: int = 12
+    auth_registration_rate_limit: int = 8
+    auth_password_reset_rate_limit: int = 6
+    auth_password_change_rate_limit: int = 10
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_username: str = ""

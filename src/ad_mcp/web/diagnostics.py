@@ -328,6 +328,10 @@ class DiagnosticsService:
             "avatar_upload_enabled": True,
             "password_reset_enabled": self.settings.smtp_configured,
             "password_change_enabled": True,
+            "auth_secure_cookies": self.settings.auth_secure_cookies,
+            "public_registration_enabled": self.settings.auth_allow_public_registration,
+            "auth_rate_limit_enabled": self.settings.auth_rate_limit_window_seconds > 0,
+            "auth_rate_limit_window_seconds": self.settings.auth_rate_limit_window_seconds,
             "cors_policy": "same-origin",
             "cache_control": "no-store",
             "oauth_provider_env_present": {
@@ -422,6 +426,7 @@ class DiagnosticsService:
                 "secrets_redacted": True,
                 "tokens_returned": False,
                 "cache_control": security["cache_control"],
+                "auth_rate_limit_enabled": security["auth_rate_limit_enabled"],
             },
             "account": {
                 "profile_editing_enabled": True,
@@ -429,6 +434,7 @@ class DiagnosticsService:
                 "password_change_enabled": True,
                 "password_reset_enabled": self.settings.smtp_configured,
                 "smtp_configured": self.settings.smtp_configured,
+                "public_registration_enabled": self.settings.auth_allow_public_registration,
             },
             "diagnostics": {
                 "overview": "/api/diagnostics",
