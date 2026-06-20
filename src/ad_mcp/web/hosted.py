@@ -175,15 +175,15 @@ class HostedConnectionService:
             },
             "claude": {
                 "label": "Claude",
-                "status": "oauth_required_for_claude_ai",
+                "status": "oauth_ready",
                 "transport": "remote_mcp_http",
-                "auth": "authorization_token_or_oauth",
-                "summary": "Claude API/клиенты с token готовы; Claude.ai custom connector из UI требует OAuth, а не raw Bearer token.",
+                "auth": "oauth_2_1_pkce_or_authorization_token",
+                "summary": "Claude.ai custom connector готов через OAuth discovery/PKCE; token-клиенты могут использовать authorization_token.",
                 "instructions": [
                     "В Claude.ai Add custom connector можно указать Name и Remote MCP server URL.",
-                    "Поля OAuth Client ID/Secret не предназначены для персонального MCP token.",
-                    "Для 100% Claude.ai self-serve подключения нужен OAuth authorization server с PKCE и discovery metadata.",
-                    "До OAuth используйте Claude API/клиент, который поддерживает authorization_token.",
+                    "OAuth Client ID/Secret можно оставить пустыми: Claude выполнит discovery и dynamic client registration.",
+                    "Пользователь войдет в AdForge MCP в браузере и разрешит доступ к своему workspace.",
+                    "Персональный MCP token не нужно вставлять в OAuth Client Secret.",
                 ],
             },
             "chatgpt": {

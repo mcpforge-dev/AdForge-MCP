@@ -33,16 +33,24 @@ ADFORGE_MCP_CLIENT_TOKEN
 
 ## Claude
 
-Статус: Claude API/клиенты с access token готовы; Claude.ai custom connector требует OAuth для 100% self-serve подключения.
+Статус: Claude.ai custom connector готов через OAuth discovery, Dynamic Client Registration и PKCE.
 
 В Claude.ai форме `Add custom connector`:
 
 1. `Name`: `AdForge MCP`.
 2. `Remote MCP server URL`: `https://your-domain.com/mcp`.
-3. `OAuth Client ID`: пока оставить пустым.
-4. `OAuth Client Secret`: пока оставить пустым.
+3. `OAuth Client ID`: оставить пустым.
+4. `OAuth Client Secret`: оставить пустым.
 
 Персональный MCP token нельзя вставлять в `OAuth Client Secret`: это не тот тип секрета.
+
+После нажатия `Add` / `Connect` Claude должен:
+
+1. Прочитать protected resource metadata.
+2. Найти authorization server metadata.
+3. Зарегистрировать OAuth client через Dynamic Client Registration.
+4. Открыть браузерный вход в AdForge MCP.
+5. Получить authorization code и обменять его на access token через PKCE.
 
 Для Claude API или MCP-клиента, который поддерживает token, используйте:
 
@@ -55,11 +63,11 @@ ADFORGE_MCP_CLIENT_TOKEN
 }
 ```
 
-Для полного Claude.ai сценария нужен OAuth authorization server. Нельзя отключать авторизацию на `/mcp` ради удобного подключения.
+Нельзя отключать авторизацию на `/mcp` ради удобного подключения.
 
 ## ChatGPT
 
-Статус: требуется OAuth 2.1 для полноценного ChatGPT Apps/connector сценария.
+Статус: базовый OAuth 2.1 слой для remote MCP добавлен; ChatGPT Apps/connector всё равно нужно отдельно проверить в Developer Mode.
 
 Текущий hosted endpoint технически является remote MCP server, но для пользовательских рекламных данных нельзя делать небезопасный no-auth connector и нельзя просить клиента вставлять raw MCP token в неподходящее поле ChatGPT Apps.
 

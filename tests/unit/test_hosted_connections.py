@@ -39,7 +39,7 @@ def test_mcp_connection_info_exposes_safe_ai_client_compatibility(tmp_path: Path
     text = str(info).lower()
 
     assert clients["codex"]["status"] == "ready"
-    assert clients["claude"]["status"] == "oauth_required_for_claude_ai"
+    assert clients["claude"]["status"] == "oauth_ready"
     assert clients["chatgpt"]["status"] == "oauth_required"
     assert clients["chatgpt"]["self_serve_ready"] is False
     assert info["chatgpt_oauth_required"] is True

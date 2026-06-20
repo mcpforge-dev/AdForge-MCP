@@ -29,6 +29,8 @@ class StaticBearerTokenVerifier:
         try:
             store.ensure_schema()
             user = store.verify_mcp_token(token)
+            if not user:
+                user = store.verify_mcp_oauth_access_token(token)
         except (AuthDatabaseUnavailable, RuntimeError):
             return None
         if not user:

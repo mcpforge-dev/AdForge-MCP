@@ -16,8 +16,10 @@ Claude может подключать AdForge MCP как remote MCP server/cust
 4. Нажать `+` или `Add custom connector`.
 5. Указать Name: `AdForge MCP`.
 6. Указать URL: `https://your-domain.com/mcp`.
-7. Если видны поля `OAuth Client ID` и `OAuth Client Secret`, не вставлять туда персональный MCP token.
-8. До внедрения OAuth authorization server эти поля можно оставить пустыми, но Claude.ai может не завершить подключение к защищенному `/mcp`.
+7. Если видны поля `OAuth Client ID` и `OAuth Client Secret`, оставить их пустыми.
+8. Нажать `Add`.
+9. На этапе `Connect` Claude откроет OAuth-вход в AdForge MCP.
+10. Войти в AdForge MCP под нужным пользователем и разрешить подключение.
 
 Персональный MCP token подходит только для клиентов, которые явно поддерживают Bearer/access token:
 
@@ -30,13 +32,12 @@ Claude может подключать AdForge MCP как remote MCP server/cust
 }
 ```
 
-9. Сохранить connector.
-10. Если Claude показывает permissions/tools, включить нужные разрешения.
-11. Проверить, что connector доступен в чате.
+11. Если Claude показывает permissions/tools, включить нужные разрешения.
+12. Проверить, что connector доступен в чате.
 
 Интерфейс Claude может меняться. Если конкретные поля отличаются, используйте фактические параметры: Name, URL и bearer/access token.
 
-Если Claude.ai custom connector требует OAuth-настройку, не отключайте auth на `/mcp`. Для 100% self-serve Claude.ai сценария нужен отдельный OAuth flow: protected resource metadata, authorization endpoint, token endpoint, PKCE, scopes и привязка к user/workspace.
+OAuth flow AdForge MCP включает protected resource metadata, authorization server metadata, Dynamic Client Registration, authorization endpoint, token endpoint, PKCE, scope `adforge:mcp` и привязку access token к user/workspace.
 
 ## Тестовые запросы
 

@@ -11,7 +11,7 @@ from http import HTTPStatus
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import parse_qs, quote, urlparse
+from urllib.parse import parse_qs, quote, urlencode, urlparse
 
 from ad_mcp.core.errors import AdMCPError, normalize_error
 from ad_mcp.core.redaction import redact_secret_text
@@ -359,6 +359,70 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         return {key: values[-1] for key, values in parse_qs(parsed.query).items() if values}
 
+    def _oauth_base_url(self) -> str:
+        return self.settings.public_base_or_local_web_url.rstrip("/")
+
+    def _oauth_protected_resource_metadata(self) -> dict:
+        base = self._oauth_base_url()
+        return {
+            "resource": self.settings.public_mcp_url,
+            "resource_name": "AdForge MCP",
+            "authorization_servers": [base],
+            "scopes_supported": ["adforge:mcp"],
+            "bearer_methods_supported": ["header"],
+        }
+
+    def _oauth_authorization_server_metadata(self) -> dict:
+        base = self._oauth_base_url()
+        return {
+            "issuer": base,
+            "authorization_endpoint": f"{base}/oauth/authorize",
+            "token_endpoint": f"{base}/oauth/token",
+            "registration_endpoint": f"{base}/oauth/register",
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code"],
+            "code_challenge_methods_supported": ["S256"],
+            "token_endpoint_auth_methods_supported": ["none"],
+            "scopes_supported": ["adforge:mcp"],
+        }
+
+    def _form_body(self) -> dict[str, str]:
+        try:
+            content_length = int(self.headers.get("Content-Length", "0"))
+        except ValueError as exc:
+            raise ValueError("Некорректный Content-Length.") from exc
+        if content_length <= 0:
+            return {}
+        if content_length > self.settings.web_max_body_bytes:
+            raise ValueError("Тело запроса слишком большое.")
+        raw = self.rfile.read(content_length).decode("utf-8")
+        return {key: values[-1] for key, values in parse_qs(raw).items() if values}
+
+    def _oauth_error_redirect(self, redirect_uri: str, error: str, state: str = "") -> None:
+        if not redirect_uri:
+            return self._send_json({"error": error}, HTTPStatus.BAD_REQUEST)
+        payload = {"error": error}
+        if state:
+            payload["state"] = state
+        separator = "&" if "?" in redirect_uri else "?"
+        return self._redirect(f"{redirect_uri}{separator}{urlencode(payload)}")
+
+    def _oauth_client_id_from_request(self, form: dict[str, str]) -> str:
+        if form.get("client_id"):
+            return str(form["client_id"]).strip()
+        header = str(self.headers.get("Authorization", "") or "").strip()
+        if header.lower().startswith("basic "):
+            # Only client_id is needed for public/DCR clients; secret validation is
+            # intentionally not used for Claude.ai dynamic registration.
+            import base64
+
+            try:
+                decoded = base64.b64decode(header[6:].encode("ascii")).decode("utf-8")
+                return decoded.split(":", 1)[0].strip()
+            except Exception:  # noqa: BLE001
+                return ""
+        return ""
+
     def _json_body(self) -> dict:
         try:
             content_length = int(self.headers.get("Content-Length", "0"))
@@ -484,10 +548,40 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 readiness = self.diagnostics.readiness()
                 status = HTTPStatus.OK if readiness.get("status") == "ready" else HTTPStatus.SERVICE_UNAVAILABLE
                 return self._send_json(readiness, status)
+            if route in {"/.well-known/oauth-protected-resource", "/.well-known/oauth-protected-resource/mcp"}:
+                return self._send_json(self._oauth_protected_resource_metadata())
+            if route in {"/.well-known/oauth-authorization-server", "/.well-known/oauth-authorization-server/mcp"}:
+                return self._send_json(self._oauth_authorization_server_metadata())
             if route == "/assets/app.css":
                 return self._send_file(STATIC_ROOT / "app.css", "text/css; charset=utf-8")
             if route == "/assets/app.js":
                 return self._send_file(STATIC_ROOT / "app.js", "application/javascript; charset=utf-8")
+            if route == "/oauth/authorize":
+                query = self._query()
+                if query.get("response_type") != "code":
+                    return self._oauth_error_redirect(query.get("redirect_uri", ""), "unsupported_response_type", query.get("state", ""))
+                user = self._session_user()
+                if not user:
+                    return self._redirect(f"/?oauth_authorize={quote(self.path, safe='')}")
+                self.auth.ensure_schema()
+                try:
+                    code = self.auth.create_mcp_oauth_authorization_code(
+                        user,
+                        client_id=str(query.get("client_id", "")),
+                        redirect_uri=str(query.get("redirect_uri", "")),
+                        scope=str(query.get("scope", "adforge:mcp")),
+                        state=str(query.get("state", "")),
+                        code_challenge=str(query.get("code_challenge", "")),
+                        code_challenge_method=str(query.get("code_challenge_method", "")),
+                    )
+                except AuthValidationError as exc:
+                    return self._oauth_error_redirect(str(query.get("redirect_uri", "")), "invalid_request", str(query.get("state", "")))
+                redirect_uri = str(query.get("redirect_uri", ""))
+                payload = {"code": code}
+                if query.get("state"):
+                    payload["state"] = str(query["state"])
+                separator = "&" if "?" in redirect_uri else "?"
+                return self._redirect(f"{redirect_uri}{separator}{urlencode(payload)}")
             if route == self.settings.meta_oauth_redirect_path:
                 return self._oauth_callback_response("meta_ads", self.hosted.meta_oauth_callback)
             if route == self.settings.google_oauth_redirect_path:
@@ -798,6 +892,27 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     str(payload.get("confirm_password", "")),
                 )
                 return self._send_json({"ok": True, "email": user.email})
+            if route == "/oauth/register":
+                self.auth.ensure_schema()
+                payload = self._json_body()
+                result = self.auth.register_mcp_oauth_client(payload)
+                return self._send_json(result, HTTPStatus.CREATED)
+            if route == "/oauth/token":
+                self.auth.ensure_schema()
+                payload = self._form_body()
+                if payload.get("grant_type") != "authorization_code":
+                    return self._send_json({"error": "unsupported_grant_type"}, HTTPStatus.BAD_REQUEST)
+                client_id = self._oauth_client_id_from_request(payload)
+                try:
+                    result = self.auth.exchange_mcp_oauth_code(
+                        client_id=client_id,
+                        code=str(payload.get("code", "")),
+                        redirect_uri=str(payload.get("redirect_uri", "")),
+                        code_verifier=str(payload.get("code_verifier", "")),
+                    )
+                except AuthValidationError:
+                    return self._send_json({"error": "invalid_grant"}, HTTPStatus.BAD_REQUEST)
+                return self._send_json(result)
             if route == "/api/profile/change-password":
                 if not self._ensure_same_origin_session_post(route):
                     return

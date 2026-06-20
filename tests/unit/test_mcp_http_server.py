@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import warnings
+import base64
+import hashlib
 
 import pytest
 
@@ -146,6 +148,50 @@ async def test_mcp_verifier_accepts_user_token_and_preserves_beta_fallback(tmp_p
     assert user_access.client_id == f"adforge-user:{user.id}"
     assert wrong_access is None
     assert store.mcp_token_summary(user.id)["last_used_at"] is not None
+
+
+@pytest.mark.asyncio
+async def test_mcp_verifier_accepts_oauth_access_token(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connections_config="missing.yaml",
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    user = store.create_user(email="oauth@example.com", name="OAuth", password="super-secret")
+    client = store.register_mcp_oauth_client(
+        {
+            "client_name": "Claude",
+            "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+        }
+    )
+    verifier = "pkce-verifier-1234567890"
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    code = store.create_mcp_oauth_authorization_code(
+        user,
+        client_id=client["client_id"],
+        redirect_uri="https://claude.ai/api/mcp/auth_callback",
+        scope="adforge:mcp",
+        state="state-1",
+        code_challenge=challenge,
+        code_challenge_method="S256",
+    )
+    token = store.exchange_mcp_oauth_code(
+        client_id=client["client_id"],
+        code=code,
+        redirect_uri="https://claude.ai/api/mcp/auth_callback",
+        code_verifier=verifier,
+    )["access_token"]
+    _auth_settings, token_verifier = build_mcp_auth(settings)
+
+    assert token_verifier is not None
+    access = await token_verifier.verify_token(token)
+
+    assert access is not None
+    assert access.client_id == f"adforge-user:{user.id}"
 
 
 @pytest.mark.asyncio

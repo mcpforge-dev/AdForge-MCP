@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import json
 import os
 import secrets
 import sqlite3
@@ -81,6 +82,10 @@ def _parse_time(value: str | None) -> datetime | None:
 
 
 def _hash_value(value: str) -> str:
+    return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _oauth_token_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
 
 
@@ -670,6 +675,192 @@ class AuthStore:
             self._execute(connection, "UPDATE mcp_access_tokens SET last_used_at = ? WHERE token_hash = ?", (_now(), token_hash))
             return user
 
+    def register_mcp_oauth_client(self, payload: dict[str, Any]) -> dict[str, Any]:
+        redirect_uris = payload.get("redirect_uris")
+        if not isinstance(redirect_uris, list) or not redirect_uris:
+            raise AuthValidationError("OAuth client должен передать redirect_uris.")
+        normalized_redirects = []
+        for value in redirect_uris:
+            uri = str(value or "").strip()
+            parsed = urlparse(uri)
+            if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+                raise AuthValidationError("OAuth redirect_uri должен быть https или localhost.")
+            if not parsed.scheme or not parsed.netloc:
+                raise AuthValidationError("Некорректный OAuth redirect_uri.")
+            normalized_redirects.append(uri)
+        client_id = f"adforge_oauth_{uuid.uuid4().hex}"
+        timestamp = _now()
+        client_name = str(payload.get("client_name") or payload.get("software_id") or "Claude MCP Connector").strip()[:160]
+        with self._connect() as connection:
+            self._execute(
+                connection,
+                """
+                INSERT INTO mcp_oauth_clients
+                  (client_id, client_name, redirect_uris_json, scope, token_endpoint_auth_method, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (client_id, client_name, json.dumps(normalized_redirects), "adforge:mcp", "none", timestamp),
+            )
+        return {
+            "client_id": client_id,
+            "client_id_issued_at": int(datetime.now(UTC).timestamp()),
+            "client_name": client_name,
+            "redirect_uris": normalized_redirects,
+            "grant_types": ["authorization_code"],
+            "response_types": ["code"],
+            "scope": "adforge:mcp",
+            "token_endpoint_auth_method": "none",
+        }
+
+    def create_mcp_oauth_authorization_code(
+        self,
+        user: AuthUser,
+        *,
+        client_id: str,
+        redirect_uri: str,
+        scope: str,
+        state: str,
+        code_challenge: str,
+        code_challenge_method: str,
+    ) -> str:
+        scope = self._normalize_mcp_oauth_scope(scope)
+        code_challenge = code_challenge.strip()
+        if not code_challenge:
+            raise AuthValidationError("OAuth PKCE code_challenge обязателен.")
+        if code_challenge_method.upper() != "S256":
+            raise AuthValidationError("OAuth PKCE поддерживает только code_challenge_method=S256.")
+        with self._connect() as connection:
+            client = self._query_one(connection, "SELECT redirect_uris_json FROM mcp_oauth_clients WHERE client_id = ?", (client_id,))
+            if not client:
+                raise AuthValidationError("OAuth client не зарегистрирован.")
+            redirect_uris = json.loads(str(client.get("redirect_uris_json") or "[]"))
+            if redirect_uri not in redirect_uris:
+                raise AuthValidationError("OAuth redirect_uri не зарегистрирован для client_id.")
+            raw_code = f"mcp_code_{secrets.token_urlsafe(32)}"
+            now = datetime.now(UTC).replace(microsecond=0)
+            timestamp = now.isoformat().replace("+00:00", "Z")
+            expires_at = (now + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+            self._execute(
+                connection,
+                """
+                INSERT INTO mcp_oauth_authorization_codes
+                  (id, code_hash, client_id, user_id, workspace_id, redirect_uri, scope, state, code_challenge, code_challenge_method, created_at, expires_at, used_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
+                """,
+                (
+                    uuid.uuid4().hex,
+                    _oauth_token_hash(raw_code),
+                    client_id,
+                    user.id,
+                    user.workspace_id,
+                    redirect_uri,
+                    scope,
+                    state,
+                    code_challenge,
+                    "S256",
+                    timestamp,
+                    expires_at,
+                ),
+            )
+            return raw_code
+
+    def exchange_mcp_oauth_code(
+        self,
+        *,
+        client_id: str,
+        code: str,
+        redirect_uri: str,
+        code_verifier: str,
+    ) -> dict[str, Any]:
+        if not client_id or not code or not redirect_uri or not code_verifier:
+            raise AuthValidationError("OAuth token request неполный.")
+        now_dt = datetime.now(UTC).replace(microsecond=0)
+        now_text = now_dt.isoformat().replace("+00:00", "Z")
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT c.*, u.status AS user_status
+                FROM mcp_oauth_authorization_codes c
+                JOIN users u ON u.id = c.user_id
+                WHERE c.code_hash = ? AND c.client_id = ?
+                LIMIT 1
+                """,
+                (_oauth_token_hash(code), client_id),
+            )
+            if not row or row.get("used_at"):
+                raise AuthValidationError("OAuth authorization code недействителен.")
+            expires_at = _parse_time(str(row.get("expires_at") or ""))
+            if not expires_at or expires_at <= now_dt:
+                raise AuthValidationError("OAuth authorization code истёк.")
+            if str(row.get("redirect_uri") or "") != redirect_uri:
+                raise AuthValidationError("OAuth redirect_uri не совпадает.")
+            if str(row.get("user_status") or "") != "active":
+                raise AuthValidationError("Пользователь OAuth отключён.")
+            if not self._verify_pkce(code_verifier, str(row.get("code_challenge") or "")):
+                raise AuthValidationError("OAuth PKCE verification failed.")
+            self._execute(
+                connection,
+                "UPDATE mcp_oauth_authorization_codes SET used_at = ? WHERE id = ?",
+                (now_text, row["id"]),
+            )
+            raw_token = f"mcp_oauth_{secrets.token_urlsafe(40)}"
+            expires_at_text = (now_dt + timedelta(days=30)).isoformat().replace("+00:00", "Z")
+            self._execute(
+                connection,
+                """
+                INSERT INTO mcp_oauth_access_tokens
+                  (id, token_hash, token_prefix, client_id, user_id, workspace_id, scope, created_at, expires_at, last_used_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL)
+                """,
+                (
+                    uuid.uuid4().hex,
+                    _oauth_token_hash(raw_token),
+                    raw_token[:20],
+                    client_id,
+                    row["user_id"],
+                    row.get("workspace_id"),
+                    row.get("scope") or "adforge:mcp",
+                    now_text,
+                    expires_at_text,
+                ),
+            )
+        return {
+            "access_token": raw_token,
+            "token_type": "Bearer",
+            "expires_in": 30 * 24 * 60 * 60,
+            "scope": row.get("scope") or "adforge:mcp",
+        }
+
+    def verify_mcp_oauth_access_token(self, token: str) -> AuthUser | None:
+        if not token:
+            return None
+        token_hash = _oauth_token_hash(token)
+        now_text = _now()
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT u.*, COALESCE(t.workspace_id, wm.workspace_id) AS workspace_id
+                FROM mcp_oauth_access_tokens t
+                JOIN users u ON u.id = t.user_id
+                LEFT JOIN workspace_members wm ON wm.user_id = u.id
+                WHERE t.token_hash = ?
+                  AND t.revoked_at IS NULL
+                  AND t.expires_at > ?
+                ORDER BY wm.created_at ASC
+                LIMIT 1
+                """,
+                (token_hash, now_text),
+            )
+            if not row:
+                return None
+            user = self._row_to_user(row)
+            if not user.is_active:
+                return None
+            self._execute(connection, "UPDATE mcp_oauth_access_tokens SET last_used_at = ? WHERE token_hash = ?", (now_text, token_hash))
+            return user
+
     def list_users(self) -> list[dict[str, Any]]:
         with self._connect() as connection:
             rows = self._query_all(
@@ -811,6 +1002,19 @@ class AuthStore:
             "revoked_at": row.get("revoked_at"),
         }
 
+    def _normalize_mcp_oauth_scope(self, scope: str) -> str:
+        requested = {item for item in str(scope or "adforge:mcp").split() if item}
+        if not requested:
+            requested = {"adforge:mcp"}
+        if requested - {"adforge:mcp"}:
+            raise AuthValidationError("OAuth scope не поддерживается.")
+        return "adforge:mcp"
+
+    def _verify_pkce(self, verifier: str, challenge: str) -> bool:
+        digest = hashlib.sha256(verifier.encode("ascii", "ignore")).digest()
+        expected = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
+        return hmac.compare_digest(expected, challenge)
+
     def _row_to_user(self, row: dict[str, Any]) -> AuthUser:
         return AuthUser(
             id=str(row["id"]),
@@ -877,6 +1081,48 @@ _SCHEMA = [
       name TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL,
+      last_used_at TEXT,
+      revoked_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mcp_oauth_clients (
+      client_id TEXT PRIMARY KEY,
+      client_name TEXT,
+      redirect_uris_json TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none',
+      created_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mcp_oauth_authorization_codes (
+      id TEXT PRIMARY KEY,
+      code_hash TEXT NOT NULL UNIQUE,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      workspace_id TEXT,
+      redirect_uri TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      state TEXT,
+      code_challenge TEXT NOT NULL,
+      code_challenge_method TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mcp_oauth_access_tokens (
+      id TEXT PRIMARY KEY,
+      token_hash TEXT NOT NULL UNIQUE,
+      token_prefix TEXT NOT NULL,
+      client_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      workspace_id TEXT,
+      scope TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
       last_used_at TEXT,
       revoked_at TEXT
     )

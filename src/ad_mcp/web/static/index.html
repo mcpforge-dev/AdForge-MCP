@@ -256,9 +256,9 @@
                 <p>Самый быстрый сценарий: Streamable HTTP, MCP URL и персональный Bearer token.</p>
               </button>
               <button type="button" class="client-card" role="tab" aria-selected="false" data-mcp-client-tab="claude">
-                <span class="client-card__badge client-card__badge--warn">OAuth для Claude.ai</span>
+                <span class="client-card__badge client-card__badge--ok">OAuth готов</span>
                 <h4>Claude</h4>
-                <p>Claude API/token-ready, но Claude.ai custom connector из вашего скрина требует OAuth, а не raw Bearer token.</p>
+                <p>Claude.ai custom connector подключается через OAuth discovery и вход в AdForge MCP.</p>
               </button>
               <button type="button" class="client-card client-card--blocked" role="tab" aria-selected="false" data-mcp-client-tab="chatgpt">
                 <span class="client-card__badge client-card__badge--warn">Нужен OAuth</span>
@@ -285,11 +285,11 @@
               <div class="client-fields">
                 <div><span>Name</span><code>AdForge MCP</code></div>
                 <div><span>Remote MCP server URL</span><code>https://mcp.holymedia.kz/mcp</code></div>
-                <div><span>OAuth Client ID</span><code>пока оставить пустым</code></div>
-                <div><span>OAuth Client Secret</span><code>пока оставить пустым</code></div>
+                <div><span>OAuth Client ID</span><code>оставьте пустым</code></div>
+                <div><span>OAuth Client Secret</span><code>оставьте пустым</code></div>
               </div>
               <p><strong>Важно:</strong> персональный MCP token нельзя вставлять в OAuth Client Secret. Это другое поле и другой протокол.</p>
-              <p><strong>Чтобы Claude.ai заработал на 100%:</strong> следующим этапом добавляем OAuth authorization server для MCP: discovery metadata, authorize/token endpoints, PKCE, scopes и привязку к вашему аккаунту AdForge.</p>
+              <p><strong>Как это работает:</strong> Claude найдёт OAuth metadata, зарегистрирует client, откроет вход в AdForge MCP и получит access token через PKCE.</p>
               <p><strong>Что уже работает:</strong> Claude API или другой Claude-клиент, который поддерживает remote MCP URL плюс <code>authorization_token</code>/<code>Authorization: Bearer ...</code>.</p>
             </div>
           </div>

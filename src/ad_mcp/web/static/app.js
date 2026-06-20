@@ -130,6 +130,22 @@
       showResetPasswordModal(new URLSearchParams(window.location.search).get("token") || "");
       return;
     }
+    const oauthAuthorizeTarget = pendingOAuthAuthorizeTarget();
+    if (window.location.pathname === "/" && oauthAuthorizeTarget) {
+      try {
+        await loadMeSilently();
+      } catch (error) {
+        state.user = null;
+      }
+      if (state.user) {
+        window.location.href = oauthAuthorizeTarget;
+        return;
+      }
+      showLanding();
+      openAuth("login");
+      showAuthError("Войдите в AdForge MCP, чтобы разрешить подключение AI-клиента.");
+      return;
+    }
     if (window.location.pathname === "/admin") {
       enterAdmin();
       return;
@@ -241,6 +257,11 @@
         state.user = result.user || null;
         if (state.authMode === "register") {
           showRegistrationSuccess();
+          return;
+        }
+        const oauthTarget = pendingOAuthAuthorizeTarget();
+        if (oauthTarget) {
+          window.location.href = oauthTarget;
           return;
         }
         closeAuth();
@@ -534,6 +555,18 @@
       await copyText(`Bearer ${token}`);
       showClientMessage("Bearer значение скопировано", "В AI-клиенте добавьте Header: Name Authorization, Value Bearer + ваш ключ доступа.", "success");
     });
+  }
+
+  function pendingOAuthAuthorizeTarget() {
+    const value = new URLSearchParams(window.location.search).get("oauth_authorize") || "";
+    if (!value) return "";
+    try {
+      const decoded = decodeURIComponent(value);
+      if (!decoded.startsWith("/oauth/authorize?")) return "";
+      return decoded;
+    } catch (error) {
+      return "";
+    }
   }
 
   function setMcpClientTab(client) {

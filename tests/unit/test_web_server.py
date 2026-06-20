@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import base64
+import hashlib
 import sqlite3
 import threading
 from http.server import ThreadingHTTPServer
 from urllib.error import HTTPError
-from urllib.request import Request, urlopen
+from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
 from ad_mcp.core.connection_store import HostedConnectionStore
 from ad_mcp.settings import Settings
@@ -23,6 +26,11 @@ class _Headers:
 
     def get(self, key: str, default: str = "") -> str:
         return self._values.get(key, default)
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, D401
+        return None
 
 
 def test_api_token_not_required_for_development_without_token() -> None:
@@ -96,6 +104,99 @@ def test_auth_login_rate_limit_blocks_repeated_failures(tmp_path) -> None:
     assert blocked["code"] == "rate_limited"
 
 
+def test_mcp_oauth_discovery_registration_authorize_and_token_flow(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        public_base_url="https://mcp.holymedia.kz",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    store.create_user(email="client@example.com", name="Client", password="right-password")
+    base_url, close = _serve(settings)
+    verifier = "pkce-verifier-1234567890"
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    redirect_uri = "https://claude.ai/api/mcp/auth_callback"
+    try:
+        prm_status, prm = _get_json(base_url, "/.well-known/oauth-protected-resource")
+        metadata_status, metadata = _get_json(base_url, "/.well-known/oauth-authorization-server")
+        register_status, client, _ = _post_json(
+            base_url,
+            "/oauth/register",
+            {"client_name": "Claude", "redirect_uris": [redirect_uri]},
+        )
+        auth_path = "/oauth/authorize?" + urlencode(
+            {
+                "response_type": "code",
+                "client_id": client["client_id"],
+                "redirect_uri": redirect_uri,
+                "scope": "adforge:mcp",
+                "state": "state-1",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+        unauth_status, unauth_location = _get_redirect_location(base_url, auth_path)
+        login_status, _login_payload, cookie = _post_json(
+            base_url,
+            "/api/auth/login",
+            {"email": "client@example.com", "password": "right-password"},
+        )
+        auth_status, auth_location = _get_redirect_location(base_url, auth_path, cookie)
+        parsed = urlparse(auth_location)
+        auth_query = parse_qs(parsed.query)
+        code = auth_query["code"][0]
+        token_status, token_payload = _post_form(
+            base_url,
+            "/oauth/token",
+            {
+                "grant_type": "authorization_code",
+                "client_id": client["client_id"],
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": verifier,
+            },
+        )
+        reuse_status, reuse_payload = _post_form(
+            base_url,
+            "/oauth/token",
+            {
+                "grant_type": "authorization_code",
+                "client_id": client["client_id"],
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": verifier,
+            },
+        )
+    finally:
+        close()
+
+    assert prm_status == 200
+    assert prm["resource"] == "https://mcp.holymedia.kz/mcp"
+    assert prm["authorization_servers"] == ["https://mcp.holymedia.kz"]
+    assert metadata_status == 200
+    assert metadata["registration_endpoint"] == "https://mcp.holymedia.kz/oauth/register"
+    assert "S256" in metadata["code_challenge_methods_supported"]
+    assert register_status == 201
+    assert client["token_endpoint_auth_method"] == "none"
+    assert unauth_status == 302
+    assert unauth_location.startswith("/?oauth_authorize=")
+    assert login_status == 200
+    assert auth_status == 302
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "claude.ai"
+    assert auth_query["state"] == ["state-1"]
+    assert token_status == 200
+    assert token_payload["token_type"] == "Bearer"
+    assert token_payload["access_token"].startswith("mcp_oauth_")
+    assert reuse_status == 400
+    assert reuse_payload["error"] == "invalid_grant"
+
+
 class _FakeEmailer(PasswordResetEmailer):
     def __init__(self, configured: bool = True) -> None:
         self._configured = configured
@@ -167,6 +268,34 @@ def _post_json(
     except HTTPError as exc:
         body = exc.read().decode("utf-8")
         return exc.code, json.loads(body or "{}"), exc.headers.get("Set-Cookie", "")
+
+
+def _post_form(base_url: str, path: str, payload: dict[str, str]) -> tuple[int, dict]:
+    body = urlencode(payload).encode("utf-8")
+    request = Request(
+        f"{base_url}{path}",
+        data=body,
+        headers={"Accept": "application/json", "Content-Type": "application/x-www-form-urlencoded"},
+        method="POST",
+    )
+    try:
+        with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            return response.status, json.loads(response.read().decode("utf-8"))
+    except HTTPError as exc:
+        return exc.code, json.loads(exc.read().decode("utf-8") or "{}")
+
+
+def _get_redirect_location(base_url: str, path: str, cookie: str | None = None) -> tuple[int, str]:
+    headers = {"Accept": "*/*"}
+    if cookie:
+        headers["Cookie"] = cookie
+    request = Request(f"{base_url}{path}", headers=headers)
+    opener = build_opener(_NoRedirect)
+    try:
+        with opener.open(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            return response.status, response.headers.get("Location", "")
+    except HTTPError as exc:
+        return exc.code, exc.headers.get("Location", "")
 
 
 def _put_json(base_url: str, path: str, payload: dict, cookie: str | None = None, *, origin: str | None = None) -> tuple[int, dict]:
