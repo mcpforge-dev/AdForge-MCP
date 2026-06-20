@@ -291,6 +291,22 @@
               <p><strong>Важно:</strong> персональный MCP token нельзя вставлять в OAuth Client Secret. Это другое поле и другой протокол.</p>
               <p><strong>Как это работает:</strong> Claude найдёт OAuth metadata, зарегистрирует client, откроет вход в AdForge MCP и получит access token через PKCE.</p>
               <p><strong>Что уже работает:</strong> Claude API или другой Claude-клиент, который поддерживает remote MCP URL плюс <code>authorization_token</code>/<code>Authorization: Bearer ...</code>.</p>
+              <div id="mcp-oauth-client-status" class="token-status">
+                <div class="empty-state"><p>Загружаем Claude OAuth credentials...</p></div>
+              </div>
+              <div id="mcp-oauth-client-reveal" class="token-reveal" hidden>
+                <strong>OAuth Client Secret будет показан только один раз</strong>
+                <span>Эти значения нужны только для Advanced settings в Claude. Это не personal MCP token.</span>
+                <div class="token-secret-row">
+                  <code id="mcp-oauth-client-id" class="token-secret"></code>
+                  <button id="copy-mcp-oauth-client-id" type="button" class="btn btn--secondary btn--small">Скопировать Client ID</button>
+                </div>
+                <div class="token-secret-row">
+                  <code id="mcp-oauth-client-secret" class="token-secret"></code>
+                  <button id="copy-mcp-oauth-client-secret" type="button" class="btn btn--secondary btn--small">Скопировать Client Secret</button>
+                </div>
+              </div>
+              <div id="mcp-oauth-client-actions" class="token-actions"></div>
             </div>
           </div>
           <div class="setup-card ai-client-panel" data-mcp-client-panel="chatgpt" role="tabpanel" hidden>

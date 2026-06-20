@@ -39,8 +39,8 @@ ADFORGE_MCP_CLIENT_TOKEN
 
 1. `Name`: `AdForge MCP`.
 2. `Remote MCP server URL`: `https://your-domain.com/mcp`.
-3. `OAuth Client ID`: оставить пустым.
-4. `OAuth Client Secret`: оставить пустым.
+3. `OAuth Client ID`: оставить пустым или вставить значение из dashboard, если Claude зависает на `Checking connection`.
+4. `OAuth Client Secret`: оставить пустым или вставить одноразово показанный secret из dashboard.
 
 Персональный MCP token нельзя вставлять в `OAuth Client Secret`: это не тот тип секрета.
 

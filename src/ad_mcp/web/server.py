@@ -16,7 +16,14 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 from ad_mcp.core.errors import AdMCPError, normalize_error
 from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
-from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore, AuthUser, AuthValidationError, EmailAlreadyRegisteredError
+from ad_mcp.web.auth_store import (
+    AuthDatabaseUnavailable,
+    AuthInvalidClientError,
+    AuthStore,
+    AuthUser,
+    AuthValidationError,
+    EmailAlreadyRegisteredError,
+)
 from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.emailer import EmailDeliveryError, PasswordResetEmailer
 from ad_mcp.web.hosted import HostedConnectionService
@@ -407,21 +414,20 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         separator = "&" if "?" in redirect_uri else "?"
         return self._redirect(f"{redirect_uri}{separator}{urlencode(payload)}")
 
-    def _oauth_client_id_from_request(self, form: dict[str, str]) -> str:
-        if form.get("client_id"):
-            return str(form["client_id"]).strip()
+    def _oauth_client_credentials_from_request(self, form: dict[str, str]) -> tuple[str, str]:
+        client_id = str(form.get("client_id") or "").strip()
+        client_secret = str(form.get("client_secret") or "").strip()
         header = str(self.headers.get("Authorization", "") or "").strip()
         if header.lower().startswith("basic "):
-            # Only client_id is needed for public/DCR clients; secret validation is
-            # intentionally not used for Claude.ai dynamic registration.
             import base64
 
             try:
                 decoded = base64.b64decode(header[6:].encode("ascii")).decode("utf-8")
-                return decoded.split(":", 1)[0].strip()
+                basic_id, _, basic_secret = decoded.partition(":")
+                return basic_id.strip(), basic_secret.strip()
             except Exception:  # noqa: BLE001
-                return ""
-        return ""
+                return client_id, client_secret
+        return client_id, client_secret
 
     def _json_body(self) -> dict:
         try:
@@ -601,6 +607,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return
                 self.auth.ensure_schema()
                 return self._send_json({"token": self.auth.mcp_token_summary(user.id)})
+            if route == "/api/mcp-oauth-client":
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                return self._send_json({"client": self.auth.mcp_oauth_client_summary(user.id)})
             if route == "/api/profile":
                 user = self._ensure_session_user()
                 if not user:
@@ -902,14 +914,17 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 payload = self._form_body()
                 if payload.get("grant_type") != "authorization_code":
                     return self._send_json({"error": "unsupported_grant_type"}, HTTPStatus.BAD_REQUEST)
-                client_id = self._oauth_client_id_from_request(payload)
+                client_id, client_secret = self._oauth_client_credentials_from_request(payload)
                 try:
                     result = self.auth.exchange_mcp_oauth_code(
                         client_id=client_id,
                         code=str(payload.get("code", "")),
                         redirect_uri=str(payload.get("redirect_uri", "")),
                         code_verifier=str(payload.get("code_verifier", "")),
+                        client_secret=client_secret,
                     )
+                except AuthInvalidClientError:
+                    return self._send_json({"error": "invalid_client"}, HTTPStatus.UNAUTHORIZED)
                 except AuthValidationError:
                     return self._send_json({"error": "invalid_grant"}, HTTPStatus.BAD_REQUEST)
                 return self._send_json(result)
@@ -968,6 +983,16 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return
                 self.auth.ensure_schema()
                 return self._send_json({"token": self.auth.revoke_mcp_token(user.id)})
+            if route == "/api/mcp-oauth-client/create":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                self.auth.ensure_schema()
+                result = self.auth.create_mcp_oauth_client_credentials(user)
+                safe = {key: value for key, value in result.items() if key != "client_secret"}
+                return self._send_json({"client": safe, "client_secret": result["client_secret"]})
             if route == "/api/admin/users/status":
                 if not self._ensure_same_origin_session_post(route):
                     return

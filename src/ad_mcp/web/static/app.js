@@ -34,6 +34,7 @@
     capabilities: null,
     connections: null,
     mcpToken: null,
+    mcpOAuthClient: null,
     activePending: null,
     dismissedPendingIds: new Set(),
     pendingModalId: null,
@@ -107,6 +108,13 @@
     el.mcpTokenActions = document.getElementById("mcp-token-actions");
     el.mcpClientTabs = Array.from(document.querySelectorAll("[data-mcp-client-tab]"));
     el.mcpClientPanels = Array.from(document.querySelectorAll("[data-mcp-client-panel]"));
+    el.mcpOAuthClientStatus = document.getElementById("mcp-oauth-client-status");
+    el.mcpOAuthClientReveal = document.getElementById("mcp-oauth-client-reveal");
+    el.mcpOAuthClientId = document.getElementById("mcp-oauth-client-id");
+    el.mcpOAuthClientSecret = document.getElementById("mcp-oauth-client-secret");
+    el.copyMcpOAuthClientId = document.getElementById("copy-mcp-oauth-client-id");
+    el.copyMcpOAuthClientSecret = document.getElementById("copy-mcp-oauth-client-secret");
+    el.mcpOAuthClientActions = document.getElementById("mcp-oauth-client-actions");
     el.profileCard = document.getElementById("profile-card");
     el.userPill = document.getElementById("user-pill");
     el.connectionsNotice = document.getElementById("connections-notice");
@@ -555,6 +563,22 @@
       await copyText(`Bearer ${token}`);
       showClientMessage("Bearer значение скопировано", "В AI-клиенте добавьте Header: Name Authorization, Value Bearer + ваш ключ доступа.", "success");
     });
+    if (el.copyMcpOAuthClientId) {
+      el.copyMcpOAuthClientId.addEventListener("click", async () => {
+        const value = el.mcpOAuthClientId.textContent.trim();
+        if (!value) return;
+        await copyText(value);
+        showClientMessage("OAuth Client ID скопирован", "Вставьте его в Advanced settings Claude.", "success");
+      });
+    }
+    if (el.copyMcpOAuthClientSecret) {
+      el.copyMcpOAuthClientSecret.addEventListener("click", async () => {
+        const value = el.mcpOAuthClientSecret.textContent.trim();
+        if (!value) return;
+        await copyText(value);
+        showClientMessage("OAuth Client Secret скопирован", "Вставьте его в Advanced settings Claude. Secret показывается только один раз.", "success");
+      });
+    }
   }
 
   function pendingOAuthAuthorizeTarget() {
@@ -706,10 +730,13 @@
     el.copyMcpUrlPanel.disabled = !mcpUrl;
     if (!state.user) {
       state.mcpToken = null;
+      state.mcpOAuthClient = null;
       renderMcpTokenStatus(null, { sessionRequired: true });
+      renderMcpOAuthClientStatus(null, { sessionRequired: true });
       return;
     }
     loadMcpToken();
+    loadMcpOAuthClient();
   }
 
   async function loadMcpToken() {
@@ -861,6 +888,74 @@
       </div>
     `;
     bindProfileForms();
+  }
+
+  async function loadMcpOAuthClient() {
+    if (!el.mcpOAuthClientStatus) return;
+    el.mcpOAuthClientReveal.hidden = true;
+    el.mcpOAuthClientId.textContent = "";
+    el.mcpOAuthClientSecret.textContent = "";
+    el.mcpOAuthClientStatus.innerHTML = emptyState("Загружаем Claude OAuth credentials...");
+    el.mcpOAuthClientActions.innerHTML = "";
+    try {
+      const payload = await api("/api/mcp-oauth-client");
+      state.mcpOAuthClient = payload.client || null;
+      renderMcpOAuthClientStatus(state.mcpOAuthClient);
+    } catch (error) {
+      if (handle401(error)) return;
+      renderMcpOAuthClientStatus(null, { error: humanizeError(error) });
+    }
+  }
+
+  function renderMcpOAuthClientStatus(client, options = {}) {
+    if (!el.mcpOAuthClientStatus) return;
+    if (options.sessionRequired) {
+      el.mcpOAuthClientStatus.innerHTML = `
+        <strong>Claude OAuth credentials</strong>
+        <span>Войдите по email, чтобы создать OAuth Client ID/Secret для Claude.</span>
+      `;
+      el.mcpOAuthClientActions.innerHTML = "";
+      return;
+    }
+    if (options.error) {
+      el.mcpOAuthClientStatus.innerHTML = errorState(options.error);
+      return;
+    }
+    const exists = Boolean(client?.exists);
+    const active = exists && client.status === "active";
+    el.mcpOAuthClientStatus.innerHTML = `
+      <strong>Claude OAuth credentials</strong>
+      <div class="kv">
+        <div class="kv-row"><span>Статус</span><strong>${statusBadgeMarkup(active ? "Активен" : exists ? "Отозван" : "Не создан", active ? "ok" : exists ? "warn" : "muted")}</strong></div>
+        <div class="kv-row"><span>Client ID</span><strong class="mono">${esc(client?.client_id || "—")}</strong></div>
+        <div class="kv-row"><span>Secret prefix</span><strong class="mono">${esc(client?.client_secret_prefix || "—")}</strong></div>
+      </div>
+      <span>Если Claude зависает на Checking connection, создайте эти значения и вставьте их в Advanced settings.</span>
+    `;
+    el.mcpOAuthClientActions.innerHTML = `
+      <button type="button" class="btn btn--primary btn--small" data-mcp-oauth-client-action="create">${active ? "Сгенерировать новый OAuth Secret" : "Создать OAuth Client ID/Secret"}</button>
+    `;
+    el.mcpOAuthClientActions.querySelector("[data-mcp-oauth-client-action]").addEventListener("click", (event) => runMcpOAuthClientAction(event.currentTarget));
+  }
+
+  async function runMcpOAuthClientAction(button) {
+    if (state.mcpOAuthClient?.exists && !window.confirm("Сгенерировать новый Claude OAuth Client ID/Secret? Старый secret перестанет работать.")) return;
+    setLoading(button, true);
+    try {
+      const payload = await api("/api/mcp-oauth-client/create", "POST", {});
+      state.mcpOAuthClient = payload.client || null;
+      renderMcpOAuthClientStatus(state.mcpOAuthClient);
+      el.mcpOAuthClientId.textContent = state.mcpOAuthClient?.client_id || "";
+      el.mcpOAuthClientSecret.textContent = payload.client_secret || "";
+      el.mcpOAuthClientReveal.hidden = false;
+      showClientMessage("Claude OAuth credentials созданы", "Скопируйте Client ID и Client Secret сейчас: secret показывается только один раз.", "success");
+    } catch (error) {
+      if (handle401(error)) return;
+      showClientMessage("Не удалось создать Claude OAuth credentials", humanizeError(error), "error");
+      renderMcpOAuthClientStatus(state.mcpOAuthClient);
+    } finally {
+      setLoading(button, false);
+    }
   }
 
   function bindProfileForms() {

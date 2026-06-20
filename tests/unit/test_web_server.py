@@ -197,6 +197,87 @@ def test_mcp_oauth_discovery_registration_authorize_and_token_flow(tmp_path) -> 
     assert reuse_payload["error"] == "invalid_grant"
 
 
+def test_mcp_oauth_client_credentials_are_created_once_and_secret_is_not_relisted(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    store.create_user(email="client@example.com", name="Client", password="right-password")
+    base_url, close = _serve(settings)
+    verifier = "pkce-verifier-1234567890"
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    redirect_uri = "https://claude.ai/api/mcp/auth_callback"
+    try:
+        login_status, _login_payload, cookie = _post_json(
+            base_url,
+            "/api/auth/login",
+            {"email": "client@example.com", "password": "right-password"},
+        )
+        create_status, created, _ = _post_json(base_url, "/api/mcp-oauth-client/create", {}, cookie, origin=base_url)
+        summary_status, summary = _get_json_with_cookie(base_url, "/api/mcp-oauth-client", cookie)
+        auth_path = "/oauth/authorize?" + urlencode(
+            {
+                "response_type": "code",
+                "client_id": created["client"]["client_id"],
+                "redirect_uri": redirect_uri,
+                "scope": "adforge:mcp",
+                "state": "state-1",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+        auth_status, auth_location = _get_redirect_location(base_url, auth_path, cookie)
+        code = parse_qs(urlparse(auth_location).query)["code"][0]
+        missing_secret_status, missing_secret = _post_form(
+            base_url,
+            "/oauth/token",
+            {
+                "grant_type": "authorization_code",
+                "client_id": created["client"]["client_id"],
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": verifier,
+            },
+        )
+        auth_status_2, auth_location_2 = _get_redirect_location(base_url, auth_path, cookie)
+        code_2 = parse_qs(urlparse(auth_location_2).query)["code"][0]
+        token_status, token_payload = _post_form(
+            base_url,
+            "/oauth/token",
+            {
+                "grant_type": "authorization_code",
+                "client_id": created["client"]["client_id"],
+                "client_secret": created["client_secret"],
+                "code": code_2,
+                "redirect_uri": redirect_uri,
+                "code_verifier": verifier,
+            },
+        )
+    finally:
+        close()
+
+    assert login_status == 200
+    assert create_status == 200
+    assert created["client"]["client_id"].startswith("adforge_claude_")
+    assert created["client_secret"].startswith("mcp_oauth_secret_")
+    assert summary_status == 200
+    assert summary["client"]["client_id"] == created["client"]["client_id"]
+    assert "client_secret" not in summary
+    assert "client_secret" not in summary["client"]
+    assert auth_status == 302
+    assert missing_secret_status == 401
+    assert missing_secret["error"] == "invalid_client"
+    assert auth_status_2 == 302
+    assert token_status == 200
+    assert token_payload["access_token"].startswith("mcp_oauth_")
+
+
 class _FakeEmailer(PasswordResetEmailer):
     def __init__(self, configured: bool = True) -> None:
         self._configured = configured

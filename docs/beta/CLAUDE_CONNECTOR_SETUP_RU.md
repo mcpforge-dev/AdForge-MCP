@@ -16,10 +16,14 @@ Claude может подключать AdForge MCP как remote MCP server/cust
 4. Нажать `+` или `Add custom connector`.
 5. Указать Name: `AdForge MCP`.
 6. Указать URL: `https://your-domain.com/mcp`.
-7. Если видны поля `OAuth Client ID` и `OAuth Client Secret`, оставить их пустыми.
-8. Нажать `Add`.
-9. На этапе `Connect` Claude откроет OAuth-вход в AdForge MCP.
-10. Войти в AdForge MCP под нужным пользователем и разрешить подключение.
+7. Если Claude зависает на `Checking connection`, откройте dashboard AdForge MCP -> вкладка `MCP` -> `Claude` и создайте `OAuth Client ID/Secret`.
+8. Если credentials созданы, вставьте их в Advanced settings:
+   - `OAuth Client ID`: значение из dashboard.
+   - `OAuth Client Secret`: значение, показанное один раз после создания.
+9. Если credentials не создавали, можно оставить поля пустыми и использовать Dynamic Client Registration.
+10. Нажать `Add`.
+11. На этапе `Connect` Claude откроет OAuth-вход в AdForge MCP.
+12. Войти в AdForge MCP под нужным пользователем и разрешить подключение.
 
 Персональный MCP token подходит только для клиентов, которые явно поддерживают Bearer/access token:
 
@@ -32,8 +36,8 @@ Claude может подключать AdForge MCP как remote MCP server/cust
 }
 ```
 
-11. Если Claude показывает permissions/tools, включить нужные разрешения.
-12. Проверить, что connector доступен в чате.
+13. Если Claude показывает permissions/tools, включить нужные разрешения.
+14. Проверить, что connector доступен в чате.
 
 Интерфейс Claude может меняться. Если конкретные поля отличаются, используйте фактические параметры: Name, URL и bearer/access token.
 

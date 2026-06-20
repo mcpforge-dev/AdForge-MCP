@@ -31,6 +31,10 @@ class AuthValidationError(AuthStoreError):
     pass
 
 
+class AuthInvalidClientError(AuthValidationError):
+    pass
+
+
 class EmailAlreadyRegisteredError(AuthValidationError):
     """Raised when an email is already registered.
 
@@ -712,6 +716,74 @@ class AuthStore:
             "token_endpoint_auth_method": "none",
         }
 
+    def mcp_oauth_client_summary(self, user_id: str) -> dict[str, Any]:
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT c.client_id, c.client_name, c.created_at, cc.client_secret_prefix, cc.status, cc.revoked_at
+                FROM mcp_oauth_client_credentials cc
+                JOIN mcp_oauth_clients c ON c.client_id = cc.client_id
+                WHERE cc.user_id = ?
+                ORDER BY c.created_at DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            )
+        if not row:
+            return {
+                "exists": False,
+                "client_id": "",
+                "client_secret_prefix": "",
+                "status": "missing",
+                "created_at": None,
+                "revoked_at": None,
+            }
+        return {
+            "exists": True,
+            "client_id": str(row.get("client_id") or ""),
+            "client_name": str(row.get("client_name") or "Claude.ai connector"),
+            "client_secret_prefix": str(row.get("client_secret_prefix") or ""),
+            "status": str(row.get("status") or "missing"),
+            "created_at": row.get("created_at"),
+            "revoked_at": row.get("revoked_at"),
+        }
+
+    def create_mcp_oauth_client_credentials(self, user: AuthUser, *, client_name: str = "Claude.ai connector") -> dict[str, Any]:
+        with self._connect() as connection:
+            now = _now()
+            self._execute(
+                connection,
+                """
+                UPDATE mcp_oauth_client_credentials
+                SET status = 'revoked', revoked_at = ?
+                WHERE user_id = ? AND status = 'active' AND revoked_at IS NULL
+                """,
+                (now, user.id),
+            )
+            client_id = f"adforge_claude_{uuid.uuid4().hex}"
+            client_secret = f"mcp_oauth_secret_{secrets.token_urlsafe(32)}"
+            redirect_uris = ["https://claude.ai/api/mcp/auth_callback"]
+            self._execute(
+                connection,
+                """
+                INSERT INTO mcp_oauth_clients
+                  (client_id, client_name, redirect_uris_json, scope, token_endpoint_auth_method, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                """,
+                (client_id, client_name, json.dumps(redirect_uris), "adforge:mcp", "client_secret_basic", now),
+            )
+            self._execute(
+                connection,
+                """
+                INSERT INTO mcp_oauth_client_credentials
+                  (client_id, user_id, workspace_id, client_secret_hash, client_secret_prefix, status, created_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, 'active', ?, NULL)
+                """,
+                (client_id, user.id, user.workspace_id, _oauth_token_hash(client_secret), client_secret[:22], now),
+            )
+        return self.mcp_oauth_client_summary(user.id) | {"client_secret": client_secret}
+
     def create_mcp_oauth_authorization_code(
         self,
         user: AuthUser,
@@ -771,6 +843,7 @@ class AuthStore:
         code: str,
         redirect_uri: str,
         code_verifier: str,
+        client_secret: str = "",
     ) -> dict[str, Any]:
         if not client_id or not code or not redirect_uri or not code_verifier:
             raise AuthValidationError("OAuth token request неполный.")
@@ -780,8 +853,9 @@ class AuthStore:
             row = self._query_one(
                 connection,
                 """
-                SELECT c.*, u.status AS user_status
+                SELECT c.*, u.status AS user_status, oc.token_endpoint_auth_method
                 FROM mcp_oauth_authorization_codes c
+                JOIN mcp_oauth_clients oc ON oc.client_id = c.client_id
                 JOIN users u ON u.id = c.user_id
                 WHERE c.code_hash = ? AND c.client_id = ?
                 LIMIT 1
@@ -799,6 +873,9 @@ class AuthStore:
                 raise AuthValidationError("Пользователь OAuth отключён.")
             if not self._verify_pkce(code_verifier, str(row.get("code_challenge") or "")):
                 raise AuthValidationError("OAuth PKCE verification failed.")
+            auth_method = str(row.get("token_endpoint_auth_method") or "none")
+            if auth_method != "none" and not self._verify_mcp_oauth_client_secret(connection, client_id, client_secret):
+                raise AuthInvalidClientError("OAuth client_secret недействителен.")
             self._execute(
                 connection,
                 "UPDATE mcp_oauth_authorization_codes SET used_at = ? WHERE id = ?",
@@ -860,6 +937,23 @@ class AuthStore:
                 return None
             self._execute(connection, "UPDATE mcp_oauth_access_tokens SET last_used_at = ? WHERE token_hash = ?", (now_text, token_hash))
             return user
+
+    def _verify_mcp_oauth_client_secret(self, connection, client_id: str, client_secret: str) -> bool:
+        if not client_secret:
+            return False
+        row = self._query_one(
+            connection,
+            """
+            SELECT client_secret_hash
+            FROM mcp_oauth_client_credentials
+            WHERE client_id = ? AND status = 'active' AND revoked_at IS NULL
+            LIMIT 1
+            """,
+            (client_id,),
+        )
+        if not row:
+            return False
+        return hmac.compare_digest(str(row.get("client_secret_hash") or ""), _oauth_token_hash(client_secret))
 
     def list_users(self) -> list[dict[str, Any]]:
         with self._connect() as connection:
@@ -1093,6 +1187,18 @@ _SCHEMA = [
       scope TEXT NOT NULL,
       token_endpoint_auth_method TEXT NOT NULL DEFAULT 'none',
       created_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mcp_oauth_client_credentials (
+      client_id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      workspace_id TEXT,
+      client_secret_hash TEXT NOT NULL,
+      client_secret_prefix TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      revoked_at TEXT
     )
     """,
     """
