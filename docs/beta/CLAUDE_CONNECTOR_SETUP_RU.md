@@ -1,6 +1,6 @@
 # Подключение hosted AdForge MCP в Claude
 
-Claude подключает AdForge MCP как внешний custom connector. Сервер уже должен быть развернут на VPS/WPS, а рекламные аккаунты должны быть подключены через AdForge dashboard.
+Claude может подключать AdForge MCP как remote MCP server/custom connector, если выбранный клиент поддерживает hosted MCP URL и access token. Сервер уже должен быть развернут на VPS/VDS, а рекламные аккаунты должны быть подключены через AdForge dashboard.
 
 ## Что нужно заранее
 
@@ -16,7 +16,7 @@ Claude подключает AdForge MCP как внешний custom connector. 
 4. Нажать `+` или `Add custom connector`.
 5. Указать Name: `AdForge MCP`.
 6. Указать URL: `https://your-domain.com/mcp`.
-7. Если Claude просит auth headers, передать персональный MCP token:
+7. Если Claude просит auth token/header, передать персональный MCP token:
 
 ```http
 Authorization: Bearer <PERSONAL_MCP_TOKEN>
@@ -26,7 +26,9 @@ Authorization: Bearer <PERSONAL_MCP_TOKEN>
 9. Если Claude показывает permissions/tools, включить нужные разрешения.
 10. Проверить, что connector доступен в чате.
 
-Интерфейс Claude может меняться. Если конкретные поля отличаются, используйте фактические параметры: Name, URL и bearer token.
+Интерфейс Claude может меняться. Если конкретные поля отличаются, используйте фактические параметры: Name, URL и bearer/access token.
+
+Если Claude.ai custom connector требует OAuth-настройку, не отключайте auth на `/mcp`. Для такого сценария нужен отдельный OAuth flow; текущий быстрый beta-сценарий рассчитан на клиентов, которые поддерживают remote MCP URL + Bearer/access token.
 
 ## Тестовые запросы
 

@@ -159,6 +159,47 @@ class HostedConnectionService:
     def mcp_connection_info(self) -> dict[str, Any]:
         endpoint_path = self._settings.mcp_route_path
         public_url = self._settings.public_mcp_url
+        clients = {
+            "codex": {
+                "label": "Codex",
+                "status": "ready",
+                "transport": "streamable_http",
+                "auth": "authorization_header_or_bearer_env",
+                "summary": "Готово: используйте MCP URL и персональный Bearer token.",
+                "instructions": [
+                    "Добавьте AdForge MCP как Streamable HTTP server.",
+                    "URL: используйте hosted MCP URL из dashboard.",
+                    "Auth: Authorization: Bearer <personal_mcp_token> или env ADFORGE_MCP_CLIENT_TOKEN.",
+                    "После добавления откройте новый чат и спросите про подключенные рекламные аккаунты.",
+                ],
+            },
+            "claude": {
+                "label": "Claude",
+                "status": "ready_for_supported_clients",
+                "transport": "remote_mcp_http",
+                "auth": "authorization_token",
+                "summary": "Готово для Claude-клиентов/API, которые поддерживают remote MCP URL и access token.",
+                "instructions": [
+                    "Добавьте custom remote MCP connector/server с URL AdForge MCP.",
+                    "Если клиент просит token/header, используйте персональный MCP token как Bearer access token.",
+                    "Для Claude.ai custom connector OAuth может потребоваться на стороне клиента/организации; без него используйте клиент, который поддерживает token.",
+                ],
+            },
+            "chatgpt": {
+                "label": "ChatGPT",
+                "status": "oauth_required",
+                "transport": "streamable_http",
+                "auth": "oauth_2_1_required_for_chatgpt_apps",
+                "self_serve_ready": False,
+                "summary": "Для полноценного ChatGPT Apps/connector сценария нужен OAuth 2.1, поэтому raw Bearer token туда не вставляем.",
+                "instructions": [
+                    "Текущий hosted MCP endpoint технически подходит как remote MCP server.",
+                    "Для пользовательских данных ChatGPT Apps должен пройти OAuth 2.1 flow с защищенной авторизацией.",
+                    "Безопасный следующий этап: добавить OAuth authorization server, discovery metadata, PKCE, scopes, revoke/rotate и audit.",
+                    "До этого используйте Codex или Claude-клиент с Bearer token; не открывайте /mcp без авторизации.",
+                ],
+            },
+        }
         return {
             "name": "AdForge MCP",
             "transport": "streamable_http",
@@ -170,10 +211,13 @@ class HostedConnectionService:
                 "token_env": "ADFORGE_MCP_CLIENT_TOKEN",
             },
             "client_notes": {
-                "codex": "Use Streamable HTTP/custom MCP. If Codex asks for a Bearer token environment variable, enter ADFORGE_MCP_CLIENT_TOKEN and store the raw token in that variable.",
-                "claude": "Add AdForge MCP as a custom connector with Name and URL, then use the personal Bearer token.",
-                "gemini": "Use the client-specific custom connector flow once available.",
+                "codex": clients["codex"]["summary"],
+                "claude": clients["claude"]["summary"],
+                "chatgpt": clients["chatgpt"]["summary"],
+                "gemini": "Use the client-specific custom connector flow if it supports remote MCP plus Authorization headers.",
             },
+            "clients": clients,
+            "chatgpt_oauth_required": True,
             "status": "transport_available",
             "message": "Hosted Streamable HTTP MCP transport is available at this URL.",
         }

@@ -505,14 +505,14 @@
       if (!url || url === "—") return;
       await copyText(url);
       markMcpUrlCopied();
-      showClientMessage("MCP URL скопирован", "Теперь перейдите в раздел MCP, создайте ключ доступа и добавьте сервер в Codex.", "success");
+      showClientMessage("MCP URL скопирован", "Теперь перейдите в раздел MCP, создайте ключ доступа и добавьте сервер в Codex или Claude.", "success");
     });
     el.copyMcpUrlPanel.addEventListener("click", async () => {
       const url = el.mcpUrlPanel.textContent.trim();
       if (!url || url === "—") return;
       await copyText(url);
       markMcpUrlCopied();
-      showClientMessage("MCP URL скопирован", "Вставьте этот URL в поле URL при добавлении MCP server в Codex.", "success");
+      showClientMessage("MCP URL скопирован", "Вставьте этот URL при добавлении remote MCP server в Codex или Claude.", "success");
     });
     el.copyMcpToken.addEventListener("click", async () => {
       const token = el.mcpTokenRaw.textContent.trim();
@@ -524,7 +524,7 @@
       const token = el.mcpTokenRaw.textContent.trim();
       if (!token) return;
       await copyText(`Bearer ${token}`);
-      showClientMessage("Значение заголовка скопировано", "В Codex добавьте Header: Name Authorization, Value Bearer + ваш ключ доступа.", "success");
+      showClientMessage("Bearer значение скопировано", "В AI-клиенте добавьте Header: Name Authorization, Value Bearer + ваш ключ доступа.", "success");
     });
   }
 

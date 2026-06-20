@@ -25,6 +25,30 @@ def test_mcp_connection_info_uses_public_url_and_route_path(tmp_path: Path) -> N
     assert info["auth"]["type"] == "bearer"
 
 
+def test_mcp_connection_info_exposes_safe_ai_client_compatibility(tmp_path: Path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        public_base_url="https://mcp.adforge.dev/",
+        mcp_endpoint_path="mcp",
+        connections_config="missing.yaml",
+    )
+    service = HostedConnectionService(settings)
+
+    info = service.mcp_connection_info()
+    clients = info["clients"]
+    text = str(info).lower()
+
+    assert clients["codex"]["status"] == "ready"
+    assert clients["claude"]["status"] == "ready_for_supported_clients"
+    assert clients["chatgpt"]["status"] == "oauth_required"
+    assert clients["chatgpt"]["self_serve_ready"] is False
+    assert info["chatgpt_oauth_required"] is True
+    assert "personal_mcp_token" in text
+    assert "beta_token" not in text
+    assert "client_secret" not in text
+    assert "refresh_token" not in text
+
+
 def test_connections_response_does_not_expose_provider_secrets(tmp_path: Path) -> None:
     config = tmp_path / "ads_config.yaml"
     config.write_text(

@@ -1,4 +1,4 @@
-# Gemini и другие MCP clients
+# Gemini, ChatGPT и другие MCP clients
 
 Этот документ описывает общий принцип подключения AdForge MCP в Gemini или другой MCP-compatible клиент. Конкретный UI клиента может отличаться.
 
@@ -20,7 +20,7 @@ AdForge MCP уже развернут как hosted service. Пользоват�
 - Auth header:
 
 ```http
-Authorization: Bearer <BETA_TOKEN>
+Authorization: Bearer <PERSONAL_MCP_TOKEN>
 ```
 
 ## Универсальный пример
@@ -30,7 +30,7 @@ Authorization: Bearer <BETA_TOKEN>
   "name": "AdForge MCP",
   "url": "https://your-domain.com/mcp",
   "headers": {
-    "Authorization": "Bearer <BETA_TOKEN>"
+    "Authorization": "Bearer <PERSONAL_MCP_TOKEN>"
   }
 }
 ```
@@ -42,7 +42,7 @@ Authorization: Bearer <BETA_TOKEN>
 1. В dashboard подключить рекламные аккаунты через OAuth.
 2. Убедиться, что Connections показывает `MCP ready`.
 3. Добавить hosted MCP URL в клиент.
-4. Передать beta token безопасным способом, который поддерживает клиент.
+4. Передать персональный MCP token безопасным способом, который поддерживает клиент.
 5. Проверить появление tools.
 6. Запустить диагностику: `Проверь AdForge MCP`.
 7. Запросить аккаунты: `Покажи подключенные рекламные аккаунты`.
@@ -50,6 +50,6 @@ Authorization: Bearer <BETA_TOKEN>
 ## Ограничения
 
 - Возможности конкретного MCP-клиента могут отличаться.
-- Если клиент не поддерживает custom headers, потребуется adapter/proxy или другой supported auth способ.
+- Если клиент не поддерживает custom headers/Bearer token, нужен другой supported auth способ. Для ChatGPT Apps/connector сценария безопасный путь - OAuth 2.1, а не отключение auth.
 - Рекламные аккаунты подключаются только через AdForge dashboard, не внутри Gemini/Codex/Claude.
 - Dangerous actions остаются preview-only.

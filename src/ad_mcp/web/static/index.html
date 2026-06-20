@@ -209,7 +209,7 @@
           </article>
           <article class="card mcp-card">
             <h3 class="card__title">Подключение к AI-клиенту</h3>
-            <p class="card__hint">Скопируйте MCP URL, создайте ключ доступа в разделе MCP и добавьте сервер в Codex или Claude.</p>
+            <p class="card__hint">Скопируйте MCP URL, создайте ключ доступа в разделе MCP и добавьте сервер в Codex, Claude или другой совместимый AI-клиент.</p>
             <div class="mcp-url-row">
               <code id="mcp-url" class="mcp-url">—</code>
               <button id="copy-mcp-url" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
@@ -225,8 +225,8 @@
       <!-- MCP -->
       <section id="section-mcp" class="section" data-section="mcp" hidden>
         <div class="section-head">
-          <h2>Подключение к Codex</h2>
-          <p class="section-head__sub">Создайте ключ доступа и добавьте hosted MCP server в настройках AI-клиента. Ключ показывается только один раз после создания или обновления.</p>
+          <h2>Подключение к AI-клиенту</h2>
+          <p class="section-head__sub">Создайте ключ доступа и добавьте hosted MCP server в Codex или Claude. Для ChatGPT Apps нужен отдельный OAuth-сценарий, поэтому raw token туда не вставляем.</p>
         </div>
         <article class="card mcp-card">
           <h3 class="card__title">1. Скопируйте MCP URL</h3>
@@ -243,12 +243,32 @@
             <div class="token-secret-row">
               <code id="mcp-token-raw" class="token-secret"></code>
               <button id="copy-mcp-token" type="button" class="btn btn--secondary btn--small">Скопировать ключ</button>
-              <button id="copy-mcp-auth-header" type="button" class="btn btn--secondary btn--small">Скопировать заголовок для Codex</button>
+              <button id="copy-mcp-auth-header" type="button" class="btn btn--secondary btn--small">Скопировать Bearer значение</button>
             </div>
           </div>
           <div id="mcp-token-actions" class="token-actions"></div>
           <div class="setup-card">
-            <h3 class="card__title">2. Добавьте сервер в Codex</h3>
+            <h3 class="card__title">2. Выберите AI-клиент</h3>
+            <div class="client-grid">
+              <div class="client-card">
+                <span class="client-card__badge client-card__badge--ok">Готово</span>
+                <h4>Codex</h4>
+                <p>Самый быстрый сценарий: Streamable HTTP, MCP URL и персональный Bearer token.</p>
+              </div>
+              <div class="client-card">
+                <span class="client-card__badge client-card__badge--ok">Готово при поддержке token</span>
+                <h4>Claude</h4>
+                <p>Подходит для Claude-клиентов/API с remote MCP URL и access token. Если Claude.ai просит OAuth, используйте OAuth-сценарий.</p>
+              </div>
+              <div class="client-card client-card--blocked">
+                <span class="client-card__badge client-card__badge--warn">Нужен OAuth</span>
+                <h4>ChatGPT</h4>
+                <p>Для полноценного ChatGPT Apps/connector подключения нужен OAuth 2.1. Мы не открываем /mcp без auth и не просим вставлять raw token в небезопасное место.</p>
+              </div>
+            </div>
+          </div>
+          <div class="setup-card">
+            <h3 class="card__title">3. Быстрый сценарий для Codex</h3>
             <ol class="setup-list">
               <li>Откройте Codex и перейдите в Settings / Настройки.</li>
               <li>Откройте раздел MCP / MCP Servers и нажмите “Add server”.</li>
@@ -259,11 +279,18 @@
             </ol>
           </div>
           <div class="callout">
-            <strong>Подсказка для Codex</strong>
-            <span>Если Codex показывает поле “Bearer token environment variable”, туда нельзя вставлять сам ключ. Введите имя переменной <code>ADFORGE_MCP_CLIENT_TOKEN</code>, а ключ сохраните в эту переменную окружения. Если ключ попал в скриншот или чат, сгенерируйте новый.</span>
+            <strong>Подсказка по безопасности</strong>
+            <span>Если клиент показывает поле “Bearer token environment variable”, туда нельзя вставлять сам ключ. Введите имя переменной <code>ADFORGE_MCP_CLIENT_TOKEN</code>, а ключ сохраните в эту переменную окружения. Если ключ попал в скриншот или чат, сгенерируйте новый.</span>
+          </div>
+          <div class="setup-card">
+            <h3 class="card__title">4. Claude и ChatGPT</h3>
+            <div class="ai-client-notes">
+              <p><strong>Claude:</strong> добавьте custom remote MCP connector/server с URL выше. Если интерфейс поддерживает token/header, передайте <code>Authorization: Bearer &lt;ваш ключ&gt;</code>.</p>
+              <p><strong>ChatGPT:</strong> текущий endpoint не публикуем как no-auth connector. Для безопасного клиентского сценария нужен OAuth 2.1 authorization server с PKCE, scopes и revoke/rotate. Это следующий отдельный этап.</p>
+            </div>
           </div>
           <div class="prompt-card">
-            <h3 class="card__title">3. Проверьте в новом чате</h3>
+            <h3 class="card__title">5. Проверьте в новом чате</h3>
             <div class="prompt-list">
               <code>Какие рекламные аккаунты подключены?</code>
               <code>Покажи кампании в Яндекс Директ</code>
