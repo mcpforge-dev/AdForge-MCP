@@ -167,7 +167,7 @@ class HostedConnectionService:
                 "auth": "authorization_header_or_bearer_env",
                 "summary": "Готово: используйте MCP URL и персональный Bearer token.",
                 "instructions": [
-                    "Добавьте AdForge MCP как Streamable HTTP server.",
+                    "Добавьте HolyMedia MCP как Streamable HTTP server.",
                     "URL: используйте hosted MCP URL из dashboard.",
                     "Auth: Authorization: Bearer <personal_mcp_token> или env ADFORGE_MCP_CLIENT_TOKEN.",
                     "После добавления откройте новый чат и спросите про подключенные рекламные аккаунты.",
@@ -182,7 +182,7 @@ class HostedConnectionService:
                 "instructions": [
                     "В Claude.ai Add custom connector можно указать Name и Remote MCP server URL.",
                     "OAuth Client ID/Secret можно оставить пустыми: Claude выполнит discovery и dynamic client registration.",
-                    "Пользователь войдет в AdForge MCP в браузере и разрешит доступ к своему workspace.",
+                    "Пользователь войдет в HolyMedia MCP в браузере и разрешит доступ к своему workspace.",
                     "Персональный MCP token не нужно вставлять в OAuth Client Secret.",
                 ],
             },
@@ -202,7 +202,7 @@ class HostedConnectionService:
             },
         }
         return {
-            "name": "AdForge MCP",
+            "name": "HolyMedia MCP",
             "transport": "streamable_http",
             "endpoint_path": endpoint_path,
             "url": public_url,

@@ -1,6 +1,6 @@
-# Live VPS runbook для hosted beta AdForge MCP
+# Live VPS runbook для hosted beta HolyMedia MCP
 
-Этот runbook описывает первый live deploy AdForge MCP на реальном VPS/WPS. Это инструкция для оператора или разработчика проекта. Beta-клиент не клонирует GitHub repo, не запускает MCP локально и не редактирует `.env`: клиент получает dashboard URL, hosted MCP URL и beta token.
+Этот runbook описывает первый live deploy HolyMedia MCP на реальном VPS/WPS. Это инструкция для оператора или разработчика проекта. Beta-клиент не клонирует GitHub repo, не запускает MCP локально и не редактирует `.env`: клиент получает dashboard URL, hosted MCP URL и beta token.
 
 ## A. Предварительные требования
 
@@ -13,7 +13,7 @@
 - Nginx.
 - Certbot.
 - systemd.
-- Доступ к GitHub repo `mcpforge-dev/AdForge-MCP`.
+- Доступ к GitHub repo `mcpforge-dev/adforge-mcp`.
 - Реальные OAuth app credentials для нужных providers.
 - Сильный beta token для `AD_MCP_WEB_API_TOKEN`.
 - Решение, где хранится hosted connection storage: рекомендуем `/var/lib/adforge-mcp/connections.json`.
@@ -30,7 +30,7 @@ sudo apt install -y git python3.11 python3.11-venv nginx certbot python3-certbot
 Создать service user и директории:
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/adforge-mcp --shell /usr/sbin/nologin adforge
+sudo useradd --system --create-home --home-dir /opt/adforge-mcp --shell /usr/sbin/nologin HolyMedia
 sudo mkdir -p /opt/adforge-mcp /etc/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp
 sudo chown -R adforge:adforge /opt/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp
 sudo chmod 755 /opt/adforge-mcp
@@ -40,7 +40,7 @@ sudo chmod 750 /etc/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp
 Клонировать репозиторий на VPS. Это делает оператор, не beta-клиент:
 
 ```bash
-sudo -u adforge git clone git@github.com:mcpforge-dev/AdForge-MCP.git /opt/adforge-mcp
+sudo -u adforge git clone git@github.com:mcpforge-dev/adforge-mcp.git /opt/adforge-mcp
 ```
 
 Создать virtualenv и установить зависимости:
@@ -143,8 +143,8 @@ sudo systemctl daemon-reload
 
 Проверить, что в service files:
 
-- `User=adforge`;
-- `Group=adforge`;
+- `User=HolyMedia`;
+- `Group=HolyMedia`;
 - `WorkingDirectory=/opt/adforge-mcp`;
 - `EnvironmentFile=/etc/adforge-mcp/adforge-mcp.env`;
 - web bind: `AD_MCP_WEB_HOST=127.0.0.1`, port `8765`;

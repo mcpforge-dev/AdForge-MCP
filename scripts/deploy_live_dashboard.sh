@@ -25,7 +25,7 @@ fail() {
   exit 1
 }
 
-echo "AdForge MCP live dashboard deploy"
+echo "HolyMedia MCP live dashboard deploy"
 
 if [[ "$(pwd -P)" != "$PROJECT_DIR" ]]; then
   echo "WARNING: current directory is not ${PROJECT_DIR}; switching to ${PROJECT_DIR}."

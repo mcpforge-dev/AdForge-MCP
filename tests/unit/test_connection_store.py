@@ -173,7 +173,7 @@ def test_safe_account_summary_keeps_provider_metadata_without_secrets(tmp_path: 
                     "name": "TikTok Advertiser",
                     "account_id": "744",
                     "advertiser_id": "744",
-                    "app_name": "AdForge MCP",
+                    "app_name": "HolyMedia MCP",
                     "app_id": "app-id",
                     "verification_status": "Approved",
                     "requested_permissions": ["Reporting", "Ads Management"],
@@ -204,7 +204,7 @@ def test_safe_account_summary_keeps_provider_metadata_without_secrets(tmp_path: 
     yandex = store.safe_provider_status("yandex_direct")["accounts"][0]
     serialized = json.dumps({"tiktok": tiktok, "yandex": yandex})
 
-    assert tiktok["app_name"] == "AdForge MCP"
+    assert tiktok["app_name"] == "HolyMedia MCP"
     assert tiktok["verification_status"] == "Approved"
     assert tiktok["requested_permissions"] == ["Reporting", "Ads Management"]
     assert yandex["direct_client_login"] == "client-login"

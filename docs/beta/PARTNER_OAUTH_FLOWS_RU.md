@@ -1,6 +1,6 @@
 # OAuth flows для Google Ads, TikTok Ads и Yandex Direct
 
-Этот документ описывает hosted OAuth-подключения после Meta Ads. Пользователь не скачивает проект локально: он открывает dashboard AdForge MCP, нажимает Connect, проходит OAuth и выбирает рекламные аккаунты. Выбранные аккаунты сохраняются в ignored файле `tokens/connections.json`.
+Этот документ описывает hosted OAuth-подключения после Meta Ads. Пользователь не скачивает проект локально: он открывает dashboard HolyMedia MCP, нажимает Connect, проходит OAuth и выбирает рекламные аккаунты. Выбранные аккаунты сохраняются в ignored файле `tokens/connections.json`.
 
 ## Общие требования
 

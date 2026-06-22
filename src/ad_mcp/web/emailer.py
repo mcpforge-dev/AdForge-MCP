@@ -26,9 +26,9 @@ class PasswordResetEmailer:
             raise SmtpNotConfigured("SMTP не настроен.")
 
         message = EmailMessage()
-        from_name = self.settings.smtp_from_name.strip() or "AdForge MCP"
+        from_name = self.settings.smtp_from_name.strip() or "HolyMedia MCP"
         from_email = self.settings.smtp_from_email.strip()
-        message["Subject"] = "Восстановление пароля AdForge MCP"
+        message["Subject"] = "Восстановление пароля HolyMedia MCP"
         message["From"] = f"{from_name} <{from_email}>"
         message["To"] = to_email
         message.set_content(
@@ -36,13 +36,13 @@ class PasswordResetEmailer:
                 [
                     "Здравствуйте!",
                     "",
-                    "Мы получили запрос на восстановление пароля AdForge MCP.",
+                    "Мы получили запрос на восстановление пароля HolyMedia MCP.",
                     f"Ссылка действует {ttl_minutes} минут:",
                     reset_url,
                     "",
                     "Если вы не запрашивали восстановление, просто проигнорируйте это письмо.",
                     "",
-                    "AdForge MCP",
+                    "HolyMedia MCP",
                 ]
             )
         )

@@ -1,6 +1,6 @@
 # Beta security
 
-AdForge MCP beta построен вокруг безопасной hosted-модели: сервер и секреты находятся на VPS/WPS, клиент подключает только dashboard и hosted MCP endpoint.
+HolyMedia MCP beta построен вокруг безопасной hosted-модели: сервер и секреты находятся на VPS/WPS, клиент подключает только dashboard и hosted MCP endpoint.
 
 Подробный hardening checklist: [SECURITY_HARDENING_RU.md](SECURITY_HARDENING_RU.md).
 

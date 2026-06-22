@@ -1,5 +1,5 @@
 [Unit]
-Description=AdForge MCP web dashboard and API
+Description=HolyMedia MCP web dashboard and API
 After=network.target
 
 [Service]

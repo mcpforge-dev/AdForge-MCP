@@ -49,7 +49,7 @@ class Settings(BaseSettings):
     smtp_username: str = ""
     smtp_password: str = ""
     smtp_from_email: str = ""
-    smtp_from_name: str = "AdForge MCP"
+    smtp_from_name: str = "HolyMedia MCP"
     smtp_use_tls: bool = True
     smtp_use_ssl: bool = False
     password_reset_ttl_minutes: int = 30

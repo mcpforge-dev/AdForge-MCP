@@ -1,6 +1,6 @@
 # MCP read tools для beta-ready MVP
 
-AdForge MCP работает как hosted MCP-сервис. Пользователь подключает внешний MCP endpoint в Codex, Claude или другой MCP-compatible клиент, а рекламные кабинеты подключает через dashboard и OAuth.
+HolyMedia MCP работает как hosted MCP-сервис. Пользователь подключает внешний MCP endpoint в Codex, Claude или другой MCP-compatible клиент, а рекламные кабинеты подключает через dashboard и OAuth.
 
 ## Tools
 

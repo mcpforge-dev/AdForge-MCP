@@ -1,6 +1,6 @@
 # Account Profile и Email Reset
 
-Этот документ описывает рабочий аккаунт-функционал AdForge MCP beta: профиль, никнейм, аватар, смену пароля и восстановление доступа через email.
+Этот документ описывает рабочий аккаунт-функционал HolyMedia MCP beta: профиль, никнейм, аватар, смену пароля и восстановление доступа через email.
 
 ## Возможности
 
@@ -21,7 +21,7 @@ AD_MCP_SMTP_PORT=587
 AD_MCP_SMTP_USERNAME=
 AD_MCP_SMTP_PASSWORD=
 AD_MCP_SMTP_FROM_EMAIL=
-AD_MCP_SMTP_FROM_NAME=AdForge MCP
+AD_MCP_SMTP_FROM_NAME="HolyMedia MCP"
 AD_MCP_SMTP_USE_TLS=true
 AD_MCP_SMTP_USE_SSL=false
 AD_MCP_PASSWORD_RESET_TTL_MINUTES=30

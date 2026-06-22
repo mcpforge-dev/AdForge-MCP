@@ -1,6 +1,6 @@
 # Diagnostics для beta MVP
 
-AdForge MCP имеет единый слой диагностики для backend, hosted OAuth connections, MCP transport и provider read checks.
+HolyMedia MCP имеет единый слой диагностики для backend, hosted OAuth connections, MCP transport и provider read checks.
 
 ## Backend endpoints
 

@@ -63,7 +63,7 @@ sudo nginx -t
 sudo journalctl -u nginx -n 100 --no-pager
 ```
 
-Если AdForge service упал:
+Если HolyMedia service упал:
 
 ```bash
 sudo journalctl -u adforge-mcp-web -n 100 --no-pager

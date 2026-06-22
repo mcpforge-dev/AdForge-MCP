@@ -35,7 +35,7 @@ Diagnostics может показывать env variables только как `p
 | `AD_MCP_SMTP_USERNAME` | Нет | SMTP username, если провайдер требует auth. |
 | `AD_MCP_SMTP_PASSWORD` | Да при SMTP auth | SMTP password/app password. Не коммитить и не выводить в логи. |
 | `AD_MCP_SMTP_FROM_EMAIL` | Да для email reset | From email, например `noreply@your-domain.com`. |
-| `AD_MCP_SMTP_FROM_NAME` | Нет | По умолчанию `AdForge MCP`. |
+| `AD_MCP_SMTP_FROM_NAME` | Нет | По умолчанию `HolyMedia MCP`. |
 | `AD_MCP_SMTP_USE_TLS` | Нет | `true` для STARTTLS. |
 | `AD_MCP_SMTP_USE_SSL` | Нет | `true` для SMTP SSL. Не включать одновременно с TLS, если провайдер этого не требует. |
 | `AD_MCP_PASSWORD_RESET_TTL_MINUTES` | Нет | TTL reset-ссылки, по умолчанию `30`. |

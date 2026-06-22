@@ -13,7 +13,7 @@ def create_http_app(settings: Settings | None = None) -> Starlette:
 def main() -> None:
     settings = Settings()
     mcp = create_server(settings, hosted_http=True)
-    print(f"AdForge MCP HTTP transport running at http://{settings.mcp_http_host}:{settings.mcp_http_port}{settings.mcp_route_path}")
+    print(f"HolyMedia MCP HTTP transport running at http://{settings.mcp_http_host}:{settings.mcp_http_port}{settings.mcp_route_path}")
     mcp.run(transport="streamable-http")
 
 

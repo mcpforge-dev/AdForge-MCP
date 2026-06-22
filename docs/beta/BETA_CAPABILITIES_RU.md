@@ -23,7 +23,7 @@ Authorization: Bearer <BETA_TOKEN>
 Основные поля:
 
 - `mode=hosted_beta`;
-- `service=AdForge MCP`;
+- `service=HolyMedia MCP`;
 - `scope.client_model=hosted_dashboard_oauth_plus_hosted_mcp`;
 - `scope.customer_local_setup_required=false`;
 - `scope.primary_platforms=["meta_ads","google_ads"]`;

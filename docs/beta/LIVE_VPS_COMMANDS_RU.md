@@ -1,4 +1,4 @@
-# Live VPS commands AdForge MCP
+# Live VPS commands HolyMedia MCP
 
 Команды ниже рассчитаны на оператора live beta deploy. Значения `your-domain.com`, `<BETA_TOKEN>` и OAuth placeholders нужно заменить на реальные значения только на VPS. Не вставляйте реальные секреты в Git.
 
@@ -12,7 +12,7 @@ sudo apt install -y git python3.11 python3.11-venv nginx certbot python3-certbot
 ## 2. Service user and directories
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/adforge-mcp --shell /usr/sbin/nologin adforge
+sudo useradd --system --create-home --home-dir /opt/adforge-mcp --shell /usr/sbin/nologin HolyMedia
 sudo mkdir -p /opt/adforge-mcp /etc/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp /var/backups/adforge-mcp
 sudo chown -R adforge:adforge /opt/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp /var/backups/adforge-mcp
 sudo chmod 755 /opt/adforge-mcp
@@ -22,7 +22,7 @@ sudo chmod 750 /etc/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp /var/b
 ## 3. Clone and install
 
 ```bash
-sudo -u adforge git clone git@github.com:mcpforge-dev/AdForge-MCP.git /opt/adforge-mcp
+sudo -u adforge git clone git@github.com:mcpforge-dev/adforge-mcp.git /opt/adforge-mcp
 cd /opt/adforge-mcp
 sudo -u adforge python3.11 -m venv .venv
 sudo -u adforge ./.venv/bin/python -m pip install --upgrade pip

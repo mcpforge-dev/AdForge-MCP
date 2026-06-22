@@ -1,4 +1,4 @@
-# AdForge MCP SaaS foundation
+# HolyMedia MCP SaaS foundation
 
 Этот документ фиксирует первый безопасный шаг перехода от beta access dashboard к SaaS-flow.
 

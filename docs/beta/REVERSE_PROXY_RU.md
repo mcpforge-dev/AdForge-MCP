@@ -1,6 +1,6 @@
 # Reverse proxy и HTTPS
 
-AdForge MCP beta публикуется через reverse proxy. Web dashboard и MCP transport должны слушать только localhost.
+HolyMedia MCP beta публикуется через reverse proxy. Web dashboard и MCP transport должны слушать только localhost.
 
 ## Recommended internal routing
 

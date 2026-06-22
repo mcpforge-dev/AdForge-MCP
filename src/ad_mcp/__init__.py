@@ -1,4 +1,4 @@
-"""AdForge MCP package."""
+"""HolyMedia MCP package."""
 
 __all__ = ["__version__"]
 

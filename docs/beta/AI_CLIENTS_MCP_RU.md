@@ -1,6 +1,6 @@
-# Подключение AdForge MCP к AI-клиентам
+# Подключение HolyMedia MCP к AI-клиентам
 
-AdForge MCP работает как hosted remote MCP server:
+HolyMedia MCP работает как hosted remote MCP server:
 
 - URL: `https://your-domain.com/mcp`
 - Transport: Streamable HTTP
@@ -37,7 +37,7 @@ ADFORGE_MCP_CLIENT_TOKEN
 
 В Claude.ai форме `Add custom connector`:
 
-1. `Name`: `AdForge MCP`.
+1. `Name`: `HolyMedia MCP`.
 2. `Remote MCP server URL`: `https://your-domain.com/mcp`.
 3. `OAuth Client ID`: оставить пустым или вставить значение из dashboard, если Claude зависает на `Checking connection`.
 4. `OAuth Client Secret`: оставить пустым или вставить одноразово показанный secret из dashboard.
@@ -49,7 +49,7 @@ ADFORGE_MCP_CLIENT_TOKEN
 1. Прочитать protected resource metadata.
 2. Найти authorization server metadata.
 3. Зарегистрировать OAuth client через Dynamic Client Registration.
-4. Открыть браузерный вход в AdForge MCP.
+4. Открыть браузерный вход в HolyMedia MCP.
 5. Получить authorization code и обменять его на access token через PKCE.
 
 Для Claude API или MCP-клиента, который поддерживает token, используйте:

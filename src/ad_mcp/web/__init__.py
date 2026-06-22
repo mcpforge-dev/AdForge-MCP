@@ -1,1 +1,1 @@
-"""Web UI layer for AdForge MCP."""
+"""Web UI layer for HolyMedia MCP."""

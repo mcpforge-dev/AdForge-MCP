@@ -1,4 +1,4 @@
-/* AdForge MCP hosted beta dashboard.
+/* HolyMedia MCP hosted beta dashboard.
    Onboarding flow: access code gate -> onboarding -> connections -> MCP setup.
    Uses only existing hosted/diagnostics endpoints. Never renders the access code
    or provider secrets. */
@@ -151,7 +151,7 @@
       }
       showLanding();
       openAuth("login");
-      showAuthError("Войдите в AdForge MCP, чтобы разрешить подключение AI-клиента.");
+      showAuthError("Войдите в HolyMedia MCP, чтобы разрешить подключение AI-клиента.");
       return;
     }
     if (window.location.pathname === "/admin") {
@@ -333,7 +333,7 @@
     el.authForm.hidden = false;
     el.authSuccess.hidden = true;
     resetPasswordVisibility();
-    el.authTitle.textContent = isRegister ? "Создать аккаунт" : "Войти в AdForge MCP";
+    el.authTitle.textContent = isRegister ? "Создать аккаунт" : "Войти в HolyMedia MCP";
     el.authSubtitle.textContent = isRegister
       ? "Создайте аккаунт, чтобы подключить рекламные кабинеты и получить MCP доступ."
       : "Введите email и пароль, чтобы открыть личный кабинет.";
@@ -343,7 +343,7 @@
   function showRegistrationSuccess() {
     hideAuthError();
     el.authTitle.textContent = "Аккаунт создан";
-    el.authSubtitle.textContent = "Добро пожаловать в AdForge MCP.";
+    el.authSubtitle.textContent = "Добро пожаловать в HolyMedia MCP.";
     el.authForm.hidden = true;
     el.authSuccess.hidden = false;
     el.authSuccessApp.focus();
@@ -376,7 +376,7 @@
   function showForgotPasswordModal() {
     showClientModal({
       title: "Восстановление пароля",
-      subtitle: "Введите email, который привязан к аккаунту AdForge MCP.",
+      subtitle: "Введите email, который привязан к аккаунту HolyMedia MCP.",
       body: `
         <form id="forgot-password-form" class="auth-form">
           <label class="field">
@@ -412,7 +412,7 @@
   function showResetPasswordModal(token) {
     showClientModal({
       title: "Новый пароль",
-      subtitle: "Введите новый пароль для аккаунта AdForge MCP.",
+      subtitle: "Введите новый пароль для аккаунта HolyMedia MCP.",
       body: `
         <form id="reset-password-form" class="auth-form">
           <input name="token" type="hidden" value="${escAttr(token)}">
@@ -669,14 +669,14 @@
   function showWelcomeModal(kind) {
     const isRegister = kind === "register";
     showClientModal({
-      title: isRegister ? "Добро пожаловать в AdForge MCP" : "С возвращением в AdForge MCP",
+      title: isRegister ? "Добро пожаловать в HolyMedia MCP" : "С возвращением в HolyMedia MCP",
       subtitle: isRegister
         ? "Первый шаг простой: подключите рекламную платформу, выберите кабинеты и скопируйте MCP URL для AI-клиента."
         : "Кабинет готов к работе. Можно перейти к подключениям или продолжить с текущего раздела.",
       body: `
         <div class="welcome-card">
           <strong>${isRegister ? "Что сделать дальше" : "Быстрый старт"}</strong>
-          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте AdForge MCP в Codex или Claude." : "Если нужно проверить кабинеты, откройте раздел подключений. Все опасные действия остаются в безопасном preview-режиме."}</span>
+          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте HolyMedia MCP в Codex или Claude." : "Если нужно проверить кабинеты, откройте раздел подключений. Все опасные действия остаются в безопасном preview-режиме."}</span>
         </div>
       `,
       closeLabel: "",
@@ -777,7 +777,7 @@
         <div class="kv-row"><span>Создан</span><strong>${esc(formatTime(token?.created_at))}</strong></div>
         <div class="kv-row"><span>Последнее использование</span><strong>${esc(formatTime(token?.last_used_at))}</strong></div>
       </div>
-      <span>Этот ключ нужен AI-клиенту, чтобы безопасно подключиться к вашему AdForge MCP. Полный ключ показывается только после создания или обновления.</span>
+      <span>Этот ключ нужен AI-клиенту, чтобы безопасно подключиться к вашему HolyMedia MCP. Полный ключ показывается только после создания или обновления.</span>
     `;
     el.mcpTokenActions.innerHTML = active
       ? `
@@ -1117,7 +1117,7 @@
       { text: "Подключите рекламную платформу", done: connectedPlatforms.length > 0 || hasPending(platforms) },
       { text: "Выберите рекламные аккаунты", done: connectedAccounts > 0 },
       { text: "Скопируйте MCP URL", done: state.mcpUrlCopied },
-      { text: "Подключите AdForge MCP в Codex или Claude", done: false },
+      { text: "Подключите HolyMedia MCP в Codex или Claude", done: false },
       { text: "Перезапустите MCP / откройте новый чат", done: false },
       { text: "Задайте AI первый вопрос по аккаунтам, кампаниям или метрикам", done: false },
     ];
@@ -1342,7 +1342,7 @@
     showClientModal({
       title: accounts.length ? "Выберите рекламный аккаунт" : "Аккаунты не найдены",
       subtitle: accounts.length
-        ? "Мы получили доступ к вашему рекламному кабинету. Выберите аккаунт, который нужно подключить к AdForge MCP."
+        ? "Мы получили доступ к вашему рекламному кабинету. Выберите аккаунт, который нужно подключить к HolyMedia MCP."
         : "Проверьте, что у пользователя есть доступ к рекламному кабинету.",
       body: renderPendingPanel(pending),
       tone: accounts.length ? "info" : "warn",
@@ -1497,7 +1497,7 @@
       closeClientModal();
       state.notice = { tone: "success", text: "Аккаунты подключены. Теперь их можно использовать в AI-клиенте." };
       await loadConnections();
-      showClientMessage("Аккаунт подключён", "Теперь AdForge MCP сможет использовать выбранные рекламные аккаунты в AI-клиенте.", "success");
+      showClientMessage("Аккаунт подключён", "Теперь HolyMedia MCP сможет использовать выбранные рекламные аккаунты в AI-клиенте.", "success");
     } catch (error) {
       if (handle401(error)) return;
       setLoading(button, false);
@@ -1811,7 +1811,7 @@
     if (status === "reconnect_required") return "Время выбора аккаунта истекло. Подключите платформу заново.";
     if (status === "provider_setup_required") return "Мы заканчиваем настройку этой платформы. Подключение скоро станет доступно.";
     if (status === "credentials_missing") {
-      return "Подключение этой платформы временно настраивается. Если нужно ускорить доступ, обратитесь к менеджеру AdForge.";
+      return "Подключение этой платформы временно настраивается. Если нужно ускорить доступ, обратитесь к менеджеру HolyMedia.";
     }
     if (status === "ready_to_connect") return "Нажмите подключить и разрешите доступ к рекламному кабинету.";
     return canConnect ? "Нажмите подключить и разрешите доступ к рекламному кабинету." : "Платформа временно настраивается.";
@@ -1979,13 +1979,13 @@
     const lower = text.toLowerCase();
     if (!text) return "Что-то пошло не так. Попробуйте еще раз.";
     if (lower.includes("api_auth_not_configured") || lower.includes("ad_mcp_web_api_token")) {
-      return "Код доступа еще не настроен на сервере. Обратитесь к менеджеру AdForge.";
+      return "Код доступа еще не настроен на сервере. Обратитесь к менеджеру HolyMedia.";
     }
     if (lower.includes("api_auth_required") || lower.includes("beta token")) {
       return "Нужен корректный код доступа.";
     }
     if (lower.includes("not configured") && lower.includes("oauth")) {
-      return "Платформа временно настраивается. Обратитесь к менеджеру AdForge, если подключение нужно ускорить.";
+      return "Платформа временно настраивается. Обратитесь к менеджеру HolyMedia, если подключение нужно ускорить.";
     }
     if (lower.includes("state expired") || (lower.includes("pending") && lower.includes("expired"))) {
       return "Сессия OAuth истекла. Переподключите платформу.";

@@ -1,12 +1,12 @@
-# AdForge MCP beta-ready MVP
+# HolyMedia MCP beta-ready MVP
 
-AdForge MCP - hosted MCP-сервис для работы с рекламными кабинетами через AI-клиенты. Пользователь подключает рекламные платформы через dashboard и OAuth, затем подключает уже развернутый MCP endpoint в Codex, Claude, Gemini или другой MCP-compatible клиент.
+HolyMedia MCP - hosted MCP-сервис для работы с рекламными кабинетами через AI-клиенты. Пользователь подключает рекламные платформы через dashboard и OAuth, затем подключает уже развернутый MCP endpoint в Codex, Claude, Gemini или другой MCP-compatible клиент.
 
 Клиент не скачивает GitHub-репозиторий, не запускает Python-сервер локально и не редактирует `.env` или `ads_config.yaml`.
 
 ## Общий сценарий
 
-1. Команда AdForge разворачивает dashboard и MCP transport на VPS/WPS.
+1. Команда HolyMedia разворачивает dashboard и MCP transport на VPS/WPS.
 2. Пользователь получает dashboard URL, hosted MCP URL и beta token.
 3. Пользователь открывает dashboard и проходит OAuth для рекламных платформ.
 4. После OAuth пользователь выбирает доступные рекламные аккаунты.
@@ -37,7 +37,7 @@ AdForge MCP - hosted MCP-сервис для работы с рекламным�
 
 ## Что можно спрашивать у AI
 
-- `Проверь диагностику AdForge MCP`.
+- `Проверь диагностику HolyMedia MCP`.
 - `Покажи подключенные рекламные платформы`.
 - `Покажи список рекламных аккаунтов`.
 - `Покажи кампании Meta Ads`.

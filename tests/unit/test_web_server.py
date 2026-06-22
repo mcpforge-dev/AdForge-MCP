@@ -264,7 +264,7 @@ def test_mcp_oauth_client_credentials_are_created_once_and_secret_is_not_reliste
 
     assert login_status == 200
     assert create_status == 200
-    assert created["client"]["client_id"].startswith("adforge_claude_")
+    assert created["client"]["client_id"].startswith("holymedia_claude_")
     assert created["client_secret"].startswith("mcp_oauth_secret_")
     assert summary_status == 200
     assert summary["client"]["client_id"] == created["client"]["client_id"]
@@ -548,10 +548,10 @@ def test_legal_pages_are_public_and_linked_from_landing(tmp_path) -> None:
     assert landing_status == privacy_status == terms_status == 200
     assert "/privacy" in landing
     assert "/terms" in landing
-    assert "Политика конфиденциальности AdForge MCP" in privacy
+    assert "Политика конфиденциальности HolyMedia MCP" in privacy
     assert "Google Ads" in privacy
     assert "Meta Ads" in privacy
-    assert "Условия использования AdForge MCP" in terms
+    assert "Условия использования HolyMedia MCP" in terms
     assert "Google Ads" in terms
     assert "Meta Ads" in terms
     assert privacy_head_status == terms_head_status == 200

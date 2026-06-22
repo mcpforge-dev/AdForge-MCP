@@ -1,23 +1,23 @@
-# AdForge MCP
+# HolyMedia MCP
 
-AdForge MCP - hosted MCP-сервис для безопасной работы с рекламными кабинетами через Codex, Claude и другие MCP-compatible клиенты.
+HolyMedia MCP - hosted MCP-сервис для безопасной работы с рекламными кабинетами через Codex, Claude и другие MCP-compatible клиенты.
 
-Главная beta-модель: клиент не скачивает GitHub-репозиторий и не запускает MCP-сервер локально. AdForge MCP разворачивается на нашем VPS/WPS-сервере, рекламные кабинеты подключаются через web dashboard и OAuth, а AI-клиент подключается к уже работающему hosted MCP endpoint.
+Главная beta-модель: клиент не скачивает GitHub-репозиторий и не запускает MCP-сервер локально. HolyMedia MCP разворачивается на нашем VPS/WPS-сервере, рекламные кабинеты подключаются через web dashboard и OAuth, а AI-клиент подключается к уже работающему hosted MCP endpoint.
 
 ## Beta Customer Setup
 
 Для beta-пользователя рабочий сценарий такой:
 
 1. Получить URL dashboard и создать email-аккаунт.
-2. Открыть dashboard AdForge MCP и войти в личный кабинет.
+2. Открыть dashboard HolyMedia MCP и войти в личный кабинет.
 3. На `Overview` увидеть статус сервиса, preview-only бейдж и блок `Connect to MCP client`.
 4. Перейти в `Connections` и подключить Meta Ads и/или Google Ads через OAuth.
 5. Выбрать рекламные аккаунты после OAuth callback и сохранить выбор.
 6. На `Diagnostics` запустить полную диагностику.
 7. На вкладке `MCP` создать персональный MCP token и сразу сохранить raw token.
 8. Скопировать MCP URL из блока `Connect to MCP client`.
-9. Добавить AdForge MCP в Codex, Claude или другой MCP-клиент как внешний hosted server/custom connector (Bearer-авторизация персональным MCP token).
-10. Задать AI-клиенту тестовый запрос: `Проверь диагностику AdForge MCP`.
+9. Добавить HolyMedia MCP в Codex, Claude или другой MCP-клиент как внешний hosted server/custom connector (Bearer-авторизация персональным MCP token).
+10. Задать AI-клиенту тестовый запрос: `Проверь диагностику HolyMedia MCP`.
 
 Клиенту не нужны `.env`, `ads_config.yaml`, GitHub clone или локальный Python runtime.
 
@@ -95,12 +95,12 @@ Dashboard состоит из трёх разделов: `Overview` (стату�
 
 ## Developer Setup
 
-Этот раздел нужен только разработчикам и серверной команде AdForge MCP.
+Этот раздел нужен только разработчикам и серверной команде HolyMedia MCP.
 
 ### Windows
 
 ```powershell
-cd "C:\MCP\AdForge-MCP"
+cd "C:\MCP\adforge-mcp"
 py -3.11 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install -e ".[dev,google,meta]"
 ```

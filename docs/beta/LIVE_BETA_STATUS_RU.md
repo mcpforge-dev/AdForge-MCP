@@ -1,4 +1,4 @@
-# Live beta status AdForge MCP
+# Live beta status HolyMedia MCP
 
 Дата обновления: 2026-06-12 (вечерняя сессия, проверки выполнены напрямую на VPS).
 
@@ -18,7 +18,7 @@
 
 - Live URL: `https://77.240.38.131.sslip.io` — `verified_live`.
 - Deployed commit: `23a572d Harden beta readiness for live OAuth stage` — `verified_live` (обновлено с `d6602c4` fast-forward pull в эту сессию, конфликтов нет).
-- Repo на VPS: `/opt/adforge-mcp`, владелец `adforge` — `verified_live`.
+- Repo на VPS: `/opt/adforge-mcp`, владелец `HolyMedia` — `verified_live`.
 - Live env: `/etc/adforge-mcp/adforge-mcp.env`, beta token present (64 символа) — `verified_live` (значения не выводились).
 - Storage: `/var/lib/adforge-mcp/connections.json` — `verified_live`; права исправлены с `644` на `600`, владелец `adforge:adforge`.
 - Services: `adforge-mcp-web`, `adforge-mcp-http`, `nginx` — все `active/running` после рестарта — `verified_live`.
@@ -65,7 +65,7 @@ Journal logs (`adforge-mcp-web`, `adforge-mcp-http`, последние 300 ст
 
 Где искал: `/opt`, `/home/ubuntu`, `/root`, `/etc/adforge-mcp`, `/var/lib/adforge-mcp`, `/var/backups/adforge-mcp` — по именам файлов (`.env*`, `ads_config.yaml`, `google-ads.yaml`, `client_secret*.json`, `*credentials*.json`) и по ключам Meta/Google.
 
-Найдено в предшественнике `mcp-for-ads` (Meta-only console, не AdForge):
+Найдено в предшественнике `mcp-for-ads` (Meta-only console, не HolyMedia):
 
 - `/opt/mcp-for-ads/.env` — **git-tracked**, в истории (commit `abfe8be`), remote `github.com/StanislavDesginer/mcp-for-ads-v2`.
 - `/home/ubuntu/projects/mcp-for-ads/.env` — untracked, remote `github.com/StanislavDesigner/mcp-for-ads`.
@@ -93,7 +93,7 @@ Journal logs (`adforge-mcp-web`, `adforge-mcp-http`, последние 300 ст
 - инвалидировать/перевыпустить access tokens;
 - удалить `.env` из tracked файлов репозитория (`git rm --cached .env`, добавить в `.gitignore`) и почистить историю при необходимости.
 
-Репозиторий **AdForge MCP** секреты НЕ трекает (`git ls-files` чисто) — проблема только в legacy `mcp-for-ads`.
+Репозиторий **HolyMedia MCP** секреты НЕ трекает (`git ls-files` чисто) — проблема только в legacy `mcp-for-ads`.
 
 ## OAuth authorize-url status
 

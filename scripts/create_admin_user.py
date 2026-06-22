@@ -29,9 +29,9 @@ def _read_password(password_env: str) -> str:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Create or promote an AdForge MCP admin user.")
+    parser = argparse.ArgumentParser(description="Create or promote an HolyMedia MCP admin user.")
     parser.add_argument("--email", default=os.getenv("AD_MCP_INITIAL_ADMIN_EMAIL", ""), help="Admin email address.")
-    parser.add_argument("--name", default="AdForge Admin", help="Admin display name.")
+    parser.add_argument("--name", default="HolyMedia Admin", help="Admin display name.")
     parser.add_argument(
         "--password-env",
         default="AD_MCP_INITIAL_ADMIN_PASSWORD",

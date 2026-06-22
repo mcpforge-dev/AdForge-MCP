@@ -234,9 +234,9 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         if user:
             return user
         self._send_json(
-            {"error": "Нужно войти в аккаунт AdForge MCP.", "code": "session_required"},
+            {"error": "Нужно войти в аккаунт HolyMedia MCP.", "code": "session_required"},
             HTTPStatus.UNAUTHORIZED,
-            {"WWW-Authenticate": 'Session realm="AdForge MCP"'},
+            {"WWW-Authenticate": 'Session realm="HolyMedia MCP"'},
         )
         return None
 
@@ -266,7 +266,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             self._send_json(
                 {"error": "Нужен beta token для доступа к MCP web API.", "code": "api_auth_required"},
                 HTTPStatus.UNAUTHORIZED,
-                {"WWW-Authenticate": 'Bearer realm="AdForge MCP"'},
+                {"WWW-Authenticate": 'Bearer realm="HolyMedia MCP"'},
             )
             return False
         return True
@@ -308,7 +308,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             return True
         self._send_json(
             {
-                "error": "Для действий через браузер нужна same-origin сессия. Повторите запрос из интерфейса AdForge MCP.",
+                "error": "Для действий через браузер нужна same-origin сессия. Повторите запрос из интерфейса HolyMedia MCP.",
                 "code": "csrf_check_failed",
             },
             HTTPStatus.FORBIDDEN,
@@ -373,7 +373,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         base = self._oauth_base_url()
         return {
             "resource": self.settings.public_mcp_url,
-            "resource_name": "AdForge MCP",
+            "resource_name": "HolyMedia MCP",
             "authorization_servers": [base],
             "scopes_supported": ["adforge:mcp"],
             "bearer_methods_supported": ["header"],

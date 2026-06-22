@@ -1,6 +1,6 @@
 # VPS/WPS deployment для hosted beta
 
-Этот документ описывает production-like beta запуск AdForge MCP на VPS/WPS. GitHub clone и настройку сервера делает оператор/разработчик проекта. Beta-клиент не скачивает репозиторий и не запускает MCP локально.
+Этот документ описывает production-like beta запуск HolyMedia MCP на VPS/WPS. GitHub clone и настройку сервера делает оператор/разработчик проекта. Beta-клиент не скачивает репозиторий и не запускает MCP локально.
 
 Для реального первого deploy используйте:
 
@@ -40,7 +40,7 @@ sudo apt install -y git python3.11 python3.11-venv nginx certbot python3-certbot
 ## Пользователь сервиса
 
 ```bash
-sudo useradd --system --create-home --home-dir /opt/adforge-mcp --shell /usr/sbin/nologin adforge
+sudo useradd --system --create-home --home-dir /opt/adforge-mcp --shell /usr/sbin/nologin HolyMedia
 sudo mkdir -p /opt/adforge-mcp /etc/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp
 sudo chown -R adforge:adforge /opt/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp
 sudo chmod 750 /etc/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp
@@ -51,7 +51,7 @@ sudo chmod 750 /etc/adforge-mcp /var/lib/adforge-mcp /var/log/adforge-mcp
 Клонирование выполняет оператор проекта на сервере:
 
 ```bash
-sudo -u adforge git clone git@github.com:mcpforge-dev/AdForge-MCP.git /opt/adforge-mcp
+sudo -u adforge git clone git@github.com:mcpforge-dev/adforge-mcp.git /opt/adforge-mcp
 ```
 
 Это не клиентский onboarding. Клиент получает только dashboard URL, MCP URL и beta token.

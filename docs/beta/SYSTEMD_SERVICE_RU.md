@@ -1,6 +1,6 @@
 # Systemd service
 
-Для текущей архитектуры выбран systemd, потому что AdForge MCP на VPS запускается как два Python-процесса за reverse proxy:
+Для текущей архитектуры выбран systemd, потому что HolyMedia MCP на VPS запускается как два Python-процесса за reverse proxy:
 
 - `ad-mcp-web` для dashboard/API;
 - `ad-mcp-http` для hosted MCP transport.
@@ -58,13 +58,13 @@ sudo systemctl restart adforge-mcp-web adforge-mcp-http
 
 Unit examples включают:
 
-- отдельного пользователя `adforge`;
+- отдельного пользователя `HolyMedia`;
 - `NoNewPrivileges=true`;
 - `PrivateTmp=true`;
 - `ProtectSystem=full`;
 - `ReadWritePaths=/var/lib/adforge-mcp /var/log/adforge-mcp`.
 
-Сервисы не должны запускаться от `root`. Live env file доступен root/adforge, а storage принадлежит service user:
+Сервисы не должны запускаться от `root`. Live env file доступен root/HolyMedia, а storage принадлежит service user:
 
 ```bash
 sudo chown root:adforge /etc/adforge-mcp/adforge-mcp.env

@@ -1,1 +1,1 @@
-"""Core application services for AdForge MCP."""
+"""Core application services for HolyMedia MCP."""

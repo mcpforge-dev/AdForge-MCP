@@ -1,4 +1,4 @@
-# Beta acceptance checklist AdForge MCP
+# Beta acceptance checklist HolyMedia MCP
 
 Чеклист фиксирует минимальные критерии, при которых hosted beta можно считать готовой к ограниченному запуску.
 

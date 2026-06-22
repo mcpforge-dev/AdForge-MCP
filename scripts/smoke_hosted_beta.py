@@ -216,7 +216,7 @@ def _print_report(checks: list[Check]) -> None:
 
 def main() -> int:
     global DEFAULT_TIMEOUT_SECONDS  # noqa: PLW0603 - keeps helper signatures simple for this standalone script.
-    parser = argparse.ArgumentParser(description="Smoke-check a deployed hosted AdForge MCP beta server.")
+    parser = argparse.ArgumentParser(description="Smoke-check a deployed hosted HolyMedia MCP beta server.")
     parser.add_argument("--base-url", required=True, help="Public dashboard base URL, for example https://your-domain.com")
     parser.add_argument("--token", default=os.getenv("ADFORGE_MCP_CLIENT_TOKEN") or os.getenv("AD_MCP_WEB_API_TOKEN") or "", help="Beta token. Can also be provided by ADFORGE_MCP_CLIENT_TOKEN.")
     parser.add_argument("--live", action="store_true", help="Run live provider read diagnostics. Disabled by default.")

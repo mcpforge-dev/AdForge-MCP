@@ -378,7 +378,7 @@ class DiagnosticsService:
         return {
             "status": "ok",
             "mode": "hosted_beta",
-            "service": "AdForge MCP",
+            "service": "HolyMedia MCP",
             "scope": {
                 "client_model": "hosted_dashboard_oauth_plus_hosted_mcp",
                 "customer_local_setup_required": False,

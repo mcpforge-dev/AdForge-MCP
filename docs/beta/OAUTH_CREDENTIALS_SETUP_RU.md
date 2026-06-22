@@ -6,12 +6,12 @@
 
 ## Meta Ads
 
-Для hosted OAuth нужен один актуальный Meta app для AdForge MCP, а не старые per-client long-lived tokens.
+Для hosted OAuth нужен один актуальный Meta app для HolyMedia MCP, а не старые per-client long-lived tokens.
 
 Действия:
 
 1. Открыть Meta Developers.
-2. Выбрать или создать app для `AdForge MCP`.
+2. Выбрать или создать app для `HolyMedia MCP`.
 3. Проверить продукт Facebook Login / OAuth.
 4. Добавить redirect URL:
 
@@ -49,7 +49,7 @@ AD_MCP_META_REDIRECT_URI=https://77.240.38.131.sslip.io/oauth/meta/callback
 Действия:
 
 1. Открыть Google Cloud Console.
-2. Выбрать проект AdForge MCP или создать отдельный production-like beta project.
+2. Выбрать проект HolyMedia MCP или создать отдельный production-like beta project.
 3. Настроить OAuth consent screen.
 4. Добавить тестовых пользователей, если app еще в testing mode.
 5. Создать OAuth Client ID типа `Web application`.

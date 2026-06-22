@@ -692,7 +692,7 @@ class AuthStore:
             if not parsed.scheme or not parsed.netloc:
                 raise AuthValidationError("Некорректный OAuth redirect_uri.")
             normalized_redirects.append(uri)
-        client_id = f"adforge_oauth_{uuid.uuid4().hex}"
+        client_id = f"holymedia_oauth_{uuid.uuid4().hex}"
         timestamp = _now()
         client_name = str(payload.get("client_name") or payload.get("software_id") or "Claude MCP Connector").strip()[:160]
         with self._connect() as connection:
@@ -761,7 +761,7 @@ class AuthStore:
                 """,
                 (now, user.id),
             )
-            client_id = f"adforge_claude_{uuid.uuid4().hex}"
+            client_id = f"holymedia_claude_{uuid.uuid4().hex}"
             client_secret = f"mcp_oauth_secret_{secrets.token_urlsafe(32)}"
             redirect_uris = ["https://claude.ai/api/mcp/auth_callback"]
             self._execute(

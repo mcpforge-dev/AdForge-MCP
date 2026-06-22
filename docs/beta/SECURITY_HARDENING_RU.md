@@ -1,6 +1,6 @@
 # Security hardening для hosted beta
 
-AdForge MCP остается hosted MCP-сервисом. Клиент подключается к dashboard и hosted MCP endpoint, а не запускает проект локально.
+HolyMedia MCP остается hosted MCP-сервисом. Клиент подключается к dashboard и hosted MCP endpoint, а не запускает проект локально.
 
 ## Access model
 
