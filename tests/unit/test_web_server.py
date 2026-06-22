@@ -440,6 +440,15 @@ def _get_json_with_cookie(base_url: str, path: str, cookie: str) -> tuple[int, d
         return exc.code, json.loads(exc.read().decode("utf-8"))
 
 
+def _get_text(base_url: str, path: str) -> tuple[int, str]:
+    request = Request(f"{base_url}{path}", headers={"Accept": "text/html"})
+    try:
+        with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            return response.status, response.read().decode("utf-8")
+    except HTTPError as exc:
+        return exc.code, exc.read().decode("utf-8")
+
+
 def _head(base_url: str, path: str, token: str | None = None) -> tuple[int, bytes]:
     headers = {"Accept": "*/*"}
     if token:
@@ -515,6 +524,38 @@ def test_head_requests_return_headers_without_body(tmp_path) -> None:
     assert all(body == b"" for _status, body in results)
     assert protected_status == 401
     assert protected_body == b""
+
+
+def test_legal_pages_are_public_and_linked_from_landing(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        public_base_url="https://adforge.example",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        landing_status, landing = _get_text(base_url, "/")
+        privacy_status, privacy = _get_text(base_url, "/privacy")
+        terms_status, terms = _get_text(base_url, "/terms")
+        privacy_head_status, privacy_head_body = _head(base_url, "/privacy")
+        terms_head_status, terms_head_body = _head(base_url, "/terms")
+    finally:
+        close()
+
+    assert landing_status == privacy_status == terms_status == 200
+    assert "/privacy" in landing
+    assert "/terms" in landing
+    assert "Политика конфиденциальности AdForge MCP" in privacy
+    assert "Google Ads" in privacy
+    assert "Meta Ads" in privacy
+    assert "Условия использования AdForge MCP" in terms
+    assert "Google Ads" in terms
+    assert "Meta Ads" in terms
+    assert privacy_head_status == terms_head_status == 200
+    assert privacy_head_body == terms_head_body == b""
 
 
 def test_email_registration_creates_session_and_authorizes_dashboard_api(tmp_path) -> None:

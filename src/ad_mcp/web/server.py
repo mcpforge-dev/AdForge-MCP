@@ -546,6 +546,10 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         try:
             if route in {"/", "/app", "/admin", "/login", "/register", "/reset-password"}:
                 return self._send_file(STATIC_ROOT / "index.html", "text/html; charset=utf-8")
+            if route == "/privacy":
+                return self._send_file(STATIC_ROOT / "privacy.html", "text/html; charset=utf-8")
+            if route == "/terms":
+                return self._send_file(STATIC_ROOT / "terms.html", "text/html; charset=utf-8")
             if route.startswith("/uploads/avatars/"):
                 return self._send_avatar_file(route.removeprefix("/uploads/avatars/"))
             if route in {"/health", "/healthz"}:
