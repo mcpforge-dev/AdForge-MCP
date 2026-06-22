@@ -6,6 +6,7 @@ import hashlib
 import sqlite3
 import threading
 from http.server import ThreadingHTTPServer
+from unittest.mock import patch
 from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
@@ -180,6 +181,7 @@ def test_mcp_oauth_discovery_registration_authorize_and_token_flow(tmp_path) -> 
     assert prm["authorization_servers"] == ["https://mcp.holymedia.kz"]
     assert metadata_status == 200
     assert metadata["registration_endpoint"] == "https://mcp.holymedia.kz/oauth/register"
+    assert metadata["client_id_metadata_document_supported"] is True
     assert "S256" in metadata["code_challenge_methods_supported"]
     assert register_status == 201
     assert client["token_endpoint_auth_method"] == "none"
@@ -195,6 +197,82 @@ def test_mcp_oauth_discovery_registration_authorize_and_token_flow(tmp_path) -> 
     assert token_payload["access_token"].startswith("mcp_oauth_")
     assert reuse_status == 400
     assert reuse_payload["error"] == "invalid_grant"
+
+
+def test_mcp_oauth_chatgpt_cimd_authorize_and_token_flow(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        public_base_url="https://mcp.holymedia.kz",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    store.create_user(email="client@example.com", name="Client", password="right-password")
+    base_url, close = _serve(settings)
+    verifier = "pkce-verifier-1234567890"
+    challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).decode().rstrip("=")
+    client_id = "https://chatgpt.com/connector/oauth/metadata/holymedia-mcp.json"
+    redirect_uri = "https://chatgpt.com/connector/oauth/callback/holymedia-mcp"
+    metadata_document = {
+        "client_id": client_id,
+        "client_name": "ChatGPT HolyMedia connector",
+        "redirect_uris": [redirect_uri],
+        "grant_types": ["authorization_code"],
+        "response_types": ["code"],
+        "token_endpoint_auth_method": "none",
+    }
+    try:
+        login_status, _login_payload, cookie = _post_json(
+            base_url,
+            "/api/auth/login",
+            {"email": "client@example.com", "password": "right-password"},
+        )
+        auth_path = "/oauth/authorize?" + urlencode(
+            {
+                "response_type": "code",
+                "client_id": client_id,
+                "redirect_uri": redirect_uri,
+                "scope": "adforge:mcp",
+                "state": "state-1",
+                "code_challenge": challenge,
+                "code_challenge_method": "S256",
+            }
+        )
+        with patch(
+            "ad_mcp.web.auth_store.AuthStore._fetch_oauth_client_metadata_document",
+            return_value=metadata_document,
+        ) as fetch_metadata:
+            auth_status, auth_location = _get_redirect_location(base_url, auth_path, cookie)
+        parsed = urlparse(auth_location)
+        auth_query = parse_qs(parsed.query)
+        code = auth_query["code"][0]
+        token_status, token_payload = _post_form(
+            base_url,
+            "/oauth/token",
+            {
+                "grant_type": "authorization_code",
+                "client_id": client_id,
+                "code": code,
+                "redirect_uri": redirect_uri,
+                "code_verifier": verifier,
+            },
+        )
+    finally:
+        close()
+
+    assert login_status == 200
+    assert auth_status == 302
+    fetch_metadata.assert_called_once_with(client_id)
+    assert parsed.scheme == "https"
+    assert parsed.netloc == "chatgpt.com"
+    assert auth_query["state"] == ["state-1"]
+    assert token_status == 200
+    assert token_payload["token_type"] == "Bearer"
+    assert token_payload["access_token"].startswith("mcp_oauth_")
 
 
 def test_mcp_oauth_client_credentials_are_created_once_and_secret_is_not_relisted(tmp_path) -> None:

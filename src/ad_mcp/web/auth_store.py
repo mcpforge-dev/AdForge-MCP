@@ -14,9 +14,15 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.error import URLError
 from urllib.parse import unquote, urlparse
+from urllib.request import Request, urlopen
 
 from ad_mcp.settings import Settings
+
+
+CIMD_MAX_DOCUMENT_BYTES = 32_768
+CIMD_ALLOWED_HOST_SUFFIXES = ("chatgpt.com", "openai.com")
 
 
 class AuthStoreError(RuntimeError):
@@ -91,6 +97,12 @@ def _hash_value(value: str) -> str:
 
 def _oauth_token_hash(value: str) -> str:
     return hashlib.sha256(value.encode("utf-8")).hexdigest()
+
+
+def _host_matches_suffix(hostname: str, suffix: str) -> bool:
+    hostname = hostname.lower().strip(".")
+    suffix = suffix.lower().strip(".")
+    return hostname == suffix or hostname.endswith(f".{suffix}")
 
 
 def _normalize_email(email: str) -> str:
@@ -716,6 +728,71 @@ class AuthStore:
             "token_endpoint_auth_method": "none",
         }
 
+    def _is_supported_cimd_client_id(self, client_id: str) -> bool:
+        parsed = urlparse(client_id)
+        if parsed.scheme != "https" or not parsed.netloc or not parsed.hostname:
+            return False
+        if parsed.username or parsed.password:
+            return False
+        return any(_host_matches_suffix(parsed.hostname, suffix) for suffix in CIMD_ALLOWED_HOST_SUFFIXES)
+
+    def _fetch_oauth_client_metadata_document(self, client_id: str) -> dict[str, Any]:
+        if not self._is_supported_cimd_client_id(client_id):
+            raise AuthValidationError("OAuth CIMD client_id must be a ChatGPT/OpenAI HTTPS metadata URL.")
+        request = Request(
+            client_id,
+            headers={
+                "Accept": "application/json",
+                "User-Agent": "HolyMedia-MCP-OAuth/1.0",
+            },
+        )
+        try:
+            with urlopen(request, timeout=5) as response:  # noqa: S310 - URL is HTTPS and allowlisted above.
+                raw = response.read(CIMD_MAX_DOCUMENT_BYTES + 1)
+        except (OSError, URLError) as exc:
+            raise AuthValidationError("OAuth CIMD metadata is not reachable.") from exc
+        if len(raw) > CIMD_MAX_DOCUMENT_BYTES:
+            raise AuthValidationError("OAuth CIMD metadata is too large.")
+        try:
+            metadata = json.loads(raw.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+            raise AuthValidationError("OAuth CIMD metadata must be JSON.") from exc
+        if not isinstance(metadata, dict):
+            raise AuthValidationError("OAuth CIMD metadata must be a JSON object.")
+        return metadata
+
+    def _register_cimd_oauth_client(self, connection, *, client_id: str, redirect_uri: str) -> dict[str, Any]:
+        metadata = self._fetch_oauth_client_metadata_document(client_id)
+        if metadata.get("client_id") and str(metadata["client_id"]).strip() != client_id:
+            raise AuthValidationError("OAuth CIMD client_id does not match metadata.")
+        redirect_uris = metadata.get("redirect_uris")
+        if not isinstance(redirect_uris, list) or not redirect_uris:
+            raise AuthValidationError("OAuth CIMD metadata must include redirect_uris.")
+        normalized_redirects = [str(value or "").strip() for value in redirect_uris if str(value or "").strip()]
+        if redirect_uri not in normalized_redirects:
+            raise AuthValidationError("OAuth redirect_uri is not declared in CIMD metadata.")
+        grant_types = metadata.get("grant_types")
+        if isinstance(grant_types, list) and "authorization_code" not in grant_types:
+            raise AuthValidationError("OAuth CIMD client must support authorization_code.")
+        response_types = metadata.get("response_types")
+        if isinstance(response_types, list) and "code" not in response_types:
+            raise AuthValidationError("OAuth CIMD client must support code response_type.")
+        auth_method = str(metadata.get("token_endpoint_auth_method") or "none").strip()
+        if auth_method != "none":
+            raise AuthValidationError("OAuth CIMD currently supports public clients with token endpoint auth method none.")
+        client_name = str(metadata.get("client_name") or metadata.get("name") or "ChatGPT connector").strip()[:160]
+        timestamp = _now()
+        self._execute(
+            connection,
+            """
+            INSERT INTO mcp_oauth_clients
+              (client_id, client_name, redirect_uris_json, scope, token_endpoint_auth_method, created_at)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """,
+            (client_id, client_name, json.dumps(normalized_redirects), "adforge:mcp", "none", timestamp),
+        )
+        return {"redirect_uris_json": json.dumps(normalized_redirects)}
+
     def mcp_oauth_client_summary(self, user_id: str) -> dict[str, Any]:
         with self._connect() as connection:
             row = self._query_one(
@@ -796,6 +873,8 @@ class AuthStore:
         code_challenge_method: str,
     ) -> str:
         scope = self._normalize_mcp_oauth_scope(scope)
+        client_id = client_id.strip()
+        redirect_uri = redirect_uri.strip()
         code_challenge = code_challenge.strip()
         if not code_challenge:
             raise AuthValidationError("OAuth PKCE code_challenge обязателен.")
@@ -804,7 +883,9 @@ class AuthStore:
         with self._connect() as connection:
             client = self._query_one(connection, "SELECT redirect_uris_json FROM mcp_oauth_clients WHERE client_id = ?", (client_id,))
             if not client:
-                raise AuthValidationError("OAuth client не зарегистрирован.")
+                if not self._is_supported_cimd_client_id(client_id):
+                    raise AuthValidationError("OAuth client не зарегистрирован.")
+                client = self._register_cimd_oauth_client(connection, client_id=client_id, redirect_uri=redirect_uri)
             redirect_uris = json.loads(str(client.get("redirect_uris_json") or "[]"))
             if redirect_uri not in redirect_uris:
                 raise AuthValidationError("OAuth redirect_uri не зарегистрирован для client_id.")

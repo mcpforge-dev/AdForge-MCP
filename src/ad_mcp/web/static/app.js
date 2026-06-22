@@ -542,14 +542,14 @@
       if (!url || url === "—") return;
       await copyText(url);
       markMcpUrlCopied();
-      showClientMessage("MCP URL скопирован", "Теперь перейдите в раздел MCP, создайте ключ доступа и добавьте сервер в Codex или Claude.", "success");
+      showClientMessage("MCP URL скопирован", "Теперь перейдите в раздел MCP и выберите инструкцию для Codex, Claude или ChatGPT.", "success");
     });
     el.copyMcpUrlPanel.addEventListener("click", async () => {
       const url = el.mcpUrlPanel.textContent.trim();
       if (!url || url === "—") return;
       await copyText(url);
       markMcpUrlCopied();
-      showClientMessage("MCP URL скопирован", "Вставьте этот URL при добавлении remote MCP server в Codex или Claude.", "success");
+      showClientMessage("MCP URL скопирован", "Вставьте этот URL при добавлении remote MCP server в Codex, Claude или ChatGPT.", "success");
     });
     el.copyMcpToken.addEventListener("click", async () => {
       const token = el.mcpTokenRaw.textContent.trim();
@@ -676,7 +676,7 @@
       body: `
         <div class="welcome-card">
           <strong>${isRegister ? "Что сделать дальше" : "Быстрый старт"}</strong>
-          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте HolyMedia MCP в Codex или Claude." : "Если нужно проверить кабинеты, откройте раздел подключений. Все опасные действия остаются в безопасном preview-режиме."}</span>
+          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте HolyMedia MCP в Codex, Claude или ChatGPT." : "Если нужно проверить кабинеты, откройте раздел подключений. Все опасные действия остаются в безопасном preview-режиме."}</span>
         </div>
       `,
       closeLabel: "",
@@ -1117,7 +1117,7 @@
       { text: "Подключите рекламную платформу", done: connectedPlatforms.length > 0 || hasPending(platforms) },
       { text: "Выберите рекламные аккаунты", done: connectedAccounts > 0 },
       { text: "Скопируйте MCP URL", done: state.mcpUrlCopied },
-      { text: "Подключите HolyMedia MCP в Codex или Claude", done: false },
+      { text: "Подключите HolyMedia MCP в Codex, Claude или ChatGPT", done: false },
       { text: "Перезапустите MCP / откройте новый чат", done: false },
       { text: "Задайте AI первый вопрос по аккаунтам, кампаниям или метрикам", done: false },
     ];

@@ -27,7 +27,7 @@
         <div class="hero__copy">
           <span class="eyebrow">AI-помощник для рекламных кабинетов</span>
           <h1>Управляйте рекламой через AI без ручных выгрузок</h1>
-          <p>HolyMedia MCP подключает ваши рекламные кабинеты к Codex или Claude. После настройки можно просто спросить AI о кампаниях, бюджетах, статусах и базовых метриках, а сервис безопасно покажет данные из подключённых платформ.</p>
+          <p>HolyMedia MCP подключает ваши рекламные кабинеты к Codex, Claude или ChatGPT. После настройки можно просто спросить AI о кампаниях, бюджетах, статусах и базовых метриках, а сервис безопасно покажет данные из подключённых платформ.</p>
           <div class="hero__actions">
             <button type="button" class="btn btn--primary" data-auth-open="register">Зарегистрироваться</button>
             <button type="button" class="btn btn--secondary" data-auth-open="login">Войти</button>
@@ -36,7 +36,7 @@
             <span>Подключение через сайт</span>
             <span>Личный доступ для AI</span>
             <span>Безопасный preview-режим</span>
-            <span>Codex и Claude</span>
+            <span>Codex, Claude и ChatGPT</span>
           </div>
         </div>
         <div class="hero__visual" aria-label="Схема подключения">
@@ -52,7 +52,7 @@
           <div class="flow-arrow" aria-hidden="true">→</div>
           <div class="flow-card flow-card--target">
             <strong>AI-клиент</strong>
-            <span>Codex · Claude · ваш рабочий чат</span>
+            <span>Codex · Claude · ChatGPT · ваш рабочий чат</span>
           </div>
         </div>
       </section>
@@ -216,7 +216,7 @@
           </article>
           <article class="card mcp-card">
             <h3 class="card__title">Подключение к AI-клиенту</h3>
-            <p class="card__hint">Скопируйте MCP URL, создайте ключ доступа в разделе MCP и добавьте сервер в Codex, Claude или другой совместимый AI-клиент.</p>
+            <p class="card__hint">Скопируйте MCP URL, выберите AI-клиент в разделе MCP и добавьте сервер в Codex, Claude или ChatGPT.</p>
             <div class="mcp-url-row">
               <code id="mcp-url" class="mcp-url">—</code>
               <button id="copy-mcp-url" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
@@ -233,7 +233,7 @@
       <section id="section-mcp" class="section" data-section="mcp" hidden>
         <div class="section-head">
           <h2>Подключение к AI-клиенту</h2>
-          <p class="section-head__sub">Создайте ключ доступа и добавьте hosted MCP server в Codex или Claude. Для ChatGPT Apps нужен отдельный OAuth-сценарий, поэтому raw token туда не вставляем.</p>
+          <p class="section-head__sub">Добавьте hosted MCP server в Codex, Claude или ChatGPT. Для Codex нужен персональный Bearer token, а Claude и ChatGPT подключаются через OAuth.</p>
         </div>
         <article class="card mcp-card">
           <h3 class="card__title">1. Скопируйте MCP URL</h3>
@@ -267,10 +267,10 @@
                 <h4>Claude</h4>
                 <p>Claude.ai custom connector подключается через OAuth discovery и вход в HolyMedia MCP.</p>
               </button>
-              <button type="button" class="client-card client-card--blocked" role="tab" aria-selected="false" data-mcp-client-tab="chatgpt">
-                <span class="client-card__badge client-card__badge--warn">Нужен OAuth</span>
+              <button type="button" class="client-card" role="tab" aria-selected="false" data-mcp-client-tab="chatgpt">
+                <span class="client-card__badge client-card__badge--ok">OAuth CIMD готов</span>
                 <h4>ChatGPT</h4>
-                <p>Для полноценного ChatGPT Apps/connector подключения нужен OAuth 2.1. Мы не открываем /mcp без auth и не просим вставлять raw token в небезопасное место.</p>
+                <p>ChatGPT custom connector подключается через OAuth 2.1, PKCE и Client ID Metadata Document. Raw token туда не вставляем.</p>
               </button>
             </div>
           </div>
@@ -319,9 +319,17 @@
           <div class="setup-card ai-client-panel" data-mcp-client-panel="chatgpt" role="tabpanel" hidden>
             <h3 class="card__title">3. Подключение ChatGPT</h3>
             <div class="ai-client-notes">
-              <p><strong>ChatGPT Apps/connector:</strong> для пользовательских рекламных данных нужен OAuth 2.1. Мы не будем делать no-auth endpoint и не будем просить клиента вставлять raw token в небезопасное место.</p>
-              <p><strong>Безопасный путь:</strong> OAuth authorization server, PKCE, scopes, revoke/rotate, audit и отдельное тестирование ChatGPT Developer Mode / Apps flow.</p>
-              <p><strong>Сейчас:</strong> используйте Codex, либо Claude/API-клиент с Bearer token. `/mcp` остаётся закрытым и без token отвечает 401.</p>
+              <p><strong>Важно:</strong> в поле URL вставляйте полный MCP endpoint <code>https://mcp.holymedia.kz/mcp</code>, не корень домена.</p>
+              <div class="client-fields">
+                <div><span>Название</span><code>HolyMedia MCP</code></div>
+                <div><span>Подключение</span><code>URL-адрес сервера</code></div>
+                <div><span>URL</span><code>https://mcp.holymedia.kz/mcp</code></div>
+                <div><span>Аутентификация</span><code>OAuth</code></div>
+                <div><span>Регистрация клиента</span><code>Client ID Metadata Document / CIMD</code></div>
+                <div><span>Token endpoint auth</span><code>none</code></div>
+              </div>
+              <p><strong>Как это работает:</strong> ChatGPT сам передаст metadata URL как <code>client_id</code>, HolyMedia MCP проверит redirect URI, откроет вход в ваш кабинет и выдаст access token через PKCE.</p>
+              <p><strong>Если ChatGPT пишет, что CIMD недоступен:</strong> обновите страницу настройки connector после деплоя и убедитесь, что URL указан с <code>/mcp</code>.</p>
             </div>
           </div>
           <div class="callout">

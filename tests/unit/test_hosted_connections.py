@@ -40,9 +40,10 @@ def test_mcp_connection_info_exposes_safe_ai_client_compatibility(tmp_path: Path
 
     assert clients["codex"]["status"] == "ready"
     assert clients["claude"]["status"] == "oauth_ready"
-    assert clients["chatgpt"]["status"] == "oauth_required"
-    assert clients["chatgpt"]["self_serve_ready"] is False
-    assert info["chatgpt_oauth_required"] is True
+    assert clients["chatgpt"]["status"] == "oauth_cimd_ready"
+    assert clients["chatgpt"]["self_serve_ready"] is True
+    assert info["chatgpt_oauth_required"] is False
+    assert info["chatgpt_cimd_supported"] is True
     assert "personal_mcp_token" in text
     assert "beta_token" not in text
     assert "client_secret" not in text

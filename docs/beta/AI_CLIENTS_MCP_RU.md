@@ -67,21 +67,33 @@ ADFORGE_MCP_CLIENT_TOKEN
 
 ## ChatGPT
 
-Статус: базовый OAuth 2.1 слой для remote MCP добавлен; ChatGPT Apps/connector всё равно нужно отдельно проверить в Developer Mode.
+Статус: готово для проверки через ChatGPT custom connector, OAuth 2.1, PKCE и Client ID Metadata Document (CIMD).
 
-Текущий hosted endpoint технически является remote MCP server, но для пользовательских рекламных данных нельзя делать небезопасный no-auth connector и нельзя просить клиента вставлять raw MCP token в неподходящее поле ChatGPT Apps.
+В ChatGPT форме `Новое приложение` / `Add custom connector`:
 
-Безопасный production-путь:
+1. `Название`: `HolyMedia MCP`.
+2. `Подключение`: `URL-адрес сервера`.
+3. `URL`: `https://mcp.holymedia.kz/mcp`.
+4. `Аутентификация`: `OAuth`.
+5. В `Расширенные настройки OAuth` выбрать регистрацию клиента через `Client ID Metadata Document` / `CIMD`, если ChatGPT показывает такой вариант.
+6. `Метод аутентификации конечной точки токена`: `none`.
+7. `OAuth Client ID` и `OAuth Client Secret` вручную не заполнять, если выбран CIMD.
 
-- добавить OAuth authorization server;
-- опубликовать protected resource metadata;
-- поддержать authorization-code flow с PKCE;
-- добавить scopes для read/preview-действий;
-- хранить и ротировать access/refresh tokens безопасно;
-- добавить revoke/logout и audit events;
-- пройти тестирование ChatGPT Apps/connector flow.
+Как работает подключение:
 
-До этого клиентский self-serve сценарий поддерживается через Codex и Claude-клиенты, которые умеют remote MCP URL + Bearer token.
+1. ChatGPT читает protected resource metadata и authorization server metadata HolyMedia MCP.
+2. ChatGPT передаёт HTTPS metadata URL как `client_id`.
+3. HolyMedia MCP скачивает этот metadata document только с allowlisted доменов ChatGPT/OpenAI, проверяет `redirect_uris` и регистрирует client.
+4. При первом использовании ChatGPT открывает вход в HolyMedia MCP.
+5. После входа HolyMedia MCP выдаёт authorization code, а ChatGPT меняет его на access token через PKCE.
+6. `/mcp` остаётся закрытым: без Bearer token endpoint отвечает `401`.
+
+Если ChatGPT пишет `CIMD недоступен`:
+
+- проверьте, что URL указан именно `https://mcp.holymedia.kz/mcp`, а не `https://mcp.holymedia.kz/`;
+- обновите окно создания connector после deploy;
+- проверьте `https://mcp.holymedia.kz/.well-known/oauth-authorization-server`: там должно быть `client_id_metadata_document_supported: true`;
+- если connector с таким URL уже существует, удалите старую попытку и создайте новую.
 
 ## Проверочные вопросы после подключения
 
