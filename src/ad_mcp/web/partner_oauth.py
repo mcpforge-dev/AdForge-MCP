@@ -27,6 +27,41 @@ def _redact_oauth_error(text: str) -> str:
     return redact_secret_text(text)
 
 
+def _http_error_detail(exc: httpx.HTTPError) -> str:
+    if not isinstance(exc, httpx.HTTPStatusError):
+        return _redact_oauth_error(str(exc))
+    response = exc.response
+    parts: list[str] = [f"HTTP {response.status_code}"]
+    try:
+        payload = response.json()
+    except ValueError:
+        payload = None
+    if isinstance(payload, dict):
+        error = payload.get("error")
+        if isinstance(error, dict):
+            for key in ("status", "message"):
+                value = str(error.get(key) or "").strip()
+                if value:
+                    parts.append(f"{key}={value}")
+            details = error.get("details")
+            if isinstance(details, list):
+                reasons = []
+                for detail in details:
+                    if isinstance(detail, dict):
+                        for item in detail.get("errors", []) or []:
+                            if isinstance(item, dict) and item.get("errorCode"):
+                                reasons.append(str(item["errorCode"]))
+                if reasons:
+                    parts.append(f"details={'; '.join(reasons[:3])}")
+        elif error:
+            parts.append(str(error))
+    else:
+        body = response.text.strip()
+        if body:
+            parts.append(body[:280])
+    return _redact_oauth_error(" | ".join(parts))
+
+
 def _b64_encode(payload: bytes) -> str:
     return base64.urlsafe_b64encode(payload).decode("ascii").rstrip("=")
 
@@ -165,7 +200,7 @@ class BasePartnerOAuthService(ABC):
             response.raise_for_status()
             payload = response.json()
         except httpx.HTTPError as exc:
-            raise PartnerOAuthError(f"{self.provider} OAuth GET failed: {_redact_oauth_error(str(exc))}") from exc
+            raise PartnerOAuthError(f"{self.provider} OAuth GET failed: {_http_error_detail(exc)}") from exc
         finally:
             if close_client:
                 client.close()
@@ -187,7 +222,7 @@ class BasePartnerOAuthService(ABC):
             response.raise_for_status()
             payload = response.json()
         except httpx.HTTPError as exc:
-            raise PartnerOAuthError(f"{self.provider} OAuth POST failed: {_redact_oauth_error(str(exc))}") from exc
+            raise PartnerOAuthError(f"{self.provider} OAuth POST failed: {_http_error_detail(exc)}") from exc
         finally:
             if close_client:
                 client.close()
@@ -286,13 +321,21 @@ class GoogleOAuthService(BasePartnerOAuthService):
 
     def _fetch_accessible_customers(self, access_token: str) -> list[dict[str, Any]]:
         version = (self._settings.google_ads_api_version.strip() or "v20").lstrip("/")
-        payload = self._get_json(
-            f"https://googleads.googleapis.com/{version}/customers:listAccessibleCustomers",
-            headers={
-                "Authorization": f"Bearer {access_token}",
-                "developer-token": self._settings.google_ads_developer_token.strip(),
-            },
-        )
+        try:
+            payload = self._get_json(
+                f"https://googleads.googleapis.com/{version}/customers:listAccessibleCustomers",
+                headers={
+                    "Authorization": f"Bearer {access_token}",
+                    "developer-token": self._settings.google_ads_developer_token.strip(),
+                },
+            )
+        except PartnerOAuthError as exc:
+            raise PartnerOAuthError(
+                "Google OAuth прошёл, но Google Ads API отклонил запрос списка аккаунтов. "
+                "Проверьте в Google Ads API Center, что developer token активен и имеет доступ "
+                "к production-аккаунтам (Explorer, Basic или Standard Access), а не только Test Account Access. "
+                f"Техническая причина: {exc}"
+            ) from exc
         accounts_by_id: dict[str, dict[str, Any]] = {}
         for resource_name in payload.get("resourceNames", []) or []:
             customer_id = str(resource_name).split("/")[-1].strip()

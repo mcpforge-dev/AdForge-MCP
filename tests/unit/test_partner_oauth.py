@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from urllib.parse import parse_qs, urlparse
 
+import httpx
 import pytest
 
 from ad_mcp.settings import Settings
@@ -19,9 +20,32 @@ class _FakeResponse:
         return self._payload
 
 
+class _FailingGoogleAdsResponse:
+    status_code = 400
+
+    def __init__(self, url: str) -> None:
+        self._url = url
+        self.text = '{"error":{"status":"INVALID_ARGUMENT","message":"Developer token is not approved."}}'
+
+    def raise_for_status(self) -> None:
+        raise httpx.HTTPStatusError(
+            "Client error '400 Bad Request'",
+            request=httpx.Request("GET", self._url),
+            response=httpx.Response(
+                self.status_code,
+                request=httpx.Request("GET", self._url),
+                json={"error": {"status": "INVALID_ARGUMENT", "message": "Developer token is not approved."}},
+            ),
+        )
+
+    def json(self) -> dict:
+        return {"error": {"status": "INVALID_ARGUMENT", "message": "Developer token is not approved."}}
+
+
 class _FakePartnerHTTP:
-    def __init__(self) -> None:
+    def __init__(self, *, fail_google_accessible_customers: bool = False) -> None:
         self.calls: list[tuple[str, str, dict | None, dict | None, dict | None]] = []
+        self.fail_google_accessible_customers = fail_google_accessible_customers
 
     def post(self, url: str, data: dict | None = None, json: dict | None = None, headers: dict | None = None) -> _FakeResponse:  # noqa: A002
         self.calls.append(("POST", url, data, json, headers))
@@ -79,6 +103,8 @@ class _FakePartnerHTTP:
         if url == "https://googleads.googleapis.com/v20/customers:listAccessibleCustomers":
             assert headers and headers["Authorization"] == "Bearer google-access"
             assert headers["developer-token"] == "google-dev-token"
+            if self.fail_google_accessible_customers:
+                return _FailingGoogleAdsResponse(url)  # type: ignore[return-value]
             return _FakeResponse({"resourceNames": ["customers/1234567890", "customers/9876543210"]})
         if url == "https://business-api.tiktok.com/open_api/v1.3/oauth2/advertiser/get/":
             assert headers and headers["Access-Token"] == "tiktok-access"
@@ -126,6 +152,22 @@ def test_google_oauth_discovers_customers_and_select_saves_credentials(tmp_path)
     assert selected["accounts"][0]["account_id"] == "1234567890"
     assert stored["accounts"][0]["refresh_token"] == "google-refresh"
     assert stored["accounts"][0]["developer_token"] == "google-dev-token"
+
+
+def test_google_oauth_explains_list_accessible_customers_failure(tmp_path) -> None:
+    http = _FakePartnerHTTP(fail_google_accessible_customers=True)
+    service = GoogleOAuthService(_settings(tmp_path), http)
+    state = parse_qs(urlparse(service.authorization_url()).query)["state"][0]
+
+    with pytest.raises(PartnerOAuthError) as exc:
+        service.handle_callback({"code": "google-code", "state": state})
+
+    message = str(exc.value)
+    assert "Google OAuth прошёл" in message
+    assert "developer token" in message
+    assert "production" in message
+    assert "INVALID_ARGUMENT" in message
+    assert "Developer token is not approved" in message
 
 
 def test_tiktok_oauth_discovers_advertiser_and_select_saves_credentials(tmp_path) -> None:
