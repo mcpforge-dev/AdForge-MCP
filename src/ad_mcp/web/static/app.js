@@ -25,7 +25,7 @@
     yandex_direct: "Кабинеты, кампании и базовые данные из Yandex Direct после подключения.",
   };
 
-  const TEST_MODE = new Set(["meta_ads", "google_ads"]);
+  const TEST_MODE = new Set();
 
   const state = {
     section: "overview",
