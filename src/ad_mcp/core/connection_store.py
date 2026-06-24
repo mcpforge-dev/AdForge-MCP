@@ -46,6 +46,9 @@ SAFE_ACCOUNT_KEYS = (
     "scope",
     "currency",
     "timezone_name",
+    "yandex_archived",
+    "selection_disabled",
+    "disabled_reason",
     "status",
 )
 
@@ -116,6 +119,30 @@ def _stored_account(provider: str, account: dict[str, Any]) -> dict[str, Any]:
     if credentials:
         stored["credentials"] = credentials
     return stored
+
+
+def _safe_pending_metadata(metadata: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(metadata, dict):
+        return {}
+    safe: dict[str, Any] = {}
+    for key, value in metadata.items():
+        if key in SECRET_KEYS:
+            continue
+        if isinstance(value, (str, int, float, bool)) or value is None:
+            safe[str(key)] = value
+        elif isinstance(value, list):
+            safe[str(key)] = [
+                item
+                for item in value
+                if isinstance(item, (str, int, float, bool)) or item is None
+            ]
+    return safe
+
+
+def _account_selection_disabled(account: dict[str, Any]) -> bool:
+    if bool(account.get("selection_disabled")):
+        return True
+    return str(account.get("yandex_archived") or "").strip().upper() == "YES"
 
 
 def _clean_scope_id(value: str | None) -> str | None:
@@ -199,6 +226,7 @@ class HostedConnectionStore:
                     "pending_id": str(pending_id),
                     "status": "expired" if expired else "pending_account_selection",
                     "expires_at": pending.get("expires_at"),
+                    "metadata": _safe_pending_metadata(pending.get("metadata")),
                     "accounts": [
                         safe_account_summary(_runtime_account(provider, account))
                         for account in accounts
@@ -268,6 +296,7 @@ class HostedConnectionStore:
         source: str = "dashboard_oauth",
         workspace_id: str | None = None,
         user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if provider not in PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
@@ -293,6 +322,7 @@ class HostedConnectionStore:
             "created_at": _now_iso(),
             "expires_at": _expires_iso(ttl_seconds),
             "credentials": dict(credentials),
+            "metadata": _safe_pending_metadata(metadata),
             "accounts": stored_accounts,
         }
         data["version"] = int(data.get("version") or 1)
@@ -360,6 +390,7 @@ class HostedConnectionStore:
             "pending_id": pending_id,
             "status": "pending_account_selection",
             "expires_at": pending.get("expires_at"),
+            "metadata": _safe_pending_metadata(pending.get("metadata")),
             "accounts": [safe_account_summary(_runtime_account(provider, account)) for account in accounts if isinstance(account, dict)],
         }
 
@@ -382,7 +413,7 @@ class HostedConnectionStore:
                 continue
             runtime_account = _runtime_account(provider, stored_account)
             account_id = str(runtime_account.get("account_id", "") or "").strip()
-            if account_id in selected_ids:
+            if account_id in selected_ids and not _account_selection_disabled(runtime_account):
                 account = dict(runtime_account)
                 account.update(credentials)
                 account["status"] = account.get("status") or "connected"

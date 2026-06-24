@@ -297,3 +297,37 @@ def test_select_pending_accounts_clears_stale_provider_pending_records(tmp_path:
     assert selected["status"] == "connected"
     assert store.pending_selections("yandex_direct") == []
     assert store.safe_provider_status("yandex_direct")["accounts"][0]["account_id"] == "client-login"
+
+
+def test_oauth_pending_metadata_is_safe_and_archived_accounts_are_not_selected(tmp_path: Path) -> None:
+    store = HostedConnectionStore(tmp_path / "connections.json")
+    pending = store.save_oauth_pending(
+        "yandex_direct",
+        [
+            {"name": "Active Yandex Client", "account_id": "active-login", "direct_client_login": "active-login"},
+            {
+                "name": "Archived Yandex Client",
+                "account_id": "archived-login",
+                "direct_client_login": "archived-login",
+                "yandex_archived": "YES",
+                "selection_disabled": True,
+                "disabled_reason": "Архивный/отключённый кабинет",
+            },
+        ],
+        credentials={"access_token": "access-token"},
+        metadata={
+            "api_clients_returned": 2,
+            "archived_clients": 1,
+            "fallback_used": False,
+            "access_token": "must-not-leak",
+        },
+    )
+
+    pending_again = store.pending_selection("yandex_direct", pending["pending_id"])
+    selected = store.select_pending_accounts("yandex_direct", pending["pending_id"], ["active-login", "archived-login"])
+
+    assert pending_again["metadata"] == {"api_clients_returned": 2, "archived_clients": 1, "fallback_used": False}
+    archived = next(account for account in pending_again["accounts"] if account["account_id"] == "archived-login")
+    assert archived["selection_disabled"] == "True"
+    assert archived["disabled_reason"] == "Архивный/отключённый кабинет"
+    assert [account["account_id"] for account in selected["accounts"]] == ["active-login"]

@@ -581,11 +581,13 @@ class YandexOAuthService(BasePartnerOAuthService):
         refresh_token = str(token_payload.get("refresh_token", "") or "").strip()
         if not access_token:
             raise PartnerOAuthError("Yandex OAuth token exchange did not return access_token.")
-        accounts = self._fetch_direct_clients(access_token)
+        accounts, discovery_metadata = self._fetch_direct_clients(access_token)
         if not accounts:
             account_id = self._settings.yandex_direct_client_login.strip() or self._settings.yandex_direct_login.strip()
             if not account_id:
                 raise PartnerOAuthError("Yandex Direct clients were not returned and AD_MCP_YANDEX_DIRECT_CLIENT_LOGIN is not configured.")
+            discovery_metadata["fallback_used"] = True
+            discovery_metadata["fallback_reason"] = "clients_get_returned_no_accounts"
             accounts = [
                 {
                     "name": f"Yandex Direct {account_id}",
@@ -596,6 +598,8 @@ class YandexOAuthService(BasePartnerOAuthService):
                     "status": "connected",
                 }
             ]
+        else:
+            discovery_metadata["fallback_used"] = False
         pending = self._store.save_oauth_pending(
             self.provider,
             accounts,
@@ -609,10 +613,17 @@ class YandexOAuthService(BasePartnerOAuthService):
             source="yandex_oauth",
             workspace_id=str(state_payload.get("workspace_id") or "") or None,
             user_id=str(state_payload.get("user_id") or "") or None,
+            metadata=discovery_metadata,
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
 
-    def _fetch_direct_clients(self, access_token: str) -> list[dict[str, Any]]:
+    def _fetch_direct_clients(self, access_token: str) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        metadata: dict[str, Any] = {
+            "api_clients_returned": 0,
+            "archived_clients": 0,
+            "active_clients": 0,
+            "fallback_used": False,
+        }
         try:
             payload = self._post_json(
                 self._settings.yandex_direct_clients_url.strip(),
@@ -623,12 +634,18 @@ class YandexOAuthService(BasePartnerOAuthService):
                     "Content-Type": "application/json; charset=utf-8",
                 },
             )
-        except PartnerOAuthError:
-            return []
+        except PartnerOAuthError as exc:
+            metadata["api_error"] = str(exc)
+            return [], metadata
         if not isinstance(payload, dict):
-            return []
+            metadata["api_error"] = "clients_get_returned_non_object"
+            return [], metadata
         result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
         clients = result.get("Clients") if isinstance(result, dict) else []
+        if not isinstance(clients, list):
+            metadata["api_error"] = "clients_get_clients_not_list"
+            return [], metadata
+        metadata["api_clients_returned"] = len(clients)
         accounts: list[dict[str, Any]] = []
         for client in clients or []:
             if not isinstance(client, dict):
@@ -636,6 +653,11 @@ class YandexOAuthService(BasePartnerOAuthService):
             login = str(client.get("Login") or "").strip()
             if not login:
                 continue
+            archived = str(client.get("Archived") or "").strip().upper() == "YES"
+            if archived:
+                metadata["archived_clients"] = int(metadata["archived_clients"]) + 1
+            else:
+                metadata["active_clients"] = int(metadata["active_clients"]) + 1
             accounts.append(
                 {
                     "name": client.get("ClientInfo") or f"Yandex Direct {login}",
@@ -645,10 +667,12 @@ class YandexOAuthService(BasePartnerOAuthService):
                     "scope": self._settings.yandex_oauth_scope.strip(),
                     "currency": client.get("Currency"),
                     "yandex_archived": client.get("Archived"),
-                    "status": "connected",
+                    "selection_disabled": archived,
+                    "disabled_reason": "Архивный/отключённый кабинет" if archived else "",
+                    "status": "archived" if archived else "connected",
                 }
             )
-        return accounts
+        return accounts, metadata
 
     def _exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
         return self._post_json(

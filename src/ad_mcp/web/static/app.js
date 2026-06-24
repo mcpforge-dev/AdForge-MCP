@@ -1277,38 +1277,67 @@
 
   function renderPendingPanel(pending) {
     const accounts = pending.accounts || [];
+    const activeAccounts = accounts.filter((account) => !isPendingAccountDisabled(account));
     const options = accounts.length
       ? accounts.map(renderPendingOption).join("")
       : emptyState("Аккаунты не найдены. Проверьте, что у пользователя есть доступ к рекламному кабинету.");
     return `
         <form id="pending-form" data-provider="${escAttr(pending.provider)}" data-pending-id="${escAttr(pending.pending_id)}">
+          ${renderPendingDiagnostics(pending)}
           ${accounts.length ? `
           <div class="pending-toolbar">
             <label class="pending-select-all">
-              <input type="checkbox" data-select-all checked>
+              <input type="checkbox" data-select-all ${activeAccounts.length ? "checked" : "disabled"}>
               <span>Все</span>
             </label>
             <button type="button" class="btn btn--ghost btn--small" data-clear-pending>Снять все</button>
-            <span class="pending-count" data-pending-count>Выбрано ${accounts.length} из ${accounts.length}</span>
+            <span class="pending-count" data-pending-count>Выбрано ${activeAccounts.length} из ${activeAccounts.length}</span>
           </div>
           ` : ""}
           <div class="pending-list">${options}</div>
           <div class="pending-actions">
-            <button type="submit" class="btn btn--primary" ${accounts.length ? "" : "disabled"}>Подключить выбранные</button>
+            <button type="submit" class="btn btn--primary" ${activeAccounts.length ? "" : "disabled"}>Подключить выбранные</button>
             <button type="button" class="btn btn--ghost" data-cancel-pending>Закрыть</button>
           </div>
         </form>
     `;
   }
 
+  function renderPendingDiagnostics(pending) {
+    const meta = pending?.metadata || {};
+    if (pending.provider !== "yandex_direct" || !Object.keys(meta).length) return "";
+    const returned = Number(meta.api_clients_returned ?? 0);
+    const archived = Number(meta.archived_clients ?? 0);
+    const active = Number(meta.active_clients ?? Math.max(0, returned - archived));
+    const fallback = meta.fallback_used === true || meta.fallback_used === "true";
+    return `
+      <div class="pending-diagnostics">
+        <strong>Диагностика Yandex Direct</strong>
+        <span>API вернул клиентов: ${esc(returned)}</span>
+        <span>Активных: ${esc(active)}</span>
+        <span>Архивных/отключённых: ${esc(archived)}</span>
+        <span>Fallback использован: ${fallback ? "да" : "нет"}</span>
+        ${returned === 0 && !fallback ? `<small>Yandex API не вернул кабинеты. Проверьте права пользователя или агентский доступ в Yandex Direct.</small>` : ""}
+      </div>
+    `;
+  }
+
+  function isPendingAccountDisabled(account) {
+    const archived = String(account?.yandex_archived || "").toUpperCase() === "YES";
+    const disabled = account?.selection_disabled === true || String(account?.selection_disabled || "").toLowerCase() === "true";
+    return archived || disabled || account?.status === "archived";
+  }
+
   function renderPendingOption(account) {
     const id = account.account_id || account.customer_id || account.advertiser_id || account.direct_client_login || "";
+    const disabled = isPendingAccountDisabled(account);
+    const reason = account.disabled_reason || (disabled ? "Архивный/отключённый кабинет" : "");
     return `
-      <label class="pending-option">
-        <input type="checkbox" name="account_id" value="${escAttr(id)}" checked>
+      <label class="pending-option ${disabled ? "pending-option--disabled" : ""}">
+        <input type="checkbox" name="account_id" value="${escAttr(id)}" ${disabled ? "disabled" : "checked"}>
         <span>
           <span class="pending-option__name">${esc(account.name || id || "Аккаунт")}</span>
-          <span class="pending-option__id">${esc(id)}</span>
+          <span class="pending-option__id">${esc(id)}${reason ? ` · ${esc(reason)}` : ""}</span>
         </span>
       </label>
     `;
@@ -1376,12 +1405,18 @@
   }
 
   function bindPendingSelectionControls(form) {
-    const checkboxes = Array.from(form.querySelectorAll("input[name='account_id']"));
+    const checkboxes = Array.from(form.querySelectorAll("input[name='account_id']:not(:disabled)"));
     const selectAll = form.querySelector("[data-select-all]");
     const clearButton = form.querySelector("[data-clear-pending]");
     const count = form.querySelector("[data-pending-count]");
     const submit = form.querySelector("button[type='submit']");
-    if (!checkboxes.length) return;
+    if (!checkboxes.length) {
+      if (selectAll) selectAll.disabled = true;
+      if (clearButton) clearButton.disabled = true;
+      if (count) count.textContent = "Нет активных кабинетов для выбора";
+      if (submit) submit.disabled = true;
+      return;
+    }
 
     const sync = () => {
       const selected = checkboxes.filter((input) => input.checked).length;

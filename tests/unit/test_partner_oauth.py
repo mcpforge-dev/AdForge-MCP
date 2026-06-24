@@ -43,9 +43,10 @@ class _FailingGoogleAdsResponse:
 
 
 class _FakePartnerHTTP:
-    def __init__(self, *, fail_google_accessible_customers: bool = False) -> None:
+    def __init__(self, *, fail_google_accessible_customers: bool = False, yandex_clients: list[dict] | None = None) -> None:
         self.calls: list[tuple[str, str, dict | None, dict | None, dict | None]] = []
         self.fail_google_accessible_customers = fail_google_accessible_customers
+        self.yandex_clients = yandex_clients
 
     def post(self, url: str, data: dict | None = None, json: dict | None = None, headers: dict | None = None) -> _FakeResponse:  # noqa: A002
         self.calls.append(("POST", url, data, json, headers))
@@ -85,7 +86,9 @@ class _FakePartnerHTTP:
             return _FakeResponse(
                 {
                     "result": {
-                        "Clients": [
+                        "Clients": self.yandex_clients
+                        if self.yandex_clients is not None
+                        else [
                             {
                                 "Login": "client-from-api",
                                 "ClientInfo": "Yandex API Client",
@@ -203,12 +206,50 @@ def test_yandex_oauth_uses_configured_direct_client_login(tmp_path) -> None:
     stored = service._store.provider_config("yandex_direct")  # noqa: SLF001
 
     assert pending["account_count"] == 1
+    assert pending["metadata"]["api_clients_returned"] == 1
+    assert pending["metadata"]["archived_clients"] == 0
+    assert pending["metadata"]["fallback_used"] is False
     assert pending["accounts"][0]["direct_client_login"] == "client-from-api"
     assert "yandex-access" not in str(selected)
     assert selected["accounts"][0]["account_id"] == "client-from-api"
     assert selected["accounts"][0]["currency"] == "KZT"
     assert stored["accounts"][0]["access_token"] == "yandex-access"
     assert stored["accounts"][0]["oauth_client_secret"] == "yandex-client-secret"
+
+
+def test_yandex_oauth_marks_archived_clients_as_disabled(tmp_path) -> None:
+    http = _FakePartnerHTTP(
+        yandex_clients=[
+            {
+                "Login": "active-client",
+                "ClientInfo": "Active Client",
+                "Currency": "KZT",
+                "Archived": "NO",
+            },
+            {
+                "Login": "archived-client",
+                "ClientInfo": "Archived Client",
+                "Currency": "KZT",
+                "Archived": "YES",
+            },
+        ]
+    )
+    service = YandexOAuthService(_settings(tmp_path), http)
+    state = parse_qs(urlparse(service.authorization_url()).query)["state"][0]
+
+    pending = service.handle_callback({"code": "yandex-code", "state": state})
+
+    assert pending["account_count"] == 2
+    assert pending["metadata"]["api_clients_returned"] == 2
+    assert pending["metadata"]["active_clients"] == 1
+    assert pending["metadata"]["archived_clients"] == 1
+    archived = next(account for account in pending["accounts"] if account["account_id"] == "archived-client")
+    assert archived["status"] == "archived"
+    assert archived["selection_disabled"] == "True"
+    assert archived["yandex_archived"] == "YES"
+
+    selected = service.select_accounts(pending["pending_id"], ["active-client", "archived-client"])
+    assert [account["account_id"] for account in selected["accounts"]] == ["active-client"]
 
 
 def test_partner_oauth_rejects_tampered_state(tmp_path) -> None:
