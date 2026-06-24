@@ -273,6 +273,66 @@ class AuthStore:
             )
         return AuthUser(user_id, email, name, role, status, workspace_id)
 
+    def find_or_create_google_user(self, *, email: str, name: str = "") -> tuple[AuthUser, bool]:
+        email = _normalize_email(email)
+        name = name.strip() or email
+        if "@" not in email:
+            raise AuthValidationError("Введите корректный email.")
+
+        now_text = _now()
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT u.*, wm.workspace_id
+                FROM users u
+                LEFT JOIN workspace_members wm ON wm.user_id = u.id
+                WHERE u.email = ?
+                ORDER BY wm.created_at ASC
+                LIMIT 1
+                """,
+                (email,),
+            )
+            if row:
+                user = self._row_to_user(row)
+                if not user.is_active:
+                    raise AuthValidationError("Аккаунт отключён. Обратитесь к администратору.")
+                if not user.name or user.name == user.email:
+                    self._execute(connection, "UPDATE users SET name = ?, updated_at = ? WHERE id = ?", (name, now_text, user.id))
+                    user = AuthUser(user.id, user.email, name, user.role, user.status, user.workspace_id)
+                self._execute(connection, "UPDATE users SET last_login_at = ?, updated_at = ? WHERE id = ?", (now_text, now_text, user.id))
+                return user, False
+
+            user_id = uuid.uuid4().hex
+            workspace_id = uuid.uuid4().hex
+            member_id = uuid.uuid4().hex
+            password_digest = _password_hash(f"google_{secrets.token_urlsafe(32)}")
+            self._execute(
+                connection,
+                """
+                INSERT INTO users (id, email, name, password_hash, role, status, created_at, updated_at, last_login_at)
+                VALUES (?, ?, ?, ?, 'user', 'active', ?, ?, ?)
+                """,
+                (user_id, email, name, password_digest, now_text, now_text, now_text),
+            )
+            self._execute(
+                connection,
+                """
+                INSERT INTO workspaces (id, name, status, created_at, updated_at)
+                VALUES (?, ?, 'active', ?, ?)
+                """,
+                (workspace_id, f"{name} workspace", now_text, now_text),
+            )
+            self._execute(
+                connection,
+                """
+                INSERT INTO workspace_members (id, workspace_id, user_id, role, created_at)
+                VALUES (?, ?, ?, 'owner', ?)
+                """,
+                (member_id, workspace_id, user_id, now_text),
+            )
+            return AuthUser(user_id, email, name, "user", "active", workspace_id), True
+
     def authenticate(self, email: str, password: str) -> AuthUser:
         email = _normalize_email(email)
         with self._connect() as connection:

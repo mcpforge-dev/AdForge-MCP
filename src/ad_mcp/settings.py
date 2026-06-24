@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     google_ads_api_version: str = "v20"
     google_oauth_scopes: str = "https://www.googleapis.com/auth/adwords"
     google_oauth_state_ttl_seconds: int = 900
+    google_login_client_id: str = ""
+    google_login_client_secret: str = ""
+    google_login_redirect_path: str = "/auth/google/callback"
+    google_login_scopes: str = "openid email profile"
+    google_login_state_ttl_seconds: int = 900
     tiktok_oauth_app_id: str = ""
     tiktok_oauth_app_secret: str = ""
     tiktok_oauth_auth_url: str = "https://ads.tiktok.com/marketing_api/auth"

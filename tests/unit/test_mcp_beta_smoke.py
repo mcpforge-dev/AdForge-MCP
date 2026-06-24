@@ -28,6 +28,7 @@ async def test_beta_diagnostics_tool_is_registered_and_safe() -> None:
     tool_names = {tool.name for tool in tools}
 
     assert "get_beta_diagnostics" in tool_names
+    assert "analyze_site_improvements" in tool_names
 
     result = await mcp.call_tool("get_beta_diagnostics", {})
     payload = _json_tool_payload(result)

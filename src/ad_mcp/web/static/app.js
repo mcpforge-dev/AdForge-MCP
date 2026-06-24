@@ -73,6 +73,7 @@
     el.authForgot = document.getElementById("auth-forgot");
     el.authTitle = document.getElementById("auth-title");
     el.authSubtitle = document.getElementById("auth-subtitle");
+    el.authGoogle = document.getElementById("auth-google");
     el.authSubmit = document.getElementById("auth-submit");
     el.authError = document.getElementById("auth-error");
     el.authSuccess = document.getElementById("auth-success");
@@ -95,6 +96,10 @@
     el.signout = document.getElementById("signout");
     el.overviewNotice = document.getElementById("overview-notice");
     el.overviewStats = document.getElementById("overview-stats");
+    el.siteAnalysisForm = document.getElementById("site-analysis-form");
+    el.siteAnalysisUrl = document.getElementById("site-analysis-url");
+    el.siteAnalysisSubmit = document.getElementById("site-analysis-submit");
+    el.siteAnalysisResult = document.getElementById("site-analysis-result");
     el.nextSteps = document.getElementById("next-steps");
     el.mcpUrl = document.getElementById("mcp-url");
     el.copyMcpUrl = document.getElementById("copy-mcp-url");
@@ -136,6 +141,16 @@
     if (window.location.pathname === "/reset-password") {
       showLanding();
       showResetPasswordModal(new URLSearchParams(window.location.search).get("token") || "");
+      return;
+    }
+    const googleLoginError = new URLSearchParams(window.location.search).get("google_login_error") || "";
+    if (window.location.pathname === "/" && googleLoginError) {
+      showLanding();
+      openAuth("login");
+      showAuthError(googleLoginError === "not_configured"
+        ? "Вход через Google пока настраивается. Войдите по email и паролю или обратитесь к менеджеру HolyMedia."
+        : humanizeError(googleLoginError));
+      cleanUrl();
       return;
     }
     const oauthAuthorizeTarget = pendingOAuthAuthorizeTarget();
@@ -230,6 +245,11 @@
     });
     el.authTabs.forEach((tab) => tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode)));
     el.authPasswordToggle.addEventListener("click", () => togglePasswordVisibility());
+    if (el.authGoogle) {
+      el.authGoogle.addEventListener("click", () => {
+        window.location.assign("/auth/google/start");
+      });
+    }
     el.authForgot.addEventListener("click", () => {
       closeAuth();
       showForgotPasswordModal();
@@ -534,6 +554,9 @@
     });
     el.connectionsRefresh.addEventListener("click", () => loadConnections());
     el.diagRun.addEventListener("click", () => runDiagnostics());
+    if (el.siteAnalysisForm) {
+      el.siteAnalysisForm.addEventListener("submit", runSiteAnalysis);
+    }
     document.querySelectorAll("[data-client-modal-close]").forEach((node) => {
       node.addEventListener("click", () => closeClientModal());
     });
@@ -1128,6 +1151,54 @@
 
   function hasPending(platforms) {
     return platforms.some((p) => (p.pending_selections || []).some((x) => x.status === "pending_account_selection"));
+  }
+
+  async function runSiteAnalysis(event) {
+    event.preventDefault();
+    const url = el.siteAnalysisUrl.value.trim();
+    if (!url) return;
+    setLoading(el.siteAnalysisSubmit, true);
+    el.siteAnalysisResult.hidden = false;
+    el.siteAnalysisResult.innerHTML = emptyState("Анализируем сайт...");
+    try {
+      const payload = await api("/api/site/analyze", "POST", { url });
+      renderSiteAnalysis(payload.analysis || null);
+    } catch (error) {
+      if (handle401(error)) return;
+      el.siteAnalysisResult.innerHTML = errorState(humanizeError(error));
+    } finally {
+      setLoading(el.siteAnalysisSubmit, false);
+    }
+  }
+
+  function renderSiteAnalysis(analysis) {
+    if (!analysis) {
+      el.siteAnalysisResult.innerHTML = errorState("Не удалось получить результат анализа.");
+      return;
+    }
+    const recommendations = analysis.priority_recommendations || [];
+    const summary = analysis.status === "ok"
+      ? analysis.summary || "Готово. Ниже приоритетные улучшения."
+      : analysis.error || analysis.summary || "Не удалось выполнить анализ сайта.";
+    el.siteAnalysisResult.innerHTML = `
+      <p class="site-analysis-result__summary">${esc(summary)}</p>
+      <ol class="site-analysis-list">
+        ${recommendations.slice(0, 6).map((item) => `
+          <li>
+            <small>${esc(item.area || "Рекомендация")} · ${esc(priorityLabel(item.priority))}</small><br>
+            ${esc(item.recommendation || "")}
+          </li>
+        `).join("")}
+      </ol>
+    `;
+  }
+
+  function priorityLabel(priority) {
+    const value = String(priority || "").toLowerCase();
+    if (value === "high") return "высокий приоритет";
+    if (value === "medium") return "средний приоритет";
+    if (value === "low") return "низкий приоритет";
+    return "приоритет";
   }
 
   /* ---------- connections ---------- */

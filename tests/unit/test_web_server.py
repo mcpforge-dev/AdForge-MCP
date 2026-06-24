@@ -16,6 +16,7 @@ from ad_mcp.settings import Settings
 from ad_mcp.web.auth_store import AuthStore
 from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.emailer import PasswordResetEmailer
+from ad_mcp.web.google_login import GoogleLoginService
 from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.server import AdsWebHandler, _api_token_required, _extract_request_token, _request_token_is_valid
 from ad_mcp.web.service import MetaDashboardService
@@ -356,6 +357,56 @@ def test_mcp_oauth_client_credentials_are_created_once_and_secret_is_not_reliste
     assert token_payload["access_token"].startswith("mcp_oauth_")
 
 
+def test_google_login_callback_creates_or_reuses_user_session(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        public_base_url="https://mcp.holymedia.kz",
+        google_login_client_id="google-login-client",
+        google_login_client_secret="google-login-secret",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    existing = store.create_user(email="client@example.com", name="Client", password="right-password")
+    base_url, close = _serve(settings)
+
+    class _FakeGoogleLogin:
+        def __init__(self) -> None:
+            self.profiles = [
+                {"email": "client@example.com", "name": "Client From Google"},
+                {"email": "new@example.com", "name": "New Google User"},
+            ]
+
+        def configured(self) -> bool:
+            return True
+
+        def handle_callback(self, query: dict[str, str]) -> dict[str, str]:
+            return self.profiles.pop(0)
+
+    AdsWebHandler.google_login = _FakeGoogleLogin()  # type: ignore[assignment]
+    try:
+        existing_status, existing_location, existing_cookie = _get_redirect(base_url, "/auth/google/callback?code=ok&state=test")
+        existing_me_status, existing_me = _get_json_with_cookie(base_url, "/api/auth/me", existing_cookie)
+        new_status, new_location, new_cookie = _get_redirect(base_url, "/auth/google/callback?code=ok&state=test")
+        new_me_status, new_me = _get_json_with_cookie(base_url, "/api/auth/me", new_cookie)
+    finally:
+        close()
+
+    assert existing_status == 302
+    assert existing_location == "/app?google_login=login"
+    assert existing_me_status == 200
+    assert existing_me["user"]["id"] == existing.id
+    assert new_status == 302
+    assert new_location == "/app?google_login=created"
+    assert new_me_status == 200
+    assert new_me["user"]["email"] == "new@example.com"
+    assert new_me["user"]["workspace_id"] != existing.workspace_id
+
+
 class _FakeEmailer(PasswordResetEmailer):
     def __init__(self, configured: bool = True) -> None:
         self._configured = configured
@@ -369,7 +420,15 @@ class _FakeEmailer(PasswordResetEmailer):
 
 
 def _serve(settings: Settings, *, emailer: PasswordResetEmailer | None = None):
-    previous = (AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service, AdsWebHandler.auth, AdsWebHandler.emailer)
+    previous = (
+        AdsWebHandler.settings,
+        AdsWebHandler.diagnostics,
+        AdsWebHandler.hosted,
+        AdsWebHandler.service,
+        AdsWebHandler.auth,
+        AdsWebHandler.emailer,
+        AdsWebHandler.google_login,
+    )
     AdsWebHandler.reset_rate_limits()
     AdsWebHandler.settings = settings
     AdsWebHandler.diagnostics = DiagnosticsService(settings)
@@ -377,6 +436,7 @@ def _serve(settings: Settings, *, emailer: PasswordResetEmailer | None = None):
     AdsWebHandler.service = MetaDashboardService(settings)
     AdsWebHandler.auth = AuthStore(settings)
     AdsWebHandler.emailer = emailer or PasswordResetEmailer(settings)
+    AdsWebHandler.google_login = GoogleLoginService(settings)
     server = ThreadingHTTPServer(("127.0.0.1", 0), AdsWebHandler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
@@ -386,7 +446,15 @@ def _serve(settings: Settings, *, emailer: PasswordResetEmailer | None = None):
         server.shutdown()
         server.server_close()
         thread.join(timeout=2)
-        AdsWebHandler.settings, AdsWebHandler.diagnostics, AdsWebHandler.hosted, AdsWebHandler.service, AdsWebHandler.auth, AdsWebHandler.emailer = previous
+        (
+            AdsWebHandler.settings,
+            AdsWebHandler.diagnostics,
+            AdsWebHandler.hosted,
+            AdsWebHandler.service,
+            AdsWebHandler.auth,
+            AdsWebHandler.emailer,
+            AdsWebHandler.google_login,
+        ) = previous
         AdsWebHandler.reset_rate_limits()
 
     return base_url, close
@@ -455,6 +523,19 @@ def _get_redirect_location(base_url: str, path: str, cookie: str | None = None) 
             return response.status, response.headers.get("Location", "")
     except HTTPError as exc:
         return exc.code, exc.headers.get("Location", "")
+
+
+def _get_redirect(base_url: str, path: str, cookie: str | None = None) -> tuple[int, str, str]:
+    headers = {"Accept": "*/*"}
+    if cookie:
+        headers["Cookie"] = cookie
+    request = Request(f"{base_url}{path}", headers=headers)
+    opener = build_opener(_NoRedirect)
+    try:
+        with opener.open(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            return response.status, response.headers.get("Location", ""), response.headers.get("Set-Cookie", "")
+    except HTTPError as exc:
+        return exc.code, exc.headers.get("Location", ""), exc.headers.get("Set-Cookie", "")
 
 
 def _put_json(base_url: str, path: str, payload: dict, cookie: str | None = None, *, origin: str | None = None) -> tuple[int, dict]:

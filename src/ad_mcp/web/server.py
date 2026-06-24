@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, quote, urlencode, urlparse
 from ad_mcp.core.errors import AdMCPError, normalize_error
 from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
+from ad_mcp.tools.site_analysis import analyze_site_improvements
 from ad_mcp.web.auth_store import (
     AuthDatabaseUnavailable,
     AuthInvalidClientError,
@@ -26,6 +27,7 @@ from ad_mcp.web.auth_store import (
 )
 from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.emailer import EmailDeliveryError, PasswordResetEmailer
+from ad_mcp.web.google_login import GoogleLoginError, GoogleLoginService
 from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.service import MetaDashboardService
 
@@ -65,6 +67,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     service = MetaDashboardService()
     auth = AuthStore()
     emailer = PasswordResetEmailer()
+    google_login = GoogleLoginService()
     _omit_response_body = False
     _rate_limit_lock = threading.Lock()
     _rate_limit_hits: dict[str, list[float]] = {}
@@ -141,6 +144,14 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     def _redirect(self, location: str) -> None:
         self.send_response(HTTPStatus.FOUND)
         self._set_default_headers()
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _redirect_with_session(self, location: str, session_token: str) -> None:
+        self.send_response(HTTPStatus.FOUND)
+        self._set_default_headers()
+        self._send_session_cookie(session_token)
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
         self.end_headers()
@@ -563,6 +574,25 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_json(self._oauth_protected_resource_metadata())
             if route in {"/.well-known/oauth-authorization-server", "/.well-known/oauth-authorization-server/mcp"}:
                 return self._send_json(self._oauth_authorization_server_metadata())
+            if route == "/auth/google/start":
+                if not self.settings.auth_enabled:
+                    return self._redirect("/?google_login_error=auth_disabled")
+                if not self.google_login.configured():
+                    return self._redirect("/?google_login_error=not_configured")
+                return self._redirect(self.google_login.authorization_url(next_path="/app"))
+            if route == self.settings.google_login_redirect_path:
+                try:
+                    profile = self.google_login.handle_callback(self._query())
+                    self.auth.ensure_schema()
+                    user, created = self.auth.find_or_create_google_user(email=profile["email"], name=profile.get("name", ""))
+                    token, _session_id = self.auth.create_session(
+                        user.id,
+                        user_agent=str(self.headers.get("User-Agent", "")),
+                        ip_address=str(self.client_address[0] if self.client_address else ""),
+                    )
+                except (GoogleLoginError, AuthValidationError, RuntimeError) as exc:
+                    return self._redirect(f"/?google_login_error={quote(self._client_error_message(exc), safe='')}")
+                return self._redirect_with_session(f"/app?google_login={'created' if created else 'login'}", token)
             if route == "/assets/app.css":
                 return self._send_file(STATIC_ROOT / "app.css", "text/css; charset=utf-8")
             if route == "/assets/app.js":
@@ -856,6 +886,13 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return
                 self.auth.revoke_session(self._session_token())
                 return self._send_auth_json({"ok": True}, clear_session=True)
+            if route == "/api/site/analyze":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                if not self._ensure_session_user():
+                    return
+                payload = self._json_body()
+                return self._send_json({"analysis": analyze_site_improvements(str(payload.get("url", "")))})
             if route == "/api/auth/forgot-password":
                 payload = self._json_body()
                 if not self.settings.auth_enabled:
@@ -1131,6 +1168,7 @@ def main() -> None:
     AdsWebHandler.service = MetaDashboardService(settings)
     AdsWebHandler.auth = AuthStore(settings)
     AdsWebHandler.emailer = PasswordResetEmailer(settings)
+    AdsWebHandler.google_login = GoogleLoginService(settings)
     if _api_token_required(settings) and not settings.web_api_token.strip():
         LOGGER.warning("AD_MCP_WEB_API_TOKEN is required for beta/production web API access but is not configured.")
     server = ThreadingHTTPServer((host, port), AdsWebHandler)

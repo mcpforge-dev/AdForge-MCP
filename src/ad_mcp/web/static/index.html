@@ -56,6 +56,18 @@
           </div>
         </div>
       </section>
+      <section class="site-analysis-strip" aria-label="AI-анализ сайта">
+        <div>
+          <span class="eyebrow">AI-анализ сайта</span>
+          <h2>Найдите, что мешает заявкам на сайте</h2>
+          <p>HolyMedia MCP помогает не только смотреть рекламные данные, но и быстро находить точки роста на сайте: первый экран, тексты, CTA, структуру, SEO-базу и конверсию.</p>
+        </div>
+        <div class="site-analysis-points">
+          <span>Проверка первого экрана и оффера</span>
+          <span>Короткие приоритетные рекомендации</span>
+          <span>UX, SEO, тексты и конверсия</span>
+        </div>
+      </section>
       <section id="features" class="feature-grid" aria-label="Возможности">
         <article>
           <h2>Подключение через сайт</h2>
@@ -104,6 +116,11 @@
       </div>
       <h2 id="auth-title">Войти в HolyMedia MCP</h2>
       <p id="auth-subtitle" class="modal__hint">Введите email и пароль, чтобы открыть личный кабинет.</p>
+      <button id="auth-google" type="button" class="btn btn--secondary btn--block auth-google">
+        <span class="auth-google__mark" aria-hidden="true">G</span>
+        <span>Войти через Google</span>
+      </button>
+      <div class="auth-divider"><span>или</span></div>
       <form id="auth-form" class="auth-form">
         <label id="auth-name-field" class="field" hidden>
           <span class="field__label">Имя</span>
@@ -227,6 +244,17 @@
             </div>
           </article>
         </div>
+        <article class="card site-analysis-card">
+          <div>
+            <h3 class="card__title">AI-анализ сайта</h3>
+            <p class="card__hint">Введите URL сайта, а HolyMedia MCP даст короткий список приоритетных улучшений по структуре, UX, SEO, текстам и конверсии.</p>
+          </div>
+          <form id="site-analysis-form" class="site-analysis-form">
+            <input id="site-analysis-url" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com" required>
+            <button id="site-analysis-submit" type="submit" class="btn btn--primary btn--small">Проанализировать</button>
+          </form>
+          <div id="site-analysis-result" class="site-analysis-result" hidden></div>
+        </article>
       </section>
 
       <!-- MCP -->
