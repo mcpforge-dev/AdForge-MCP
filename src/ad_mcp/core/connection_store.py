@@ -149,6 +149,11 @@ def _clean_scope_id(value: str | None) -> str | None:
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
+def _clean_google_customer_id(value: str | None) -> str:
+    clean = "".join(char for char in str(value or "") if char.isdigit())
+    return clean if len(clean) == 10 else ""
+
+
 def _scope_root(data: dict[str, Any], workspace_id: str | None = None, *, create: bool = False) -> dict[str, Any]:
     clean_workspace = _clean_scope_id(workspace_id)
     if not clean_workspace:
@@ -418,6 +423,23 @@ class HostedConnectionStore:
                 account.update(credentials)
                 account["status"] = account.get("status") or "connected"
                 selected_accounts.append(account)
+        if provider == "google_ads" and not selected_accounts:
+            metadata = pending.get("metadata", {}) if isinstance(pending.get("metadata"), dict) else {}
+            manual_allowed = bool(metadata.get("manual_customer_entry_allowed"))
+            for selected_id in selected_ids:
+                customer_id = _clean_google_customer_id(selected_id)
+                if manual_allowed and customer_id:
+                    account = {
+                        "name": f"Google Ads {customer_id}",
+                        "account_id": customer_id,
+                        "customer_id": customer_id,
+                        "manager_customer_id": "",
+                        "login_customer_id": credentials.get("login_customer_id") or customer_id,
+                        "google_ads_account_type": "manual_customer_id",
+                        "status": "connected",
+                    }
+                    account.update(credentials)
+                    selected_accounts.append(account)
         if not selected_accounts:
             raise ValueError("Selected account_ids were not found in pending OAuth discovery.")
         status = self.save_provider_config(

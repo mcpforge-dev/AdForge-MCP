@@ -157,20 +157,25 @@ def test_google_oauth_discovers_customers_and_select_saves_credentials(tmp_path)
     assert stored["accounts"][0]["developer_token"] == "google-dev-token"
 
 
-def test_google_oauth_explains_list_accessible_customers_failure(tmp_path) -> None:
+def test_google_oauth_allows_manual_customer_id_when_discovery_fails(tmp_path) -> None:
     http = _FakePartnerHTTP(fail_google_accessible_customers=True)
     service = GoogleOAuthService(_settings(tmp_path), http)
     state = parse_qs(urlparse(service.authorization_url()).query)["state"][0]
 
-    with pytest.raises(PartnerOAuthError) as exc:
-        service.handle_callback({"code": "google-code", "state": state})
+    pending = service.handle_callback({"code": "google-code", "state": state})
+    selected = service.select_accounts(pending["pending_id"], ["123-456-7890"])
+    stored = service._store.provider_config("google_ads")  # noqa: SLF001
 
-    message = str(exc.value)
-    assert "Google OAuth прошёл" in message
-    assert "developer token" in message
-    assert "production" in message
-    assert "INVALID_ARGUMENT" in message
-    assert "Developer token is not approved" in message
+    assert pending["status"] == "pending_account_selection"
+    assert pending["account_count"] == 0
+    assert pending["metadata"]["accessible_customers_status"] == "blocked"
+    assert pending["metadata"]["manual_customer_entry_allowed"] is True
+    assert "google-refresh" not in str(pending)
+    assert selected["status"] == "connected"
+    assert selected["accounts"][0]["customer_id"] == "1234567890"
+    assert selected["accounts"][0]["google_ads_account_type"] == "manual_customer_id"
+    assert stored["accounts"][0]["refresh_token"] == "google-refresh"
+    assert stored["accounts"][0]["developer_token"] == "google-dev-token"
 
 
 def test_tiktok_oauth_discovers_advertiser_and_select_saves_credentials(tmp_path) -> None:

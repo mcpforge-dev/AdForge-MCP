@@ -1349,6 +1349,7 @@
   function renderPendingPanel(pending) {
     const accounts = pending.accounts || [];
     const activeAccounts = accounts.filter((account) => !isPendingAccountDisabled(account));
+    const manualGoogle = isGoogleManualCustomerEntry(pending);
     const options = accounts.length
       ? accounts.map(renderPendingOption).join("")
       : emptyState("Аккаунты не найдены. Проверьте, что у пользователя есть доступ к рекламному кабинету.");
@@ -1366,8 +1367,9 @@
           </div>
           ` : ""}
           <div class="pending-list">${options}</div>
+          ${manualGoogle ? renderGoogleManualCustomerEntry() : ""}
           <div class="pending-actions">
-            <button type="submit" class="btn btn--primary" ${activeAccounts.length ? "" : "disabled"}>Подключить выбранные</button>
+            <button type="submit" class="btn btn--primary" ${activeAccounts.length || manualGoogle ? "" : "disabled"}>Подключить выбранные</button>
             <button type="button" class="btn btn--ghost" data-cancel-pending>Закрыть</button>
           </div>
         </form>
@@ -1376,6 +1378,18 @@
 
   function renderPendingDiagnostics(pending) {
     const meta = pending?.metadata || {};
+    if (pending.provider === "google_ads" && Object.keys(meta).length) {
+      const blocked = meta.accessible_customers_status === "blocked";
+      const detail = meta.provider_api_error ? `<small>${esc(meta.provider_api_error)}</small>` : "";
+      return `
+        <div class="pending-diagnostics">
+          <strong>Диагностика Google Ads</strong>
+          <span>${blocked ? "Google OAuth прошёл, но API не вернул список кабинетов автоматически." : "Google Ads API вернул список доступных кабинетов."}</span>
+          ${blocked ? "<span>Можно завершить подключение вручную: введите Customer ID рекламного кабинета.</span>" : ""}
+          ${detail}
+        </div>
+      `;
+    }
     if (pending.provider !== "yandex_direct" || !Object.keys(meta).length) return "";
     const returned = Number(meta.api_clients_returned ?? 0);
     const archived = Number(meta.archived_clients ?? 0);
@@ -1389,6 +1403,23 @@
         <span>Архивных/отключённых: ${esc(archived)}</span>
         <span>Fallback использован: ${fallback ? "да" : "нет"}</span>
         ${returned === 0 && !fallback ? `<small>Yandex API не вернул кабинеты. Проверьте права пользователя или агентский доступ в Yandex Direct.</small>` : ""}
+      </div>
+    `;
+  }
+
+  function isGoogleManualCustomerEntry(pending) {
+    const meta = pending?.metadata || {};
+    return pending?.provider === "google_ads" && String(meta.manual_customer_entry_allowed || "").toLowerCase() === "true";
+  }
+
+  function renderGoogleManualCustomerEntry() {
+    return `
+      <div class="pending-manual">
+        <label class="field">
+          <span class="field__label">Google Ads Customer ID</span>
+          <input name="manual_customer_id" type="text" inputmode="numeric" autocomplete="off" placeholder="Например: 123-456-7890">
+        </label>
+        <p class="modal__hint">Customer ID находится в Google Ads в правом верхнем углу аккаунта. Можно вводить с дефисами или без них.</p>
       </div>
     `;
   }
@@ -1438,15 +1469,18 @@
     const pending = state.activePending;
     if (state.pendingModalId === pending.pending_id && !el.clientModal.hidden) return;
     const accounts = pending.accounts || [];
+    const manualGoogle = isGoogleManualCustomerEntry(pending);
     state.pendingModalId = pending.pending_id;
     showClientModal({
-      title: accounts.length ? "Выберите рекламный аккаунт" : "Аккаунты не найдены",
+      title: accounts.length ? "Выберите рекламный аккаунт" : manualGoogle ? "Введите Google Ads Customer ID" : "Аккаунты не найдены",
       subtitle: accounts.length
         ? "Мы получили доступ к вашему рекламному кабинету. Выберите аккаунт, который нужно подключить к HolyMedia MCP."
+        : manualGoogle
+        ? "Google OAuth прошёл. Если API не вернул список кабинетов автоматически, введите Customer ID вручную."
         : "Проверьте, что у пользователя есть доступ к рекламному кабинету.",
       body: renderPendingPanel(pending),
-      tone: accounts.length ? "info" : "warn",
-      closeLabel: accounts.length ? "" : "Закрыть",
+      tone: accounts.length || manualGoogle ? "info" : "warn",
+      closeLabel: accounts.length || manualGoogle ? "" : "Закрыть",
     });
     const form = el.clientModal.querySelector("#pending-form");
     if (form) {
@@ -1477,11 +1511,12 @@
 
   function bindPendingSelectionControls(form) {
     const checkboxes = Array.from(form.querySelectorAll("input[name='account_id']:not(:disabled)"));
+    const manualCustomerId = form.querySelector("input[name='manual_customer_id']");
     const selectAll = form.querySelector("[data-select-all]");
     const clearButton = form.querySelector("[data-clear-pending]");
     const count = form.querySelector("[data-pending-count]");
     const submit = form.querySelector("button[type='submit']");
-    if (!checkboxes.length) {
+    if (!checkboxes.length && !manualCustomerId) {
       if (selectAll) selectAll.disabled = true;
       if (clearButton) clearButton.disabled = true;
       if (count) count.textContent = "Нет активных кабинетов для выбора";
@@ -1491,12 +1526,13 @@
 
     const sync = () => {
       const selected = checkboxes.filter((input) => input.checked).length;
+      const manualReady = manualCustomerId ? normalizeGoogleCustomerId(manualCustomerId.value).length === 10 : false;
       if (selectAll) {
         selectAll.checked = selected === checkboxes.length;
         selectAll.indeterminate = selected > 0 && selected < checkboxes.length;
       }
       if (count) count.textContent = `Выбрано ${selected} из ${checkboxes.length}`;
-      if (submit) submit.disabled = selected === 0;
+      if (submit) submit.disabled = selected === 0 && !manualReady;
     };
 
     if (selectAll) {
@@ -1516,6 +1552,7 @@
       });
     }
     checkboxes.forEach((input) => input.addEventListener("change", sync));
+    if (manualCustomerId) manualCustomerId.addEventListener("input", sync);
     sync();
   }
 
@@ -1587,6 +1624,15 @@
     const slug = PROVIDER_SLUG[provider];
     if (!slug || !state.activePending) return;
     const accountIds = Array.from(form.querySelectorAll("input[name='account_id']:checked")).map((i) => i.value);
+    const manualCustomerId = form.querySelector("input[name='manual_customer_id']");
+    if (manualCustomerId && manualCustomerId.value.trim()) {
+      const cleanCustomerId = normalizeGoogleCustomerId(manualCustomerId.value);
+      if (cleanCustomerId.length !== 10) {
+        showClientMessage("Проверьте Customer ID", "Введите Google Ads Customer ID из 10 цифр. Можно с дефисами, например 123-456-7890.", "warn");
+        return;
+      }
+      accountIds.push(cleanCustomerId);
+    }
     if (!accountIds.length) {
       showClientMessage("Нужно выбрать аккаунт", "Отметьте хотя бы один рекламный аккаунт, чтобы завершить подключение.", "warn");
       return;
@@ -2104,6 +2150,10 @@
     }
     if (text.length > 240) return `${text.slice(0, 237)}…`;
     return text;
+  }
+
+  function normalizeGoogleCustomerId(value) {
+    return String(value || "").replace(/\D/g, "");
   }
 
   function formatTime(value) {

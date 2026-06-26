@@ -75,6 +75,11 @@ def _split_scopes(value: str) -> str:
     return " ".join(part.strip() for part in value.replace(",", " ").split() if part.strip())
 
 
+def _clean_google_customer_id(value: str | None) -> str:
+    clean = "".join(char for char in str(value or "") if char.isdigit())
+    return clean if len(clean) == 10 else ""
+
+
 class BasePartnerOAuthService(ABC):
     provider: str
     state_ttl_seconds: int
@@ -286,9 +291,15 @@ class GoogleOAuthService(BasePartnerOAuthService):
             raise PartnerOAuthError("Google OAuth token exchange did not return access_token.")
         if not refresh_token:
             raise PartnerOAuthError("Google OAuth token exchange did not return refresh_token. Reconnect with consent prompt.")
-        accounts = self._fetch_accessible_customers(access_token)
-        if not accounts:
-            raise PartnerOAuthError("Google OAuth succeeded, but no accessible Google Ads accounts were returned.")
+        accounts: list[dict[str, Any]] = []
+        discovery_error = ""
+        try:
+            accounts = self._fetch_accessible_customers(access_token)
+        except PartnerOAuthError as exc:
+            discovery_error = _redact_oauth_error(str(exc))
+        manual_customer_id = _clean_google_customer_id(self._settings.google_ads_login_customer_id)
+        if not accounts and manual_customer_id:
+            accounts = [self._manual_google_account(manual_customer_id)]
         pending = self._store.save_oauth_pending(
             self.provider,
             accounts,
@@ -304,6 +315,12 @@ class GoogleOAuthService(BasePartnerOAuthService):
             source="google_oauth",
             workspace_id=str(state_payload.get("workspace_id") or "") or None,
             user_id=str(state_payload.get("user_id") or "") or None,
+            metadata={
+                "accessible_customers_status": "ok" if accounts and not discovery_error else "blocked",
+                "manual_customer_entry_allowed": True,
+                "manual_customer_id_prefilled": bool(manual_customer_id and accounts),
+                "provider_api_error": discovery_error[:360] if discovery_error else "",
+            },
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
 
@@ -331,10 +348,9 @@ class GoogleOAuthService(BasePartnerOAuthService):
             )
         except PartnerOAuthError as exc:
             raise PartnerOAuthError(
-                "Google OAuth прошёл, но Google Ads API отклонил запрос списка аккаунтов. "
-                "Проверьте в Google Ads API Center, что developer token активен и имеет доступ "
-                "к production-аккаунтам (Explorer, Basic или Standard Access), а не только Test Account Access. "
-                f"Техническая причина: {exc}"
+                "Google OAuth succeeded, but Google Ads API rejected automatic account discovery. "
+                "The user can finish connection by entering a Google Ads Customer ID manually. "
+                f"Provider detail: {exc}"
             ) from exc
         accounts_by_id: dict[str, dict[str, Any]] = {}
         for resource_name in payload.get("resourceNames", []) or []:
@@ -352,6 +368,17 @@ class GoogleOAuthService(BasePartnerOAuthService):
                 for client_account in self._fetch_customer_clients(access_token, customer_id):
                     accounts_by_id.setdefault(client_account["customer_id"], client_account)
         return list(accounts_by_id.values())
+
+    def _manual_google_account(self, customer_id: str) -> dict[str, Any]:
+        return {
+            "name": f"Google Ads {customer_id}",
+            "account_id": customer_id,
+            "customer_id": customer_id,
+            "manager_customer_id": "",
+            "login_customer_id": self._settings.google_ads_login_customer_id.strip(),
+            "google_ads_account_type": "manual_customer_id",
+            "status": "connected",
+        }
 
     def _fetch_customer_clients(self, access_token: str, manager_customer_id: str) -> list[dict[str, Any]]:
         version = (self._settings.google_ads_api_version.strip() or "v20").lstrip("/")
