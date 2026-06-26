@@ -337,7 +337,7 @@ class GoogleOAuthService(BasePartnerOAuthService):
         )
 
     def _fetch_accessible_customers(self, access_token: str) -> list[dict[str, Any]]:
-        version = (self._settings.google_ads_api_version.strip() or "v20").lstrip("/")
+        version = (self._settings.google_ads_api_version.strip() or "v24").lstrip("/")
         try:
             payload = self._get_json(
                 f"https://googleads.googleapis.com/{version}/customers:listAccessibleCustomers",
@@ -381,7 +381,7 @@ class GoogleOAuthService(BasePartnerOAuthService):
         }
 
     def _fetch_customer_clients(self, access_token: str, manager_customer_id: str) -> list[dict[str, Any]]:
-        version = (self._settings.google_ads_api_version.strip() or "v20").lstrip("/")
+        version = (self._settings.google_ads_api_version.strip() or "v24").lstrip("/")
         headers = {
             "Authorization": f"Bearer {access_token}",
             "developer-token": self._settings.google_ads_developer_token.strip(),

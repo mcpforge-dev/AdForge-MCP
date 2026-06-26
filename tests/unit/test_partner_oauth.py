@@ -103,7 +103,7 @@ class _FakePartnerHTTP:
 
     def get(self, url: str, params: dict | None = None, headers: dict | None = None) -> _FakeResponse:
         self.calls.append(("GET", url, params, None, headers))
-        if url == "https://googleads.googleapis.com/v20/customers:listAccessibleCustomers":
+        if url == "https://googleads.googleapis.com/v24/customers:listAccessibleCustomers":
             assert headers and headers["Authorization"] == "Bearer google-access"
             assert headers["developer-token"] == "google-dev-token"
             if self.fail_google_accessible_customers:
