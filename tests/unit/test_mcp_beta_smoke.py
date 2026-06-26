@@ -134,6 +134,45 @@ async def test_mcp_tools_are_scoped_to_current_workspace(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
+async def test_unscoped_mcp_tools_read_single_workspace_google_accounts(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "google_ads",
+        {
+            "provider": "google_ads",
+            "accounts": [
+                {
+                    "name": "Google Client",
+                    "customer_id": "1234567890",
+                    "status": "connected",
+                    "refresh_token": "refresh-token",
+                    "developer_token": "developer-token",
+                }
+            ],
+        },
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+    mcp = create_server(settings)
+
+    accounts = _json_tool_payload(await mcp.call_tool("list_ad_accounts", {"platform": "google_ads"}))
+    platforms = _json_tool_payload(await mcp.call_tool("list_connected_platforms", {}))
+    google = next(item for item in platforms["platforms"] if item["platform"] == "google_ads")
+
+    assert accounts["account_count"] == 1
+    assert accounts["accounts"][0]["account_id"] == "1234567890"
+    assert accounts["accounts"][0]["credentials_present"] is True
+    assert accounts["accounts"][0]["source"] == "hosted_connection_store_single_workspace"
+    assert google["status"] == "connected"
+    assert google["account_count"] == 1
+
+
+@pytest.mark.asyncio
 async def test_beta_read_tools_are_registered_and_hide_connection_secrets(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,

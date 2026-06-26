@@ -96,6 +96,65 @@ def test_connection_store_isolates_accounts_by_workspace(tmp_path: Path) -> None
     assert configs_global["meta_ads"]["accounts"] == []
 
 
+def test_unscoped_runtime_configs_use_single_workspace_accounts(tmp_path: Path) -> None:
+    settings = Settings(project_root=tmp_path, connection_store_path="tokens/connections.json", connections_fallback_to_local=False)
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "google_ads",
+        {
+            "provider": "google_ads",
+            "accounts": [
+                {
+                    "name": "Google Client",
+                    "customer_id": "1234567890",
+                    "refresh_token": "refresh-token",
+                    "developer_token": "developer-token",
+                }
+            ],
+        },
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+
+    configs, sources = load_runtime_provider_configs(settings)
+
+    assert sources["google_ads"] == "hosted_connection_store_single_workspace"
+    assert configs["google_ads"]["accounts"][0]["account_id"] == "1234567890"
+    assert configs["google_ads"]["accounts"][0]["refresh_token"] == "refresh-token"
+
+
+def test_unscoped_runtime_configs_ignore_single_provider_when_multiple_workspaces_exist(tmp_path: Path) -> None:
+    settings = Settings(project_root=tmp_path, connection_store_path="tokens/connections.json", connections_fallback_to_local=False)
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "google_ads",
+        {
+            "provider": "google_ads",
+            "accounts": [
+                {
+                    "name": "Workspace A Google",
+                    "customer_id": "1234567890",
+                    "refresh_token": "refresh-token",
+                    "developer_token": "developer-token",
+                }
+            ],
+        },
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+    store.save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": []},
+        workspace_id="workspace-b",
+        user_id="user-b",
+    )
+
+    configs, sources = load_runtime_provider_configs(settings)
+
+    assert sources["google_ads"] == "empty"
+    assert configs["google_ads"]["accounts"] == []
+
+
 def test_scoped_runtime_configs_do_not_fallback_to_local_config(tmp_path: Path) -> None:
     local_config = tmp_path / "ads_config.yaml"
     local_config.write_text(

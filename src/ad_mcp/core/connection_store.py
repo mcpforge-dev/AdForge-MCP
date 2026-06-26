@@ -174,6 +174,17 @@ def _scope_root(data: dict[str, Any], workspace_id: str | None = None, *, create
     return workspace
 
 
+def _workspace_roots(data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
+    workspaces = data.get("workspaces", {})
+    if not isinstance(workspaces, dict):
+        return []
+    roots: list[tuple[str, dict[str, Any]]] = []
+    for workspace_id, workspace in workspaces.items():
+        if isinstance(workspace, dict):
+            roots.append((str(workspace_id), workspace))
+    return roots
+
+
 class HostedConnectionStore:
     def __init__(self, path: Path) -> None:
         self.path = path
@@ -193,6 +204,17 @@ class HostedConnectionStore:
     def provider_config(self, provider: str, workspace_id: str | None = None) -> dict[str, Any]:
         data = self.read()
         root = _scope_root(data, workspace_id)
+        return self._provider_config_from_root(provider, root)
+
+    def single_workspace_provider_config(self, provider: str) -> dict[str, Any] | None:
+        data = self.read()
+        roots = _workspace_roots(data)
+        if len(roots) != 1:
+            return None
+        _workspace_id, root = roots[0]
+        return self._provider_config_from_root(provider, root)
+
+    def _provider_config_from_root(self, provider: str, root: dict[str, Any]) -> dict[str, Any]:
         connection = (root.get("connections", {}) if isinstance(root.get("connections", {}), dict) else {}).get(provider, {})
         if not isinstance(connection, dict):
             return {"provider": provider, "accounts": []}
@@ -519,6 +541,11 @@ def load_runtime_provider_configs(
         if scoped_workspace_id:
             configs[provider] = {"provider": provider, "accounts": []}
             sources[provider] = "empty"
+            continue
+        single_workspace_config = store.single_workspace_provider_config(provider)
+        if single_workspace_config and single_workspace_config.get("accounts"):
+            configs[provider] = single_workspace_config
+            sources[provider] = "hosted_connection_store_single_workspace"
             continue
         if settings.connections_fallback_to_local:
             local_config = load_provider_from_connections(settings.connections_config_path, provider)

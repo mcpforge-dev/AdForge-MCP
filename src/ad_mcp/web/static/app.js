@@ -1260,9 +1260,7 @@
 
     const metaBits = platformMeta(platform, status, accounts);
 
-    const accountsBlock = accounts.length
-      ? `<div class="platform-card__accounts">${accounts.map(renderAccountRow).join("")}</div>`
-      : "";
+    const accountsBlock = renderConnectedAccounts(accounts);
 
     const pending = (platform.pending_selections || []).find((x) => x.status === "pending_account_selection");
     const expired = (platform.pending_selections || []).find((x) => x.status === "expired");
@@ -1314,6 +1312,23 @@
         <span>${esc(account.name || id || "Аккаунт")}</span>
         <span class="mono">${esc(id)}</span>
       </div>
+    `;
+  }
+
+  function renderConnectedAccounts(accounts) {
+    if (!accounts.length) return "";
+    const rows = accounts.map(renderAccountRow).join("");
+    if (accounts.length <= 3) {
+      return `<div class="platform-card__accounts">${rows}</div>`;
+    }
+    return `
+      <details class="platform-card__accounts platform-card__accounts--collapsed">
+        <summary>
+          <span>Показать кабинеты</span>
+          <strong>${accounts.length}</strong>
+        </summary>
+        <div class="platform-card__accounts-list">${rows}</div>
+      </details>
     `;
   }
 

@@ -1409,6 +1409,41 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .platform-card__accounts { display: flex; flex-direction: column; gap: 6px; }
 
+.platform-card__accounts--collapsed {
+  display: block;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  background: var(--bg-inset);
+  overflow: hidden;
+}
+
+.platform-card__accounts--collapsed summary {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 9px 12px;
+  color: var(--text-muted);
+  font-size: 13.5px;
+}
+
+.platform-card__accounts--collapsed summary::marker { color: var(--text-faint); }
+
+.platform-card__accounts--collapsed summary strong {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.platform-card__accounts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 8px 8px;
+}
+
+.platform-card__accounts-list .account-row { background: var(--bg-card); }
+
 .account-row {
   display: flex;
   align-items: center;
