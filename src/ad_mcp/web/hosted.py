@@ -165,11 +165,11 @@ class HostedConnectionService:
                 "status": "ready",
                 "transport": "streamable_http",
                 "auth": "authorization_header_or_bearer_env",
-                "summary": "Готово: используйте MCP URL и персональный Bearer token.",
+                "summary": "Готово: используйте адрес подключения и персональный ключ доступа.",
                 "instructions": [
-                    "Добавьте HolyMedia MCP как Streamable HTTP server.",
-                    "URL: используйте hosted MCP URL из dashboard.",
-                    "Auth: Authorization: Bearer <personal_mcp_token> или env ADFORGE_MCP_CLIENT_TOKEN.",
+                    "Добавьте HolyMedia MCP как HTTP-подключение.",
+                    "URL: используйте адрес подключения из dashboard.",
+                    "Для доступа используйте персональный ключ из раздела MCP.",
                     "После добавления откройте новый чат и спросите про подключенные рекламные аккаунты.",
                 ],
             },
@@ -178,12 +178,12 @@ class HostedConnectionService:
                 "status": "oauth_ready",
                 "transport": "remote_mcp_http",
                 "auth": "oauth_2_1_pkce_or_authorization_token",
-                "summary": "Claude.ai custom connector готов через OAuth discovery/PKCE; token-клиенты могут использовать authorization_token.",
+                "summary": "Claude подключается через custom connector и вход в HolyMedia MCP.",
                 "instructions": [
                     "В Claude.ai Add custom connector можно указать Name и Remote MCP server URL.",
-                    "OAuth Client ID/Secret можно оставить пустыми: Claude выполнит discovery и dynamic client registration.",
-                    "Пользователь войдет в HolyMedia MCP в браузере и разрешит доступ к своему workspace.",
-                    "Персональный MCP token не нужно вставлять в OAuth Client Secret.",
+                    "OAuth Client ID/Secret можно оставить пустыми, если Claude подключается автоматически.",
+                    "Пользователь войдет в HolyMedia MCP в браузере и разрешит доступ к своему рабочему пространству.",
+                    "Персональный ключ доступа не нужно вставлять в OAuth Client Secret.",
                 ],
             },
             "chatgpt": {
@@ -192,13 +192,13 @@ class HostedConnectionService:
                 "transport": "streamable_http",
                 "auth": "oauth_2_1_pkce_with_cimd",
                 "self_serve_ready": True,
-                "summary": "ChatGPT custom connector готов через OAuth 2.1, PKCE и Client ID Metadata Document. Raw Bearer token туда не вставляем.",
+                "summary": "ChatGPT подключается через custom connector и безопасный вход в HolyMedia MCP.",
                 "instructions": [
-                    "В ChatGPT custom connector укажите URL: используйте hosted MCP URL из dashboard, обычно https://mcp.holymedia.kz/mcp.",
+                    "В ChatGPT custom connector укажите URL из dashboard, обычно https://mcp.holymedia.kz/mcp.",
                     "Authentication: OAuth.",
-                    "Advanced OAuth: выберите Client ID Metadata Document / CIMD, если ChatGPT показывает этот вариант.",
+                    "В расширенных настройках используйте автоматическую регистрацию клиента, если ChatGPT показывает этот вариант.",
                     "Token endpoint authentication method: none.",
-                    "При первом использовании ChatGPT откроет вход в HolyMedia MCP и получит access token через PKCE.",
+                    "При первом использовании ChatGPT откроет вход в HolyMedia MCP.",
                 ],
             },
         }
@@ -222,7 +222,7 @@ class HostedConnectionService:
             "chatgpt_oauth_required": False,
             "chatgpt_cimd_supported": True,
             "status": "transport_available",
-            "message": "Hosted Streamable HTTP MCP transport is available at this URL.",
+            "message": "HolyMedia MCP доступен по этому адресу подключения.",
         }
 
     def connections(self, user: Any | None = None) -> dict[str, Any]:

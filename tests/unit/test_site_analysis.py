@@ -26,7 +26,7 @@ def test_analyze_html_returns_short_priority_recommendations() -> None:
     assert result["checks"]["viewport_present"] is True
     assert result["checks"]["images_without_alt"] == 1
     assert len(result["priority_recommendations"]) <= 6
-    assert any(item["area"] == "SEO" for item in result["priority_recommendations"])
+    assert any(item["area"] == "Видимость" for item in result["priority_recommendations"])
 
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1", "http://localhost", "http://10.0.0.1"])

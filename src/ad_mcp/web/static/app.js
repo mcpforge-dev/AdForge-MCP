@@ -1,4 +1,4 @@
-/* HolyMedia MCP hosted beta dashboard.
+/* HolyMedia MCP dashboard.
    Onboarding flow: access code gate -> onboarding -> connections -> MCP setup.
    Uses only existing hosted/diagnostics endpoints. Never renders the access code
    or provider secrets. */
@@ -572,7 +572,7 @@
       if (!url || url === "—") return;
       await copyText(url);
       markMcpUrlCopied();
-      showClientMessage("MCP URL скопирован", "Вставьте этот URL при добавлении remote MCP server в Codex, Claude или ChatGPT.", "success");
+      showClientMessage("Адрес подключения скопирован", "Вставьте этот URL при добавлении HolyMedia MCP в Codex, Claude или ChatGPT.", "success");
     });
     el.copyMcpToken.addEventListener("click", async () => {
       const token = el.mcpTokenRaw.textContent.trim();
@@ -584,14 +584,14 @@
       const token = el.mcpTokenRaw.textContent.trim();
       if (!token) return;
       await copyText(`Bearer ${token}`);
-      showClientMessage("Bearer значение скопировано", "В AI-клиенте добавьте Header: Name Authorization, Value Bearer + ваш ключ доступа.", "success");
+      showClientMessage("Значение для Authorization скопировано", "В AI-клиенте добавьте заголовок Authorization и вставьте скопированное значение.", "success");
     });
     if (el.copyMcpOAuthClientId) {
       el.copyMcpOAuthClientId.addEventListener("click", async () => {
         const value = el.mcpOAuthClientId.textContent.trim();
         if (!value) return;
         await copyText(value);
-        showClientMessage("OAuth Client ID скопирован", "Вставьте его в Advanced settings Claude.", "success");
+        showClientMessage("Client ID скопирован", "Вставьте его в расширенные настройки Claude, если Claude попросит эти данные.", "success");
       });
     }
     if (el.copyMcpOAuthClientSecret) {
@@ -599,7 +599,7 @@
         const value = el.mcpOAuthClientSecret.textContent.trim();
         if (!value) return;
         await copyText(value);
-        showClientMessage("OAuth Client Secret скопирован", "Вставьте его в Advanced settings Claude. Secret показывается только один раз.", "success");
+        showClientMessage("Client Secret скопирован", "Вставьте его в расширенные настройки Claude. Secret показывается только один раз.", "success");
       });
     }
   }
@@ -634,7 +634,7 @@
     try {
       await api("/api/auth/logout", "POST", {});
     } catch (error) {
-      /* beta fallback may not have a web session */
+      /* Service access code may not have a web session. */
     }
     clearToken();
     state.user = null;
@@ -699,7 +699,7 @@
       body: `
         <div class="welcome-card">
           <strong>${isRegister ? "Что сделать дальше" : "Быстрый старт"}</strong>
-          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте HolyMedia MCP в Codex, Claude или ChatGPT." : "Если нужно проверить кабинеты, откройте раздел подключений. Все опасные действия остаются в безопасном preview-режиме."}</span>
+          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте HolyMedia MCP в Codex, Claude или ChatGPT." : "Если нужно проверить кабинеты, откройте раздел подключений. Изменения в рекламе применяются только после подтверждения."}</span>
         </div>
       `,
       closeLabel: "",
@@ -743,7 +743,7 @@
 
   function applyPreviewBadge(capabilities) {
     const enabled = capabilities?.preview_only?.enabled !== false;
-    el.previewBadge.textContent = enabled ? "Безопасный режим включён" : "Безопасный режим выключен";
+    el.previewBadge.textContent = enabled ? "Изменения только после подтверждения" : "Режим подтверждения выключен";
     el.previewBadge.className = `badge ${enabled ? "badge--ok" : "badge--err"}`;
   }
 
@@ -765,7 +765,7 @@
   async function loadMcpToken() {
     el.mcpTokenReveal.hidden = true;
     el.mcpTokenRaw.textContent = "";
-    el.mcpTokenStatus.innerHTML = emptyState("Загружаем статус token...");
+    el.mcpTokenStatus.innerHTML = emptyState("Загружаем статус ключа...");
     el.mcpTokenActions.innerHTML = "";
     try {
       const payload = await api("/api/mcp-token");
@@ -857,8 +857,8 @@
     const user = state.user;
     if (!user) {
       el.profileCard.innerHTML = `
-        <h3 class="card__title">Beta fallback</h3>
-        <p class="card__hint">Вы вошли по старому коду доступа. Email-профиль появится после входа или регистрации.</p>
+        <h3 class="card__title">Служебный доступ</h3>
+        <p class="card__hint">Вы вошли по коду доступа. Email-профиль появится после входа или регистрации.</p>
         <button type="button" class="btn btn--primary btn--small" data-auth-open="login">Войти по email</button>
       `;
       el.profileCard.querySelector("[data-auth-open]").addEventListener("click", () => openAuth("login"));
@@ -918,7 +918,7 @@
     el.mcpOAuthClientReveal.hidden = true;
     el.mcpOAuthClientId.textContent = "";
     el.mcpOAuthClientSecret.textContent = "";
-    el.mcpOAuthClientStatus.innerHTML = emptyState("Загружаем Claude OAuth credentials...");
+    el.mcpOAuthClientStatus.innerHTML = emptyState("Загружаем данные подключения Claude...");
     el.mcpOAuthClientActions.innerHTML = "";
     try {
       const payload = await api("/api/mcp-oauth-client");
@@ -934,8 +934,8 @@
     if (!el.mcpOAuthClientStatus) return;
     if (options.sessionRequired) {
       el.mcpOAuthClientStatus.innerHTML = `
-        <strong>Claude OAuth credentials</strong>
-        <span>Войдите по email, чтобы создать OAuth Client ID/Secret для Claude.</span>
+        <strong>Данные подключения Claude</strong>
+        <span>Войдите по email, чтобы создать данные для расширенных настроек Claude.</span>
       `;
       el.mcpOAuthClientActions.innerHTML = "";
       return;
@@ -947,22 +947,22 @@
     const exists = Boolean(client?.exists);
     const active = exists && client.status === "active";
     el.mcpOAuthClientStatus.innerHTML = `
-      <strong>Claude OAuth credentials</strong>
+      <strong>Данные подключения Claude</strong>
       <div class="kv">
         <div class="kv-row"><span>Статус</span><strong>${statusBadgeMarkup(active ? "Активен" : exists ? "Отозван" : "Не создан", active ? "ok" : exists ? "warn" : "muted")}</strong></div>
         <div class="kv-row"><span>Client ID</span><strong class="mono">${esc(client?.client_id || "—")}</strong></div>
         <div class="kv-row"><span>Secret prefix</span><strong class="mono">${esc(client?.client_secret_prefix || "—")}</strong></div>
       </div>
-      <span>Если Claude зависает на Checking connection, создайте эти значения и вставьте их в Advanced settings.</span>
+      <span>Если Claude зависает на Checking connection, создайте эти значения и вставьте их в расширенные настройки.</span>
     `;
     el.mcpOAuthClientActions.innerHTML = `
-      <button type="button" class="btn btn--primary btn--small" data-mcp-oauth-client-action="create">${active ? "Сгенерировать новый OAuth Secret" : "Создать OAuth Client ID/Secret"}</button>
+      <button type="button" class="btn btn--primary btn--small" data-mcp-oauth-client-action="create">${active ? "Сгенерировать новый Secret" : "Создать данные для Claude"}</button>
     `;
     el.mcpOAuthClientActions.querySelector("[data-mcp-oauth-client-action]").addEventListener("click", (event) => runMcpOAuthClientAction(event.currentTarget));
   }
 
   async function runMcpOAuthClientAction(button) {
-    if (state.mcpOAuthClient?.exists && !window.confirm("Сгенерировать новый Claude OAuth Client ID/Secret? Старый secret перестанет работать.")) return;
+    if (state.mcpOAuthClient?.exists && !window.confirm("Сгенерировать новые данные подключения Claude? Старый secret перестанет работать.")) return;
     setLoading(button, true);
     try {
       const payload = await api("/api/mcp-oauth-client/create", "POST", {});
@@ -971,10 +971,10 @@
       el.mcpOAuthClientId.textContent = state.mcpOAuthClient?.client_id || "";
       el.mcpOAuthClientSecret.textContent = payload.client_secret || "";
       el.mcpOAuthClientReveal.hidden = false;
-      showClientMessage("Claude OAuth credentials созданы", "Скопируйте Client ID и Client Secret сейчас: secret показывается только один раз.", "success");
+      showClientMessage("Данные подключения Claude созданы", "Скопируйте Client ID и Client Secret сейчас: secret показывается только один раз.", "success");
     } catch (error) {
       if (handle401(error)) return;
-      showClientMessage("Не удалось создать Claude OAuth credentials", humanizeError(error), "error");
+      showClientMessage("Не удалось создать данные подключения Claude", humanizeError(error), "error");
       renderMcpOAuthClientStatus(state.mcpOAuthClient);
     } finally {
       setLoading(button, false);
@@ -1127,7 +1127,7 @@
     const stats = [
       stat("Сервис", badge("Работает", "ok")),
       stat("Адрес кабинета", monoText(window.location.origin)),
-      stat("Безопасный режим", badge(previewOn ? "включён" : "выключен", previewOn ? "ok" : "err")),
+      stat("Подтверждение изменений", badge(previewOn ? "включено" : "выключено", previewOn ? "ok" : "err")),
       stat("Подключенные платформы", String(connectedPlatforms.length)),
       stat("Рекламные аккаунты", String(connectedAccounts)),
       stat("AI-подключение", state.mcpUrlCopied ? badge("URL скопирован", "ok") : badge("Ожидает настройки", "info")),
@@ -1398,8 +1398,8 @@
       const detail = meta.provider_api_error ? `<small>${esc(meta.provider_api_error)}</small>` : "";
       return `
         <div class="pending-diagnostics">
-          <strong>Диагностика Google Ads</strong>
-          <span>${blocked ? "Google OAuth прошёл, но API не вернул список кабинетов автоматически." : "Google Ads API вернул список доступных кабинетов."}</span>
+        <strong>Подсказка Google Ads</strong>
+          <span>${blocked ? "Google подключён, но список кабинетов не подтянулся автоматически." : "Google Ads вернул список доступных кабинетов."}</span>
           ${blocked ? "<span>Можно завершить подключение вручную: введите Customer ID рекламного кабинета.</span>" : ""}
           ${detail}
         </div>
@@ -1412,8 +1412,8 @@
     const fallback = meta.fallback_used === true || meta.fallback_used === "true";
     return `
       <div class="pending-diagnostics">
-        <strong>Диагностика Yandex Direct</strong>
-        <span>API вернул клиентов: ${esc(returned)}</span>
+        <strong>Подсказка Yandex Direct</strong>
+        <span>Найдено клиентов: ${esc(returned)}</span>
         <span>Активных: ${esc(active)}</span>
         <span>Архивных/отключённых: ${esc(archived)}</span>
         <span>Fallback использован: ${fallback ? "да" : "нет"}</span>
@@ -1999,9 +1999,9 @@
       platform_configuring: "платформа настраивается",
       ready_to_connect: "готово к подключению",
       blocked_missing_credentials: "платформа настраивается",
-      blocked_provider_dashboard_check: "нужна проверка provider dashboard",
-      blocked_authorize_url: "authorize URL заблокирован",
-      blocked_public_disabled: "public OAuth выключен",
+      blocked_provider_dashboard_check: "нужна проверка платформы",
+      blocked_authorize_url: "подключение временно закрыто",
+      blocked_public_disabled: "подключение временно закрыто",
       missing_env: "платформа настраивается",
       not_checked: "не проверено",
       not_recorded: "не записывается",

@@ -150,9 +150,9 @@ def build_site_analysis_tools() -> dict[str, callable]:
 def _recommendations(parser: _PageParser, word_count: int, cta_words: list[str]) -> list[dict[str, str]]:
     items: list[dict[str, str]] = []
     if not parser.title or len(parser.title) < 25:
-        items.append(_item("SEO", "high", "Уточните title страницы: добавьте услугу, город/нишу и ключевое обещание."))
+        items.append(_item("Видимость", "high", "Уточните заголовок страницы: добавьте услугу, город/нишу и ключевое обещание."))
     if not parser.meta_description:
-        items.append(_item("SEO", "medium", "Добавьте meta description на 130-160 символов с выгодой и понятным CTA."))
+        items.append(_item("Текст", "medium", "Добавьте короткое описание страницы с выгодой и понятным призывом к действию."))
     if len(parser.h1) != 1:
         items.append(_item("Структура", "high", "Сделайте один главный H1, который сразу объясняет предложение страницы."))
     if not parser.viewport:
@@ -162,11 +162,11 @@ def _recommendations(parser: _PageParser, word_count: int, cta_words: list[str])
     if not cta_words and parser.buttons == 0 and parser.forms == 0:
         items.append(_item("Конверсия", "high", "Добавьте заметный CTA на первом экране: заявка, консультация, расчёт или запись."))
     if parser.images and parser.images_without_alt:
-        items.append(_item("SEO", "low", "Заполните alt у изображений, особенно у важных иллюстраций и карточек услуг."))
+        items.append(_item("Доступность", "low", "Добавьте описания к важным изображениям, чтобы страница была понятнее людям и системам анализа."))
     if len(parser.h2) < 2:
         items.append(_item("Структура", "medium", "Разбейте страницу на понятные блоки: выгоды, процесс, кейсы, FAQ и контакты."))
     if not parser.canonical:
-        items.append(_item("SEO", "low", "Добавьте canonical, чтобы поисковые системы понимали основную версию страницы."))
+        items.append(_item("Структура", "low", "Проверьте, что у страницы есть понятная основная версия и нет дублей для одной и той же услуги."))
     if not items:
         items.append(_item("Конверсия", "medium", "Проверьте первый экран вручную: оффер, доверие и CTA должны быть видны без скролла."))
     return items

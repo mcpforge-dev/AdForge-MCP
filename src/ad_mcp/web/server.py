@@ -574,6 +574,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_json(self._oauth_protected_resource_metadata())
             if route in {"/.well-known/oauth-authorization-server", "/.well-known/oauth-authorization-server/mcp"}:
                 return self._send_json(self._oauth_authorization_server_metadata())
+            if route == "/assets/app.css":
+                return self._send_file(STATIC_ROOT / "app.css", "text/css; charset=utf-8")
+            if route == "/assets/app.js":
+                return self._send_file(STATIC_ROOT / "app.js", "application/javascript; charset=utf-8")
+            if route in {"/favicon.svg", "/apple-touch-icon.svg"}:
+                return self._send_file(STATIC_ROOT / "favicon.svg", "image/svg+xml")
             if route == "/auth/google/start":
                 if not self.settings.auth_enabled:
                     return self._redirect("/?google_login_error=auth_disabled")
@@ -593,10 +599,6 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 except (GoogleLoginError, AuthValidationError, RuntimeError) as exc:
                     return self._redirect(f"/?google_login_error={quote(self._client_error_message(exc), safe='')}")
                 return self._redirect_with_session(f"/app?google_login={'created' if created else 'login'}", token)
-            if route == "/assets/app.css":
-                return self._send_file(STATIC_ROOT / "app.css", "text/css; charset=utf-8")
-            if route == "/assets/app.js":
-                return self._send_file(STATIC_ROOT / "app.js", "application/javascript; charset=utf-8")
             if route == "/oauth/authorize":
                 query = self._query()
                 if query.get("response_type") != "code":

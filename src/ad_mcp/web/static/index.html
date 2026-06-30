@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>HolyMedia MCP · Beta</title>
+  <title>HolyMedia MCP — рекламные кабинеты в AI</title>
+  <meta name="description" content="HolyMedia MCP подключает рекламные кабинеты к AI-клиентам и помогает быстро смотреть аккаунты, кампании, статусы, метрики и точки роста сайта.">
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/apple-touch-icon.svg">
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
@@ -26,8 +29,8 @@
       <section class="hero">
         <div class="hero__copy">
           <span class="eyebrow">AI-помощник для рекламных кабинетов</span>
-          <h1>Управляйте рекламой через AI без ручных выгрузок</h1>
-          <p>HolyMedia MCP подключает ваши рекламные кабинеты к Codex, Claude или ChatGPT. После настройки можно просто спросить AI о кампаниях, бюджетах, статусах и базовых метриках, а сервис безопасно покажет данные из подключённых платформ.</p>
+          <h1>Подключите рекламу к AI и задавайте вопросы в чате</h1>
+          <p>HolyMedia MCP связывает рекламные кабинеты с Codex, Claude или ChatGPT. После подключения можно спросить AI о кампаниях, бюджетах, статусах и базовых метриках без ручных выгрузок и таблиц.</p>
           <div class="hero__actions">
             <button type="button" class="btn btn--primary" data-auth-open="register">Зарегистрироваться</button>
             <button type="button" class="btn btn--secondary" data-auth-open="login">Войти</button>
@@ -35,7 +38,7 @@
           <div class="hero__benefits">
             <span>Подключение через сайт</span>
             <span>Личный доступ для AI</span>
-            <span>Безопасный preview-режим</span>
+            <span>Изменения только после подтверждения</span>
             <span>Codex, Claude и ChatGPT</span>
           </div>
         </div>
@@ -47,7 +50,7 @@
           <div class="flow-arrow" aria-hidden="true">→</div>
           <div class="flow-card flow-card--middle">
             <strong>HolyMedia MCP</strong>
-            <span>Подключения, аккаунты, безопасный режим</span>
+            <span>Подключения, аккаунты и понятные отчёты</span>
           </div>
           <div class="flow-arrow" aria-hidden="true">→</div>
           <div class="flow-card flow-card--target">
@@ -60,12 +63,12 @@
         <div>
           <span class="eyebrow">AI-анализ сайта</span>
           <h2>Найдите, что мешает заявкам на сайте</h2>
-          <p>HolyMedia MCP помогает не только смотреть рекламные данные, но и быстро находить точки роста на сайте: первый экран, тексты, CTA, структуру, SEO-базу и конверсию.</p>
+          <p>HolyMedia MCP помогает не только смотреть рекламные данные, но и быстро находить точки роста на сайте: первый экран, оффер, тексты, CTA, доверие, UX и конверсию.</p>
         </div>
         <div class="site-analysis-points">
           <span>Проверка первого экрана и оффера</span>
           <span>Короткие приоритетные рекомендации</span>
-          <span>UX, SEO, тексты и конверсия</span>
+          <span>UX, тексты, доверие и конверсия</span>
         </div>
       </section>
       <section id="features" class="feature-grid" aria-label="Возможности">
@@ -78,7 +81,7 @@
           <p>Каждый пользователь работает со своими подключениями. Чужие рекламные кабинеты не смешиваются с вашим рабочим пространством.</p>
         </article>
         <article>
-          <h2>Безопасный режим</h2>
+          <h2>Контроль перед изменениями</h2>
           <p>AI может анализировать рекламу и готовить рекомендации. Реальные изменения в кабинетах не выполняются без отдельного подтверждения.</p>
         </article>
       </section>
@@ -97,7 +100,7 @@
       </section>
     </main>
     <footer class="footer footer--landing">
-      <p>HolyMedia MCP hosted beta · безопасный preview-режим для рекламных кабинетов.</p>
+      <p>HolyMedia MCP · рекламные кабинеты, сайт и AI-клиенты в одном рабочем процессе.</p>
       <nav class="footer__links" aria-label="Юридическая информация">
         <a href="/privacy">Политика конфиденциальности</a>
         <a href="/terms">Условия использования</a>
@@ -173,7 +176,6 @@
       <div class="gate__brand">
         <span class="logo-dot" aria-hidden="true"></span>
         <span class="gate__brand-name">HolyMedia MCP</span>
-        <span class="chip chip--beta">Бета</span>
       </div>
       <h1 class="gate__title">Вход по коду доступа</h1>
       <p class="gate__subtitle">Это служебный вход по коду доступа. Обычные пользователи входят по email на главной странице.</p>
@@ -185,7 +187,7 @@
         <button id="gate-submit" class="btn btn--primary btn--block" type="submit">Открыть панель</button>
         <p id="gate-error" class="gate__error" hidden>Неверный или пустой код доступа.</p>
       </form>
-      <p class="gate__footnote">Код доступа выдает менеджер HolyMedia. На beta-этапе опасные действия показываются как предварительный просмотр и не применяются без подтверждения.</p>
+      <p class="gate__footnote">Код доступа выдает менеджер HolyMedia. Действия, которые могут повлиять на рекламу, применяются только после отдельного подтверждения.</p>
     </div>
   </section>
 
@@ -196,7 +198,6 @@
         <a class="topbar__brand topbar__brand--link" href="/" aria-label="HolyMedia MCP на главную">
           <span class="logo-dot" aria-hidden="true"></span>
           <span class="topbar__name">HolyMedia MCP</span>
-          <span class="chip chip--beta">Бета</span>
         </a>
         <div class="topbar__side">
           <span id="user-pill" class="user-pill" hidden></span>
@@ -212,7 +213,7 @@
         <button type="button" class="nav-tab" data-nav="mcp">MCP</button>
         <button type="button" class="nav-tab" data-nav="profile">Профиль</button>
       </nav>
-      <span id="preview-badge" class="badge badge--ok" title="Реальные изменения в рекламных кабинетах без подтверждения не выполняются.">Безопасный режим включён</span>
+      <span id="preview-badge" class="badge badge--ok" title="Реальные изменения в рекламных кабинетах без подтверждения не выполняются.">Изменения только после подтверждения</span>
     </div>
 
     <main class="main">
@@ -220,7 +221,7 @@
       <section id="section-overview" class="section" data-section="overview">
         <div class="section-head">
           <h2>Начало работы</h2>
-          <p class="section-head__sub">Путь от рекламных кабинетов до вашего AI-клиента: подключение платформ, выбор аккаунтов и MCP URL.</p>
+          <p class="section-head__sub">Подключите рекламные платформы, выберите аккаунты и добавьте HolyMedia MCP в ваш AI-клиент.</p>
         </div>
         <div id="overview-notice"></div>
         <div id="overview-stats" class="stats-grid">
@@ -233,21 +234,21 @@
           </article>
           <article class="card mcp-card">
             <h3 class="card__title">Подключение к AI-клиенту</h3>
-            <p class="card__hint">Скопируйте MCP URL, выберите AI-клиент в разделе MCP и добавьте сервер в Codex, Claude или ChatGPT.</p>
+            <p class="card__hint">Скопируйте адрес подключения, выберите инструкцию для Codex, Claude или ChatGPT и добавьте HolyMedia MCP в ваш AI-клиент.</p>
             <div class="mcp-url-row">
               <code id="mcp-url" class="mcp-url">—</code>
               <button id="copy-mcp-url" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
             </div>
             <div class="safe-mode-note">
-              <strong>Безопасный режим</strong>
-              <span>HolyMedia MCP анализирует кабинеты и показывает предварительный просмотр изменений. Реальные изменения без подтверждения не выполняются.</span>
+              <strong>Вы контролируете изменения</strong>
+              <span>HolyMedia MCP помогает анализировать кабинеты и готовить рекомендации. Изменения в рекламе применяются только после подтверждения.</span>
             </div>
           </article>
         </div>
         <article class="card site-analysis-card">
           <div>
             <h3 class="card__title">AI-анализ сайта</h3>
-            <p class="card__hint">Введите URL сайта, а HolyMedia MCP даст короткий список приоритетных улучшений по структуре, UX, SEO, текстам и конверсии.</p>
+            <p class="card__hint">Введите URL сайта, а HolyMedia MCP даст короткий список приоритетных улучшений по первому экрану, офферу, текстам, UX, доверию и конверсии.</p>
           </div>
           <form id="site-analysis-form" class="site-analysis-form">
             <input id="site-analysis-url" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com" required>
@@ -261,7 +262,7 @@
       <section id="section-mcp" class="section" data-section="mcp" hidden>
         <div class="section-head">
           <h2>Подключение к AI-клиенту</h2>
-          <p class="section-head__sub">Добавьте hosted MCP server в Codex, Claude или ChatGPT. Для Codex нужен персональный Bearer token, а Claude и ChatGPT подключаются через OAuth.</p>
+          <p class="section-head__sub">Скопируйте адрес подключения, создайте личный ключ и выберите инструкцию для вашего AI-клиента.</p>
         </div>
         <article class="card mcp-card">
           <h3 class="card__title">1. Скопируйте MCP URL</h3>
@@ -270,7 +271,7 @@
             <button id="copy-mcp-url-panel" type="button" class="btn btn--secondary btn--small">Скопировать URL</button>
           </div>
           <div id="mcp-token-status" class="token-status">
-            <div class="empty-state"><p>Загружаем статус token...</p></div>
+            <div class="empty-state"><p>Загружаем статус ключа...</p></div>
           </div>
           <div id="mcp-token-reveal" class="token-reveal" hidden>
             <strong>Ключ доступа будет показан только один раз</strong>
@@ -278,7 +279,7 @@
             <div class="token-secret-row">
               <code id="mcp-token-raw" class="token-secret"></code>
               <button id="copy-mcp-token" type="button" class="btn btn--secondary btn--small">Скопировать ключ</button>
-              <button id="copy-mcp-auth-header" type="button" class="btn btn--secondary btn--small">Скопировать Bearer значение</button>
+              <button id="copy-mcp-auth-header" type="button" class="btn btn--secondary btn--small">Скопировать значение для Authorization</button>
             </div>
           </div>
           <div id="mcp-token-actions" class="token-actions"></div>
@@ -288,17 +289,17 @@
               <button type="button" class="client-card is-active" role="tab" aria-selected="true" data-mcp-client-tab="codex">
                 <span class="client-card__badge client-card__badge--ok">Готово</span>
                 <h4>Codex</h4>
-                <p>Самый быстрый сценарий: Streamable HTTP, MCP URL и персональный Bearer token.</p>
+                <p>Самый быстрый сценарий: вставьте адрес подключения и личный ключ доступа.</p>
               </button>
               <button type="button" class="client-card" role="tab" aria-selected="false" data-mcp-client-tab="claude">
-                <span class="client-card__badge client-card__badge--ok">OAuth готов</span>
+                <span class="client-card__badge client-card__badge--ok">Готово</span>
                 <h4>Claude</h4>
-                <p>Claude.ai custom connector подключается через OAuth discovery и вход в HolyMedia MCP.</p>
+                <p>Claude подключается через custom connector и вход в HolyMedia MCP.</p>
               </button>
               <button type="button" class="client-card" role="tab" aria-selected="false" data-mcp-client-tab="chatgpt">
-                <span class="client-card__badge client-card__badge--ok">OAuth CIMD готов</span>
+                <span class="client-card__badge client-card__badge--ok">Готово</span>
                 <h4>ChatGPT</h4>
-                <p>ChatGPT custom connector подключается через OAuth 2.1, PKCE и Client ID Metadata Document. Raw token туда не вставляем.</p>
+                <p>ChatGPT подключается через custom connector и безопасный вход в HolyMedia MCP.</p>
               </button>
             </div>
           </div>
@@ -307,31 +308,30 @@
             <ol class="setup-list">
               <li>Откройте Codex и перейдите в Settings / Настройки.</li>
               <li>Откройте раздел MCP / MCP Servers и нажмите “Add server”.</li>
-              <li>Выберите тип подключения “Streamable HTTP”.</li>
-              <li>В поле URL вставьте MCP URL выше.</li>
-              <li>В Headers / Заголовки добавьте Name: <code>Authorization</code>, Value: <code>Bearer &lt;ваш ключ доступа&gt;</code>.</li>
+              <li>Выберите подключение по HTTP.</li>
+              <li>В поле URL вставьте адрес выше.</li>
+              <li>В заголовках добавьте <code>Authorization</code> и значение <code>Bearer &lt;ваш ключ доступа&gt;</code>.</li>
               <li>Сохраните сервер, перезапустите MCP-подключение и откройте новый чат.</li>
             </ol>
           </div>
           <div class="setup-card ai-client-panel" data-mcp-client-panel="claude" role="tabpanel" hidden>
             <h3 class="card__title">3. Подключение Claude</h3>
             <div class="ai-client-notes">
-              <p><strong>Что есть в Claude сейчас:</strong> форма принимает <code>Name</code>, <code>Remote MCP server URL</code> и optional OAuth Client ID/Secret.</p>
+              <p><strong>Что заполнить в Claude:</strong> укажите название и адрес HolyMedia MCP. Если Claude попросит дополнительные поля, используйте блок ниже.</p>
               <div class="client-fields">
                 <div><span>Name</span><code>HolyMedia MCP</code></div>
                 <div><span>Remote MCP server URL</span><code>https://mcp.holymedia.kz/mcp</code></div>
                 <div><span>OAuth Client ID</span><code>оставьте пустым</code></div>
                 <div><span>OAuth Client Secret</span><code>оставьте пустым</code></div>
               </div>
-              <p><strong>Важно:</strong> персональный MCP token нельзя вставлять в OAuth Client Secret. Это другое поле и другой протокол.</p>
-              <p><strong>Как это работает:</strong> Claude найдёт OAuth metadata, зарегистрирует client, откроет вход в HolyMedia MCP и получит access token через PKCE.</p>
-              <p><strong>Что уже работает:</strong> Claude API или другой Claude-клиент, который поддерживает remote MCP URL плюс <code>authorization_token</code>/<code>Authorization: Bearer ...</code>.</p>
+              <p><strong>Важно:</strong> личный ключ доступа не вставляйте в поле OAuth Client Secret.</p>
+              <p><strong>Как это работает:</strong> Claude откроет вход в HolyMedia MCP, а затем получит доступ только к вашему рабочему пространству.</p>
               <div id="mcp-oauth-client-status" class="token-status">
-                <div class="empty-state"><p>Загружаем Claude OAuth credentials...</p></div>
+                <div class="empty-state"><p>Загружаем данные подключения Claude...</p></div>
               </div>
               <div id="mcp-oauth-client-reveal" class="token-reveal" hidden>
-                <strong>OAuth Client Secret будет показан только один раз</strong>
-                <span>Эти значения нужны только для Advanced settings в Claude. Это не personal MCP token.</span>
+                <strong>Секрет для Claude будет показан только один раз</strong>
+                <span>Эти значения нужны только для расширенных настроек Claude. Это не личный ключ доступа MCP.</span>
                 <div class="token-secret-row">
                   <code id="mcp-oauth-client-id" class="token-secret"></code>
                   <button id="copy-mcp-oauth-client-id" type="button" class="btn btn--secondary btn--small">Скопировать Client ID</button>
@@ -353,16 +353,16 @@
                 <div><span>Подключение</span><code>URL-адрес сервера</code></div>
                 <div><span>URL</span><code>https://mcp.holymedia.kz/mcp</code></div>
                 <div><span>Аутентификация</span><code>OAuth</code></div>
-                <div><span>Регистрация клиента</span><code>Client ID Metadata Document / CIMD</code></div>
-                <div><span>Token endpoint auth</span><code>none</code></div>
+                <div><span>Регистрация клиента</span><code>автоматическая</code></div>
+                <div><span>Дополнительная аутентификация</span><code>none</code></div>
               </div>
-              <p><strong>Как это работает:</strong> ChatGPT сам передаст metadata URL как <code>client_id</code>, HolyMedia MCP проверит redirect URI, откроет вход в ваш кабинет и выдаст access token через PKCE.</p>
-              <p><strong>Если ChatGPT пишет, что CIMD недоступен:</strong> обновите страницу настройки connector после деплоя и убедитесь, что URL указан с <code>/mcp</code>.</p>
+              <p><strong>Как это работает:</strong> ChatGPT откроет вход в HolyMedia MCP и подключится к вашему рабочему пространству.</p>
+              <p><strong>Если подключение не проходит:</strong> обновите страницу настройки connector и убедитесь, что URL указан с <code>/mcp</code>.</p>
             </div>
           </div>
           <div class="callout">
             <strong>Подсказка по безопасности</strong>
-            <span>Если клиент показывает поле “Bearer token environment variable”, туда нельзя вставлять сам ключ. Введите имя переменной <code>ADFORGE_MCP_CLIENT_TOKEN</code>, а ключ сохраните в эту переменную окружения. Если ключ попал в скриншот или чат, сгенерируйте новый.</span>
+            <span>Если личный ключ попал в скриншот или чат, сразу сгенерируйте новый в этом разделе.</span>
           </div>
           <div class="prompt-card">
             <h3 class="card__title">4. Проверьте в новом чате</h3>
@@ -425,7 +425,7 @@
     </main>
 
     <footer class="footer">
-      <p>HolyMedia MCP hosted beta · безопасный режим: реальные изменения без подтверждения не выполняются.</p>
+      <p>HolyMedia MCP · изменения в рекламных кабинетах применяются только после подтверждения.</p>
       <nav class="footer__links" aria-label="Юридическая информация">
         <a href="/privacy">Политика конфиденциальности</a>
         <a href="/terms">Условия использования</a>
@@ -452,7 +452,7 @@
       <section class="section">
         <div class="section-head">
           <h2>Админ-панель</h2>
-          <p class="section-head__sub">Foundation-версия: пользователи, роли, статусы и базовая диагностика без показа секретов.</p>
+          <p class="section-head__sub">Пользователи, роли, подключения и служебная диагностика без показа секретов.</p>
         </div>
         <div id="admin-content">
           <div class="empty-state"><p>Проверяем доступ администратора...</p></div>

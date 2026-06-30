@@ -78,6 +78,22 @@ def test_custom_beta_token_header_authorizes_request() -> None:
     assert _request_token_is_valid(_Headers({"X-AD-MCP-BETA-TOKEN": "secret-token"}), settings) is True
 
 
+def test_favicon_svg_is_publicly_served(tmp_path) -> None:
+    settings = Settings(project_root=tmp_path, env="development", web_host="127.0.0.1", web_api_token="")
+    base_url, close = _serve(settings)
+    try:
+        request = Request(f"{base_url}/favicon.svg")
+        with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            body = response.read().decode("utf-8")
+            content_type = response.headers.get("content-type", "")
+    finally:
+        close()
+
+    assert response.status == 200
+    assert "image/svg+xml" in content_type
+    assert "HolyMedia MCP" in body
+
+
 def test_auth_login_rate_limit_blocks_repeated_failures(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
