@@ -1197,6 +1197,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   display: flex;
   flex-direction: column;
   gap: 4px;
+  margin-top: auto;
 }
 
 .safe-mode-note strong { color: var(--text); }
