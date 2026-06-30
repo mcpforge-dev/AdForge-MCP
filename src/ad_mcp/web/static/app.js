@@ -1217,20 +1217,27 @@
     }
     el.siteAnalysisResult.innerHTML = `
       <div class="site-analysis-report">
-        <div class="site-analysis-actions">
-          <button type="button" class="btn btn--primary btn--small" data-site-download>Скачать отчёт</button>
-          <button type="button" class="btn btn--secondary btn--small" data-site-copy="report">Скопировать отчёт</button>
-          <button type="button" class="btn btn--secondary btn--small" data-site-copy="tasks">Скопировать задачи для команды</button>
-          <button type="button" class="btn btn--secondary btn--small" data-site-copy="hero">Скопировать тексты для hero</button>
-          <button type="button" class="btn btn--secondary btn--small" data-site-repeat>Повторить анализ</button>
-        </div>
         <div class="site-analysis-summary">
-          <span class="site-analysis-score">${esc(String(analysis.overall_score || "—"))}/100</span>
-          <div>
+          <div class="site-analysis-score-card">
+            <span class="site-analysis-score">${esc(String(analysis.overall_score || "—"))}</span>
+            <small>оценка сайта</small>
+          </div>
+          <div class="site-analysis-summary__body">
+            <span class="site-analysis-eyebrow">AI-аудит страницы</span>
             <h3>Краткий вердикт</h3>
             <p>${esc(analysis.verdict?.summary || analysis.summary || "")}</p>
-            <p><strong>Главный риск:</strong> ${esc(analysis.verdict?.main_risk || "Не хватает данных для точного вывода.")}</p>
-            <p><strong>Быстрый выигрыш:</strong> ${esc(analysis.verdict?.fastest_win || "Усилить первый экран, CTA и доверие.")}</p>
+            <div class="site-analysis-verdict-grid">
+              <div><strong>Главный риск</strong><span>${esc(analysis.verdict?.main_risk || "Не хватает данных для точного вывода.")}</span></div>
+              <div><strong>Быстрый выигрыш</strong><span>${esc(analysis.verdict?.fastest_win || "Усилить первый экран, CTA и доверие.")}</span></div>
+            </div>
+            ${renderReportKpis(analysis)}
+          </div>
+          <div class="site-analysis-actions">
+            <button type="button" class="btn btn--primary btn--small" data-site-download>Скачать отчёт</button>
+            <button type="button" class="btn btn--secondary btn--small" data-site-copy="report">Скопировать отчёт</button>
+            <button type="button" class="btn btn--secondary btn--small" data-site-copy="tasks">Задачи команде</button>
+            <button type="button" class="btn btn--secondary btn--small" data-site-copy="hero">Hero-тексты</button>
+            <button type="button" class="btn btn--secondary btn--small" data-site-repeat>Новый анализ</button>
           </div>
         </div>
         ${renderAssumptions(analysis.assumptions || [])}
@@ -1358,20 +1365,53 @@
     return `<div class="site-analysis-cardlet"><h4>Допущения</h4><ul>${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>`;
   }
 
+  function renderReportKpis(analysis) {
+    const vertical = analysis.checks?.detected_vertical || "auto";
+    const topCount = (analysis.top_issues || []).length;
+    const dayCount = (analysis.one_day_plan || []).length;
+    const cta = analysis.evidence?.audit_engine?.cta_texts || [];
+    const ctaLabel = cta.length && cta[0] !== "не обнаружено в собранных данных" ? "CTA найден" : "CTA нужно усилить";
+    return `<div class="site-analysis-kpis">
+      <span>Ниша: ${esc(vertical)}</span>
+      <span>${esc(String(topCount))} приоритетов</span>
+      <span>${esc(String(dayCount))} задач на день</span>
+      <span>${esc(ctaLabel)}</span>
+    </div>`;
+  }
+
   function renderScorecards(items) {
     return `<div class="site-analysis-block"><h3>Оценка по направлениям</h3><div class="site-score-grid">${items.map((item) => `
-      <div class="site-score-card">
+      <div class="site-score-card ${scoreToneClass(item.score)}">
         <div><strong>${esc(item.area)}</strong><span>${esc(String(item.score))}/100</span></div>
+        <div class="site-score-bar" aria-hidden="true"><i style="width:${scoreWidth(item.score)}%"></i></div>
         <p>${esc(item.explanation || "")}</p>
         <ul>${(item.problems || []).slice(0, 3).map((p) => `<li>${esc(p)}</li>`).join("")}</ul>
       </div>
     `).join("")}</div></div>`;
   }
 
+  function scoreWidth(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return 0;
+    return Math.max(0, Math.min(100, number));
+  }
+
+  function scoreToneClass(value) {
+    const number = Number(value);
+    if (!Number.isFinite(number)) return "";
+    if (number < 60) return "is-risk";
+    if (number < 78) return "is-watch";
+    return "is-strong";
+  }
+
   function renderTopIssues(items) {
     return `<div class="site-analysis-block"><h3>Топ улучшений</h3><div class="site-issue-list">${items.map((item) => `
-      <article>
-        <span>${esc(item.priority || "P2")} · эффект ${esc(item.effect || "средний")} · сложность ${esc(item.difficulty || "средняя")}</span>
+      <article class="${priorityToneClass(item.priority)}">
+        <div class="site-issue-meta">
+          <b>${esc(item.priority || "P2")}</b>
+          <span>эффект ${esc(item.effect || "средний")}</span>
+          <span>сложность ${esc(item.difficulty || "средняя")}</span>
+        </div>
         <h4>${esc(item.title || "Улучшение")}</h4>
         <p><strong>Проблема:</strong> ${esc(item.problem || "")}</p>
         <p><strong>Почему важно:</strong> ${esc(item.why_it_matters || "")}</p>
@@ -1379,6 +1419,12 @@
         ${item.evidence ? `<p><strong>Что найдено:</strong> ${esc(item.evidence)}</p>` : ""}
       </article>
     `).join("")}</div></div>`;
+  }
+
+  function priorityToneClass(priority) {
+    if (priority === "P1") return "is-p1";
+    if (priority === "P3") return "is-p3";
+    return "is-p2";
   }
 
   function renderQuickWins(items) {
@@ -1390,27 +1436,40 @@
   function renderReadyHero(hero) {
     if (!hero || !Object.keys(hero).length) return "";
     return `<div class="site-analysis-block"><h3>${esc(hero.title || "Готовый первый экран")}</h3>
-      <div class="site-copy-grid">
-        <div><h4>H1</h4><p>${esc(hero.h1 || "")}</p></div>
-        <div><h4>Подзаголовок</h4><p>${esc(hero.subheadline || "")}</p></div>
-        <div><h4>Кнопки</h4><p><strong>Основная:</strong> ${esc(hero.primary_button || "")}</p><p><strong>Вторичная:</strong> ${esc(hero.secondary_button || "")}</p></div>
-        <div><h4>Преимущества рядом с CTA</h4><ul>${(hero.advantages || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>
-        <div><h4>Микротекст</h4><p>${esc(hero.microcopy || "")}</p></div>
-        <div><h4>Визуал и доверие</h4><p>${esc(hero.visual || "")}</p><ul>${(hero.trust_elements || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>
+      <div class="site-hero-preview">
+        <div class="site-hero-preview__copy">
+          <span>готово для дизайнера</span>
+          <h4>${esc(hero.h1 || "")}</h4>
+          <p>${esc(hero.subheadline || "")}</p>
+          <div class="site-hero-buttons">
+            <b>${esc(hero.primary_button || "")}</b>
+            <em>${esc(hero.secondary_button || "")}</em>
+          </div>
+          <small>${esc(hero.microcopy || "")}</small>
+        </div>
+        <div class="site-hero-preview__side">
+          <h4>Что поставить рядом</h4>
+          <ul>${(hero.advantages || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul>
+          <h4>Визуал и доверие</h4>
+          <p>${esc(hero.visual || "")}</p>
+          <div class="site-trust-chips">${(hero.trust_elements || []).map((item) => `<span>${esc(item)}</span>`).join("")}</div>
+        </div>
       </div>
     </div>`;
   }
 
   function renderOneDayPlan(items) {
     if (!items.length) return "";
-    return `<div class="site-analysis-block"><h3>Что сделать за 1 день</h3><div class="site-plan-table">${items.map((item) => `
-      <div>
-        <strong>${esc(item.task || "")}</strong>
-        <span>${esc(item.owner || "")}</span>
-        <span>${esc(item.time || "")}</span>
-        <span>${esc(item.expected_effect || "")}</span>
-        <span>${esc(item.placement || "")}</span>
-      </div>
+    return `<div class="site-analysis-block"><h3>Что сделать за 1 день</h3><div class="site-day-plan">${items.map((item, index) => `
+      <article>
+        <b>${esc(String(index + 1))}</b>
+        <div>
+          <h4>${esc(item.task || "")}</h4>
+          <p>${esc(item.expected_effect || "")}</p>
+          <span>${esc(item.owner || "")} · ${esc(item.time || "")}</span>
+          <small>${esc(item.placement || "")}</small>
+        </div>
+      </article>
     `).join("")}</div></div>`;
   }
 
