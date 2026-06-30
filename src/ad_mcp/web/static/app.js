@@ -742,6 +742,7 @@
   }
 
   function applyPreviewBadge(capabilities) {
+    if (!el.previewBadge) return;
     const enabled = capabilities?.preview_only?.enabled !== false;
     el.previewBadge.textContent = enabled ? "Изменения только после подтверждения" : "Режим подтверждения выключен";
     el.previewBadge.className = `badge ${enabled ? "badge--ok" : "badge--err"}`;
@@ -1115,7 +1116,6 @@
     const connectedPlatforms = platforms.filter((p) => (p.accounts || []).length > 0);
     const connectedAccounts = connectedPlatforms.reduce((sum, p) => sum + (p.accounts || []).length, 0);
     const mcpUrl = capabilities?.mcp?.url || connections?.mcp?.url || "";
-    const previewOn = capabilities?.preview_only?.enabled !== false;
 
     el.mcpUrl.textContent = mcpUrl || "—";
     el.copyMcpUrl.disabled = !mcpUrl;
@@ -1125,12 +1125,11 @@
     }
 
     const stats = [
-      stat("Сервис", badge("Работает", "ok")),
+      stat("Сервис", plainValue("Работает")),
       stat("Адрес кабинета", monoText(window.location.origin)),
-      stat("Подтверждение изменений", badge(previewOn ? "включено" : "выключено", previewOn ? "ok" : "err")),
       stat("Подключенные платформы", String(connectedPlatforms.length)),
       stat("Рекламные аккаунты", String(connectedAccounts)),
-      stat("AI-подключение", state.mcpUrlCopied ? badge("URL скопирован", "ok") : badge("Ожидает настройки", "info")),
+      stat("AI-подключение", plainValue(state.mcpUrlCopied ? "URL скопирован" : "Ожидает настройки")),
     ];
     el.overviewStats.innerHTML = stats.join("");
 
@@ -2031,6 +2030,10 @@
 
   function monoText(value) {
     return `<span class="mono">${esc(value)}</span>`;
+  }
+
+  function plainValue(value) {
+    return `<span>${esc(value)}</span>`;
   }
 
   function kvGrid(rows) {

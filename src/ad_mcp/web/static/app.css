@@ -1037,6 +1037,20 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   letter-spacing: 0.04em;
 }
 
+.site-analysis-examples {
+  display: grid;
+  gap: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.site-analysis-examples span {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  background: rgba(255, 255, 255, 0.025);
+  padding: 10px 12px;
+}
+
 /* ---------- Overview ---------- */
 
 .stats-grid {
