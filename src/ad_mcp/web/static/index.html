@@ -382,14 +382,65 @@
             <h3 class="card__title">Что можно улучшить на сайте</h3>
             <p class="card__hint">Вставьте URL страницы. HolyMedia MCP не заходит в закрытые кабинеты и не проверяет внутренние адреса, а анализирует только публичный сайт.</p>
           </div>
-          <form id="site-analysis-form" class="site-analysis-form">
-            <input id="site-analysis-url" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com" required>
-            <button id="site-analysis-submit" type="submit" class="btn btn--primary btn--small">Проанализировать</button>
+          <form id="site-analysis-form" class="site-analysis-form site-analysis-form--advanced">
+            <label class="field">
+              <span class="field__label">URL сайта</span>
+              <input id="site-analysis-url" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com" required>
+            </label>
+            <label class="field">
+              <span class="field__label">Тип сайта</span>
+              <select id="site-analysis-type">
+                <option value="">Определить автоматически</option>
+                <option value="лендинг">Лендинг</option>
+                <option value="корпоративный сайт">Корпоративный сайт</option>
+                <option value="интернет-магазин">Интернет-магазин</option>
+                <option value="клиника/услуги">Клиника / услуги</option>
+                <option value="B2B">B2B</option>
+                <option value="другое">Другое</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Цель сайта</span>
+              <select id="site-analysis-goal">
+                <option value="">Определить автоматически</option>
+                <option value="заявки">Заявки</option>
+                <option value="звонки">Звонки</option>
+                <option value="продажи">Продажи</option>
+                <option value="бронирования">Бронирования</option>
+                <option value="лиды">Лиды</option>
+                <option value="доверие/презентация компании">Доверие / презентация</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Режим анализа</span>
+              <select id="site-analysis-mode">
+                <option value="quick">Быстрый анализ</option>
+                <option value="full">Полный анализ</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="field__label">Целевая аудитория</span>
+              <input id="site-analysis-audience" type="text" placeholder="Например: владельцы клиник, B2B-клиенты, родители">
+            </label>
+            <label class="field">
+              <span class="field__label">Город / страна</span>
+              <input id="site-analysis-region" type="text" placeholder="Например: Алматы, Казахстан">
+            </label>
+            <label class="field">
+              <span class="field__label">Главный конкурент</span>
+              <input id="site-analysis-competitor" type="text" placeholder="Опционально">
+            </label>
+            <label class="field">
+              <span class="field__label">Что волнует больше всего</span>
+              <input id="site-analysis-concern" type="text" placeholder="Например: мало заявок, слабый первый экран, нет доверия">
+            </label>
+            <button id="site-analysis-submit" type="submit" class="btn btn--primary btn--block">Проанализировать сайт</button>
           </form>
           <div class="site-analysis-examples">
             <span>Пример для AI-клиента: “Проанализируй сайт и скажи, что мешает заявкам”.</span>
             <span>Результат будет коротким: только приоритетные рекомендации без длинного технического отчёта.</span>
           </div>
+          <div id="site-analysis-history" class="site-analysis-history" hidden></div>
           <div id="site-analysis-result" class="site-analysis-result" hidden></div>
         </article>
       </section>

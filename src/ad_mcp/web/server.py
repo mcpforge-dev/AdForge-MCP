@@ -30,6 +30,7 @@ from ad_mcp.web.emailer import EmailDeliveryError, PasswordResetEmailer
 from ad_mcp.web.google_login import GoogleLoginError, GoogleLoginService
 from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.service import MetaDashboardService
+from ad_mcp.web.site_analysis_history import SiteAnalysisHistoryStore
 
 
 WEB_ROOT = Path(__file__).resolve().parent
@@ -68,6 +69,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     auth = AuthStore()
     emailer = PasswordResetEmailer()
     google_login = GoogleLoginService()
+    site_analysis_history = SiteAnalysisHistoryStore()
     _omit_response_body = False
     _rate_limit_lock = threading.Lock()
     _rate_limit_hits: dict[str, list[float]] = {}
@@ -741,6 +743,11 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_json(self.hosted.oauth_authorization_info("yandex_direct", self._session_user()))
             if route == "/api/hosted/oauth/yandex/pending":
                 return self._send_json(self.hosted.oauth_pending("yandex_direct", str(query["pending_id"]), self._session_user()))
+            if route == "/api/site/history":
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                return self._send_json({"items": self.site_analysis_history.list_for_user(user.id)})
 
             if route == "/api/meta/dashboard":
                 return self._send_json(self.service.dashboard(account_id=account_id, end_date=end_date))
@@ -893,10 +900,22 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             if route == "/api/site/analyze":
                 if not self._ensure_same_origin_session_post(route):
                     return
-                if not self._ensure_session_user():
+                user = self._ensure_session_user()
+                if not user:
                     return
                 payload = self._json_body()
-                return self._send_json({"analysis": analyze_site_improvements(str(payload.get("url", "")))})
+                analysis = analyze_site_improvements(
+                    str(payload.get("url", "")),
+                    site_type=str(payload.get("site_type", "")),
+                    goal=str(payload.get("goal", "")),
+                    audience=str(payload.get("audience", "")),
+                    region=str(payload.get("region", "")),
+                    mode=str(payload.get("mode", "quick")),
+                    competitor=str(payload.get("competitor", "")),
+                    concern=str(payload.get("concern", "")),
+                )
+                history_record = self.site_analysis_history.save(user.id, analysis)
+                return self._send_json({"analysis": analysis, "history_record": history_record})
             if route == "/api/auth/forgot-password":
                 payload = self._json_body()
                 if not self.settings.auth_enabled:
@@ -1173,6 +1192,7 @@ def main() -> None:
     AdsWebHandler.auth = AuthStore(settings)
     AdsWebHandler.emailer = PasswordResetEmailer(settings)
     AdsWebHandler.google_login = GoogleLoginService(settings)
+    AdsWebHandler.site_analysis_history = SiteAnalysisHistoryStore(settings)
     if _api_token_required(settings) and not settings.web_api_token.strip():
         LOGGER.warning("AD_MCP_WEB_API_TOKEN is required for beta/production web API access but is not configured.")
     server = ThreadingHTTPServer((host, port), AdsWebHandler)

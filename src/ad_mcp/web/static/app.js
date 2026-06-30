@@ -42,6 +42,8 @@
     mcpUrlCopied: localStorage.getItem(MCP_URL_COPIED_KEY) === "1",
     notice: null,
     diagnosticsRun: false,
+    siteAnalysisCopy: {},
+    siteAnalysisHistory: [],
   };
 
   const el = {};
@@ -98,7 +100,15 @@
     el.overviewStats = document.getElementById("overview-stats");
     el.siteAnalysisForm = document.getElementById("site-analysis-form");
     el.siteAnalysisUrl = document.getElementById("site-analysis-url");
+    el.siteAnalysisType = document.getElementById("site-analysis-type");
+    el.siteAnalysisGoal = document.getElementById("site-analysis-goal");
+    el.siteAnalysisMode = document.getElementById("site-analysis-mode");
+    el.siteAnalysisAudience = document.getElementById("site-analysis-audience");
+    el.siteAnalysisRegion = document.getElementById("site-analysis-region");
+    el.siteAnalysisCompetitor = document.getElementById("site-analysis-competitor");
+    el.siteAnalysisConcern = document.getElementById("site-analysis-concern");
     el.siteAnalysisSubmit = document.getElementById("site-analysis-submit");
+    el.siteAnalysisHistory = document.getElementById("site-analysis-history");
     el.siteAnalysisResult = document.getElementById("site-analysis-result");
     el.nextSteps = document.getElementById("next-steps");
     el.mcpUrl = document.getElementById("mcp-url");
@@ -557,6 +567,9 @@
     if (el.siteAnalysisForm) {
       el.siteAnalysisForm.addEventListener("submit", runSiteAnalysis);
     }
+    if (el.siteAnalysisResult) {
+      el.siteAnalysisResult.addEventListener("click", handleSiteAnalysisCopy);
+    }
     document.querySelectorAll("[data-client-modal-close]").forEach((node) => {
       node.addEventListener("click", () => closeClientModal());
     });
@@ -735,6 +748,7 @@
     if (state.section === "overview") loadOverview();
     if (state.section === "connections") loadConnections();
     if (state.section === "mcp") renderMcpPanel();
+    if (state.section === "site-analysis") loadSiteAnalysisHistory();
     if (state.section === "diagnostics" && !state.diagnosticsRun) {
       el.diagnosticsContent.innerHTML = emptyState("Запустите диагностику, чтобы увидеть состояние сервиса.");
     }
@@ -1154,12 +1168,23 @@
     event.preventDefault();
     const url = el.siteAnalysisUrl.value.trim();
     if (!url) return;
+    const request = {
+      url,
+      site_type: el.siteAnalysisType?.value || "",
+      goal: el.siteAnalysisGoal?.value || "",
+      mode: el.siteAnalysisMode?.value || "quick",
+      audience: el.siteAnalysisAudience?.value || "",
+      region: el.siteAnalysisRegion?.value || "",
+      competitor: el.siteAnalysisCompetitor?.value || "",
+      concern: el.siteAnalysisConcern?.value || "",
+    };
     setLoading(el.siteAnalysisSubmit, true);
     el.siteAnalysisResult.hidden = false;
-    el.siteAnalysisResult.innerHTML = emptyState("Анализируем сайт...");
+    el.siteAnalysisResult.innerHTML = emptyState(request.mode === "full" ? "Готовим полный аудит сайта..." : "Анализируем сайт...");
     try {
-      const payload = await api("/api/site/analyze", "POST", { url });
+      const payload = await api("/api/site/analyze", "POST", request);
       renderSiteAnalysis(payload.analysis || null);
+      loadSiteAnalysisHistory();
     } catch (error) {
       if (handle401(error)) return;
       el.siteAnalysisResult.innerHTML = errorState(humanizeError(error));
@@ -1173,21 +1198,193 @@
       el.siteAnalysisResult.innerHTML = errorState("Не удалось получить результат анализа.");
       return;
     }
-    const recommendations = analysis.priority_recommendations || [];
-    const summary = analysis.status === "ok"
-      ? analysis.summary || "Готово. Ниже приоритетные улучшения."
-      : analysis.error || analysis.summary || "Не удалось выполнить анализ сайта.";
+    const reportText = siteAnalysisMarkdown(analysis);
+    const heroText = heroCopyMarkdown(analysis);
+    const tasksText = tasksMarkdown(analysis);
+    state.siteAnalysisCopy = { reportText, heroText, tasksText };
+    if (analysis.status !== "ok") {
+      el.siteAnalysisResult.innerHTML = `
+        <div class="site-analysis-report">
+          <div class="site-analysis-summary">
+            <h3>Не удалось открыть сайт</h3>
+            <p>${esc(analysis.error || analysis.summary || "Страница недоступна.")}</p>
+          </div>
+          ${renderTopIssues(analysis.top_issues || [])}
+        </div>
+      `;
+      return;
+    }
     el.siteAnalysisResult.innerHTML = `
-      <p class="site-analysis-result__summary">${esc(summary)}</p>
-      <ol class="site-analysis-list">
-        ${recommendations.slice(0, 6).map((item) => `
-          <li>
-            <small>${esc(item.area || "Рекомендация")} · ${esc(priorityLabel(item.priority))}</small><br>
-            ${esc(item.recommendation || "")}
-          </li>
-        `).join("")}
-      </ol>
+      <div class="site-analysis-report">
+        <div class="site-analysis-actions">
+          <button type="button" class="btn btn--secondary btn--small" data-site-copy="report">Скопировать отчёт</button>
+          <button type="button" class="btn btn--secondary btn--small" data-site-copy="tasks">Скопировать задачи для команды</button>
+          <button type="button" class="btn btn--secondary btn--small" data-site-copy="hero">Скопировать тексты для hero</button>
+          <button type="button" class="btn btn--secondary btn--small" data-site-repeat>Повторить анализ</button>
+        </div>
+        <div class="site-analysis-summary">
+          <span class="site-analysis-score">${esc(String(analysis.overall_score || "—"))}/100</span>
+          <div>
+            <h3>Краткий вердикт</h3>
+            <p>${esc(analysis.verdict?.summary || analysis.summary || "")}</p>
+            <p><strong>Главный риск:</strong> ${esc(analysis.verdict?.main_risk || "Не хватает данных для точного вывода.")}</p>
+            <p><strong>Быстрый выигрыш:</strong> ${esc(analysis.verdict?.fastest_win || "Усилить первый экран, CTA и доверие.")}</p>
+          </div>
+        </div>
+        ${renderAssumptions(analysis.assumptions || [])}
+        ${renderScorecards(analysis.scores || [])}
+        ${renderTopIssues(analysis.top_issues || [])}
+        ${renderQuickWins(analysis.quick_wins || [])}
+        ${renderRewrittenCopy(analysis.rewritten_copy || {})}
+        ${renderRecommendedStructure(analysis.recommended_structure || [])}
+        ${renderImplementationPlan(analysis.implementation_plan || [])}
+        ${renderQuestions(analysis.questions || [])}
+      </div>
     `;
+  }
+
+  async function loadSiteAnalysisHistory() {
+    if (!el.siteAnalysisHistory || !state.user) return;
+    try {
+      const payload = await api("/api/site/history");
+      const items = payload.items || [];
+      state.siteAnalysisHistory = items;
+      if (!items.length) {
+        el.siteAnalysisHistory.hidden = true;
+        el.siteAnalysisHistory.innerHTML = "";
+        return;
+      }
+      el.siteAnalysisHistory.hidden = false;
+      el.siteAnalysisHistory.innerHTML = `
+        <h3 class="card__title">Последние анализы</h3>
+        <div class="site-analysis-history__list">
+          ${items.slice(0, 5).map((item, index) => `
+            <button type="button" data-history-index="${escAttr(String(index))}">
+              <strong>${esc(item.url || "Сайт")}</strong>
+              <span>${esc(item.created_at || "")} · ${esc(String(item.overall_score || "—"))}/100</span>
+            </button>
+          `).join("")}
+        </div>
+      `;
+      el.siteAnalysisHistory.querySelectorAll("[data-history-index]").forEach((node) => {
+        node.addEventListener("click", () => {
+          const index = Number(node.getAttribute("data-history-index") || "-1");
+          const item = state.siteAnalysisHistory[index];
+          if (!item?.analysis) return;
+          renderSiteAnalysis(item.analysis);
+          el.siteAnalysisResult.hidden = false;
+        });
+      });
+    } catch (error) {
+      if (!handle401(error)) {
+        el.siteAnalysisHistory.hidden = true;
+      }
+    }
+  }
+
+  async function handleSiteAnalysisCopy(event) {
+    const target = event.target.closest("[data-site-copy], [data-site-repeat]");
+    if (!target) return;
+    if (target.dataset.siteRepeat !== undefined) {
+      el.siteAnalysisForm?.scrollIntoView({ behavior: "smooth", block: "start" });
+      return;
+    }
+    const key = target.dataset.siteCopy === "tasks" ? "tasksText" : target.dataset.siteCopy === "hero" ? "heroText" : "reportText";
+    await copyText(state.siteAnalysisCopy[key] || "");
+    toast("Скопировано", "success");
+  }
+
+  function renderAssumptions(items) {
+    if (!items.length) return "";
+    return `<div class="site-analysis-cardlet"><h4>Допущения</h4><ul>${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>`;
+  }
+
+  function renderScorecards(items) {
+    return `<div class="site-analysis-block"><h3>Оценка по направлениям</h3><div class="site-score-grid">${items.map((item) => `
+      <div class="site-score-card">
+        <div><strong>${esc(item.area)}</strong><span>${esc(String(item.score))}/100</span></div>
+        <p>${esc(item.explanation || "")}</p>
+        <ul>${(item.problems || []).slice(0, 3).map((p) => `<li>${esc(p)}</li>`).join("")}</ul>
+      </div>
+    `).join("")}</div></div>`;
+  }
+
+  function renderTopIssues(items) {
+    return `<div class="site-analysis-block"><h3>Топ улучшений</h3><div class="site-issue-list">${items.map((item) => `
+      <article>
+        <span>${esc(item.priority || "P2")} · эффект ${esc(item.effect || "средний")} · сложность ${esc(item.difficulty || "средняя")}</span>
+        <h4>${esc(item.title || "Улучшение")}</h4>
+        <p><strong>Проблема:</strong> ${esc(item.problem || "")}</p>
+        <p><strong>Почему важно:</strong> ${esc(item.why_it_matters || "")}</p>
+        <p><strong>Что сделать:</strong> ${esc(item.what_to_do || "")}</p>
+      </article>
+    `).join("")}</div></div>`;
+  }
+
+  function renderQuickWins(items) {
+    return `<div class="site-analysis-block"><h3>Что поправить за 30-60 минут</h3><div class="site-win-grid">${items.map((item) => `
+      <div><strong>${esc(item.title || "")}</strong><p>${esc(item.action || "")}</p><small>${esc(item.time || "")}</small></div>
+    `).join("")}</div></div>`;
+  }
+
+  function renderRewrittenCopy(copy) {
+    const h1 = copy.h1_variants || [];
+    return `<div class="site-analysis-block"><h3>Готовые тексты</h3>
+      <div class="site-copy-grid">
+        <div><h4>H1</h4>${h1.map((item) => `<p>${esc(item)}</p>`).join("")}</div>
+        <div><h4>Подзаголовок</h4><p>${esc(copy.subheadline || "")}</p></div>
+        <div><h4>CTA</h4>${(copy.cta_variants || []).map((item) => `<p>${esc(item)}</p>`).join("")}</div>
+        <div><h4>Текст формы</h4><p>${esc(copy.form_text || "")}</p></div>
+      </div>
+    </div>`;
+  }
+
+  function renderRecommendedStructure(items) {
+    return `<div class="site-analysis-block"><h3>Рекомендуемая структура страницы</h3><ol class="site-structure-list">${items.map((item) => `<li><strong>${esc(item.block || "")}</strong><span>${esc(item.purpose || "")}</span></li>`).join("")}</ol></div>`;
+  }
+
+  function renderImplementationPlan(items) {
+    return `<div class="site-analysis-block"><h3>План для команды</h3><div class="site-plan-table">${items.map((item) => `
+      <div><strong>${esc(item.task || "")}</strong><span>${esc(item.impact || "")}</span><span>${esc(item.difficulty || "")}</span><span>${esc(item.priority || "")}</span><span>${esc(item.owner || "")}</span></div>
+    `).join("")}</div></div>`;
+  }
+
+  function renderQuestions(items) {
+    return `<div class="site-analysis-block"><h3>Вопросы к владельцу сайта</h3><ol>${items.map((item) => `<li>${esc(item)}</li>`).join("")}</ol></div>`;
+  }
+
+  function siteAnalysisMarkdown(analysis) {
+    return [
+      `# AI-анализ сайта: ${analysis.url || ""}`,
+      `Оценка: ${analysis.overall_score || "—"}/100`,
+      analysis.verdict?.summary || analysis.summary || "",
+      `Главный риск: ${analysis.verdict?.main_risk || ""}`,
+      `Быстрый выигрыш: ${analysis.verdict?.fastest_win || ""}`,
+      "",
+      "## Топ улучшений",
+      ...(analysis.top_issues || []).map((x) => `- ${x.priority}: ${x.title}. ${x.what_to_do}`),
+      "",
+      "## Быстрые победы",
+      ...(analysis.quick_wins || []).map((x) => `- ${x.title}: ${x.action}`),
+    ].join("\n");
+  }
+
+  function heroCopyMarkdown(analysis) {
+    const copy = analysis.rewritten_copy || {};
+    return [
+      "## H1",
+      ...(copy.h1_variants || []),
+      "## Подзаголовок",
+      copy.subheadline || "",
+      "## CTA",
+      ...(copy.cta_variants || []),
+      "## Текст формы",
+      copy.form_text || "",
+    ].join("\n");
+  }
+
+  function tasksMarkdown(analysis) {
+    return (analysis.implementation_plan || []).map((x) => `${x.priority} · ${x.owner}: ${x.task} | влияние: ${x.impact} | сложность: ${x.difficulty}`).join("\n");
   }
 
   function priorityLabel(priority) {
