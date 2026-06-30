@@ -999,7 +999,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 }
 
 .overview-main-grid > .card {
-  min-height: 268px;
+  min-height: 292px;
 }
 
 .overview-progress-card {
@@ -1104,9 +1104,10 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .steps li {
   counter-increment: step;
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  align-items: center;
+  column-gap: 12px;
   font-size: 14px;
   color: var(--text-muted);
 }
@@ -1123,7 +1124,6 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  transform: translateY(3px);
 }
 
 .steps li.is-done { color: var(--text); }
