@@ -30,6 +30,8 @@ def test_analyze_html_returns_advanced_cro_report() -> None:
     assert result["top_issues"]
     assert result["quick_wins"]
     assert result["rewritten_copy"]["h1_variants"]
+    assert result["ready_hero"]["h1"]
+    assert result["one_day_plan"]
     assert result["recommended_structure"]
     assert result["implementation_plan"]
     assert result["questions"]
@@ -90,6 +92,8 @@ def test_hotel_analysis_uses_booking_context_and_honest_score() -> None:
     assert "Забронировать номер" in ctas
     assert "Проверить свободные номера" in ctas
     assert all("Записаться" not in item for item in ctas)
+    assert result["ready_hero"]["primary_button"] == "Проверить свободные номера"
+    assert result["one_day_plan"][0]["task"]
     titles = [item["title"] for item in result["top_issues"][:5]]
     assert any("бронировать на сайте выгоднее" in title for title in titles)
     assert any("CTA бронирования" in title for title in titles)
@@ -224,11 +228,19 @@ def test_site_audit_dedupes_headings_and_filters_cta_noise() -> None:
                 "Standard double room with breakfast and a very long card description that should not be treated as CTA",
                 "Submit",
             ],
+            "cta_groups": {
+                "booking_cta": [],
+                "navigation_link": ["Rooms"],
+                "form_submit": ["Submit"],
+            },
             "first_screen_blocks": [{"tag": "h2", "text": "Conference halls"}, {"tag": "h2", "text": "Conference halls"}],
         },
     )
 
     assert result["evidence"]["h2"] == ["Conference halls"]
+    groups = result["evidence"]["audit_engine"]["cta_groups"]
+    assert "Rooms" in groups["navigation_link"]
+    assert groups["booking_cta"] == []
     assert "booking@example.com" not in result["evidence"]["audit_engine"]["cta_texts"]
     assert not any("facebook" in item.lower() for item in result["evidence"]["audit_engine"]["cta_texts"])
     assert all(len(item) <= 70 for item in result["evidence"]["audit_engine"]["cta_texts"])

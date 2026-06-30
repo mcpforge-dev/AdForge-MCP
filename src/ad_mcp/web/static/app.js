@@ -1237,6 +1237,8 @@
         <div class="site-result-tabs" role="tablist" aria-label="Разделы отчёта">
           ${[
             ["issues", "Топ улучшений"],
+            ["hero", "Первый экран"],
+            ["day", "1 день"],
             ["wins", "Что поправить"],
             ["copy", "Готовые тексты"],
             ["structure", "Структура"],
@@ -1248,6 +1250,8 @@
           ${renderScorecards(analysis.scores || [])}
           ${renderTopIssues(analysis.top_issues || [])}
         </div>
+        <div class="site-result-panel" data-site-panel="hero" hidden>${renderReadyHero(analysis.ready_hero || {})}</div>
+        <div class="site-result-panel" data-site-panel="day" hidden>${renderOneDayPlan(analysis.one_day_plan || [])}</div>
         <div class="site-result-panel" data-site-panel="wins" hidden>${renderQuickWins(analysis.quick_wins || [])}</div>
         <div class="site-result-panel" data-site-panel="copy" hidden>${renderRewrittenCopy(analysis.rewritten_copy || {})}</div>
         <div class="site-result-panel" data-site-panel="structure" hidden>${renderRecommendedStructure(analysis.recommended_structure || [])}</div>
@@ -1383,6 +1387,33 @@
     `).join("")}</div></div>`;
   }
 
+  function renderReadyHero(hero) {
+    if (!hero || !Object.keys(hero).length) return "";
+    return `<div class="site-analysis-block"><h3>${esc(hero.title || "Готовый первый экран")}</h3>
+      <div class="site-copy-grid">
+        <div><h4>H1</h4><p>${esc(hero.h1 || "")}</p></div>
+        <div><h4>Подзаголовок</h4><p>${esc(hero.subheadline || "")}</p></div>
+        <div><h4>Кнопки</h4><p><strong>Основная:</strong> ${esc(hero.primary_button || "")}</p><p><strong>Вторичная:</strong> ${esc(hero.secondary_button || "")}</p></div>
+        <div><h4>Преимущества рядом с CTA</h4><ul>${(hero.advantages || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>
+        <div><h4>Микротекст</h4><p>${esc(hero.microcopy || "")}</p></div>
+        <div><h4>Визуал и доверие</h4><p>${esc(hero.visual || "")}</p><ul>${(hero.trust_elements || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul></div>
+      </div>
+    </div>`;
+  }
+
+  function renderOneDayPlan(items) {
+    if (!items.length) return "";
+    return `<div class="site-analysis-block"><h3>Что сделать за 1 день</h3><div class="site-plan-table">${items.map((item) => `
+      <div>
+        <strong>${esc(item.task || "")}</strong>
+        <span>${esc(item.owner || "")}</span>
+        <span>${esc(item.time || "")}</span>
+        <span>${esc(item.expected_effect || "")}</span>
+        <span>${esc(item.placement || "")}</span>
+      </div>
+    `).join("")}</div></div>`;
+  }
+
   function renderRewrittenCopy(copy) {
     const h1 = copy.h1_variants || [];
     return `<div class="site-analysis-block"><h3>Готовые тексты</h3>
@@ -1422,11 +1453,30 @@
       "",
       "## Быстрые победы",
       ...(analysis.quick_wins || []).map((x) => `- ${x.title}: ${x.action}`),
+      "",
+      "## Что сделать за 1 день",
+      ...(analysis.one_day_plan || []).map((x) => `- ${x.task}: ${x.owner}, ${x.time}. Эффект: ${x.expected_effect}. Где: ${x.placement}`),
     ].join("\n");
   }
 
   function heroCopyMarkdown(analysis) {
+    const hero = analysis.ready_hero || {};
     const copy = analysis.rewritten_copy || {};
+    if (hero && Object.keys(hero).length) {
+      return [
+        "## Готовый первый экран",
+        `H1: ${hero.h1 || ""}`,
+        `Подзаголовок: ${hero.subheadline || ""}`,
+        `Основная кнопка: ${hero.primary_button || ""}`,
+        `Вторичная кнопка: ${hero.secondary_button || ""}`,
+        "Преимущества:",
+        ...(hero.advantages || []).map((item) => `- ${item}`),
+        `Микротекст: ${hero.microcopy || ""}`,
+        `Визуал: ${hero.visual || ""}`,
+        "Доверие рядом:",
+        ...(hero.trust_elements || []).map((item) => `- ${item}`),
+      ].join("\n");
+    }
     return [
       "## H1",
       ...(copy.h1_variants || []),
@@ -1440,6 +1490,9 @@
   }
 
   function tasksMarkdown(analysis) {
+    if ((analysis.one_day_plan || []).length) {
+      return (analysis.one_day_plan || []).map((x) => `${x.owner}: ${x.task} | ${x.time} | эффект: ${x.expected_effect} | где: ${x.placement}`).join("\n");
+    }
     return (analysis.implementation_plan || []).map((x) => `${x.priority} · ${x.owner}: ${x.task} | влияние: ${x.impact} | сложность: ${x.difficulty}`).join("\n");
   }
 

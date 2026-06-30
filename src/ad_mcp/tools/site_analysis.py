@@ -40,6 +40,7 @@ BOOKING_CTA_KEYWORDS = [
 ]
 BOOKING_CTA_STRONG_KEYWORDS = [
     "book",
+    "book now",
     "booking",
     "reserve",
     "availability",
@@ -52,9 +53,39 @@ BOOKING_CTA_STRONG_KEYWORDS = [
     "узнать цену",
     "цена на даты",
     "номера и цены",
+    "посмотреть номера и цены",
 ]
 GENERIC_SUBMIT_WORDS = {"отправить", "submit", "send", "ok", "далее"}
 CTA_NOISE_WORDS = {"ru", "kz", "en", "cn", "главная", "вернуться назад", "назад", "стать участником"}
+HOTEL_NAVIGATION_LINKS = {
+    "номера",
+    "rooms",
+    "контакты",
+    "contacts",
+    "предложения",
+    "offers",
+    "смотреть еще",
+    "смотреть ещё",
+    "конференц-залы",
+    "конференц залы",
+    "ресторан",
+    "ресторан salt",
+    "выбор гостиницы",
+    "посмотреть на карте",
+    "о гостинице",
+    "галерея",
+}
+CONTACT_CTA_KEYWORDS = ["позвонить", "call", "whatsapp", "написать", "связаться", "contact us", "связаться с отелем"]
+SECONDARY_CTA_KEYWORDS = ["подробнее", "смотреть", "посмотреть", "узнать больше", "more", "learn more"]
+LEAD_CTA_KEYWORDS = [
+    "получить консультацию",
+    "оставить заявку",
+    "заказать звонок",
+    "get consultation",
+    "contact us",
+    "request",
+    "order",
+]
 
 NICHE_KEYWORDS: dict[str, list[str]] = {
     "hotel": ["отель", "гостиниц", "hotel", "номер", "номера", "rooms", "проживание", "заезд", "выезд", "booking", "брон"],
@@ -259,6 +290,8 @@ def analyze_html(
     quick_wins = _quick_wins(parser, signals, context)
     rewritten_copy = _rewritten_copy(parser, context)
     implementation_plan = _implementation_plan(top_issues, quick_wins)
+    ready_hero = _ready_hero(context)
+    one_day_plan = _one_day_plan(context, signals)
     result = {
         "status": "ok",
         "url": url,
@@ -273,6 +306,8 @@ def analyze_html(
         "technical_notes": technical_notes,
         "quick_wins": quick_wins,
         "rewritten_copy": rewritten_copy,
+        "ready_hero": ready_hero,
+        "one_day_plan": one_day_plan,
         "recommended_structure": _recommended_structure(context),
         "implementation_plan": implementation_plan,
         "priority_matrix": implementation_plan,
@@ -310,6 +345,9 @@ def analyze_html(
                 "transport_mentions": signals.get("hotel_transport_matches", []),
                 "faq_mentions": signals.get("hotel_faq_matches", []),
                 "booking_ctas": signals.get("booking_ctas", []),
+                "first_screen_booking_ctas": signals.get("first_screen_booking_ctas", []),
+                "contact_ctas": signals.get("contact_ctas", []),
+                "navigation_links": signals.get("navigation_links", []),
             },
             "niche_scores": signals.get("niche_scores", {}),
             "audit_engine": {
@@ -493,7 +531,12 @@ def _extract_audit_facts(
     structured = _extract_structured_data(html)
     first_screen_blocks = _dedupe_blocks((rendered_facts or {}).get("first_screen_blocks") or _fallback_first_screen_blocks(parser))
     cta_candidates = _extract_cta_candidates(html, first_screen_blocks)
-    ctas = [item["text"] for item in cta_candidates][:MAX_FACT_ITEMS]
+    cta_groups = _group_cta_candidates(cta_candidates)
+    ctas = (
+        cta_groups.get("booking_cta", [])
+        + cta_groups.get("contact_cta", [])
+        + cta_groups.get("secondary_cta", [])
+    )[:MAX_FACT_ITEMS]
     images = _extract_images(html)
     facts = {
         "engine": engine_status or {"static_html_used": True, "rendered_dom_used": False},
@@ -505,6 +548,7 @@ def _extract_audit_facts(
         "h2": _unique((soup_facts.get("h2") or parser.h2))[:MAX_FACT_ITEMS],
         "h3": _unique((soup_facts.get("h3") or parser.h3))[:MAX_FACT_ITEMS],
         "cta_texts": ctas,
+        "cta_groups": cta_groups,
         "cta_candidates": cta_candidates[:MAX_FACT_ITEMS],
         "forms": {"count": parser.forms, "inputs": parser.inputs},
         "contacts": {
@@ -525,6 +569,24 @@ def _extract_audit_facts(
         "pagespeed": _pagespeed_signals(url),
     }
     return facts
+
+
+def _group_cta_candidates(candidates: list[dict[str, Any]]) -> dict[str, list[str]]:
+    groups = {
+        "booking_cta": [],
+        "contact_cta": [],
+        "form_submit": [],
+        "secondary_cta": [],
+        "informational_link": [],
+        "navigation_link": [],
+    }
+    for item in candidates:
+        category = str(item.get("category") or "informational_link")
+        groups.setdefault(category, [])
+        text = _clean_text(str(item.get("text", "")))
+        if text:
+            groups[category].append(text)
+    return {key: _clean_cta_list(value) if key in {"booking_cta", "contact_cta", "form_submit", "secondary_cta"} else _unique(value)[:8] for key, value in groups.items()}
 
 
 def _extract_with_beautifulsoup(html: str) -> dict[str, Any]:
@@ -585,7 +647,8 @@ def _append_cta_candidate(candidates: list[dict[str, Any]], *, text: str, href: 
         text = _text_from_href(href)
     lowered_text = text.lower()
     haystack = f"{text} {href}".lower()
-    booking_related = any(keyword in haystack for keyword in BOOKING_CTA_STRONG_KEYWORDS) or lowered_text in {"номера", "rooms"}
+    cta_category = _classify_cta(text, href, source)
+    booking_related = cta_category == "booking_cta"
     if derived_from_href and not booking_related:
         return
     if lowered_text in CTA_NOISE_WORDS:
@@ -604,6 +667,7 @@ def _append_cta_candidate(candidates: list[dict[str, Any]], *, text: str, href: 
             "text": text,
             "href": href,
             "source": source,
+            "category": cta_category,
             "booking_related": booking_related,
             "generic_submit": generic_submit,
         }
@@ -616,6 +680,7 @@ def _rank_cta_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any
     for item in sorted(
         candidates,
         key=lambda value: (
+            _cta_category_priority(str(value.get("category", ""))),
             not bool(value.get("booking_related")),
             bool(value.get("generic_submit")),
             0 if str(value.get("source", "")).startswith("first_screen") else 1,
@@ -639,6 +704,42 @@ def _cta_source_priority(source: str) -> int:
     if source == "attribute":
         return 2
     return 3
+
+
+def _classify_cta(text: str, href: str, source: str) -> str:
+    lowered_text = text.lower().strip()
+    haystack = f"{lowered_text} {href.lower()}".strip()
+    href_lower = href.lower()
+    if any(keyword in haystack for keyword in BOOKING_CTA_STRONG_KEYWORDS):
+        return "booking_cta"
+    if href_lower.startswith(("tel:", "mailto:")) or "wa.me" in href_lower or "whatsapp" in haystack:
+        return "contact_cta"
+    if any(keyword in haystack for keyword in LEAD_CTA_KEYWORDS):
+        return "secondary_cta"
+    if any(keyword in haystack for keyword in CONTACT_CTA_KEYWORDS):
+        if lowered_text not in {"контакты", "contacts"}:
+            return "contact_cta"
+    if lowered_text in GENERIC_SUBMIT_WORDS or source == "input":
+        return "form_submit"
+    if lowered_text in HOTEL_NAVIGATION_LINKS:
+        return "navigation_link"
+    if any(keyword in lowered_text for keyword in SECONDARY_CTA_KEYWORDS):
+        return "secondary_cta"
+    if href:
+        return "informational_link"
+    return "informational_link"
+
+
+def _cta_category_priority(category: str) -> int:
+    order = {
+        "booking_cta": 0,
+        "contact_cta": 1,
+        "form_submit": 2,
+        "secondary_cta": 3,
+        "informational_link": 4,
+        "navigation_link": 5,
+    }
+    return order.get(category, 6)
 
 
 def _extract_attr_values(html: str, attr: str) -> list[str]:
@@ -844,6 +945,11 @@ def _technical_notes(parser: _PageParser, signals: dict[str, Any], context: dict
 
 
 def _display_cta_texts(values: list[str]) -> list[str]:
+    result = _clean_cta_list(values)
+    return result or ["не обнаружено в собранных данных"]
+
+
+def _clean_cta_list(values: list[str]) -> list[str]:
     result: list[str] = []
     for value in _unique(values):
         lowered = value.lower()
@@ -864,7 +970,7 @@ def _display_cta_texts(values: list[str]) -> list[str]:
         result.append(value)
         if len(result) >= 8:
             break
-    return result or ["не обнаружено в собранных данных"]
+    return result
 
 
 def _sanitize_result(result: dict[str, Any]) -> dict[str, Any]:
@@ -878,6 +984,11 @@ def _sanitize_result(result: dict[str, Any]) -> dict[str, Any]:
         if isinstance(audit, dict):
             audit["first_screen_blocks"] = _dedupe_blocks(audit.get("first_screen_blocks", []))
             audit["cta_texts"] = _display_cta_texts([str(item) for item in audit.get("cta_texts", [])])
+            if isinstance(audit.get("cta_groups"), dict):
+                audit["cta_groups"] = {
+                    str(key): _clean_cta_list([str(item) for item in value]) if isinstance(value, list) else []
+                    for key, value in audit["cta_groups"].items()
+                }
     verdict = result.get("verdict", {})
     if isinstance(verdict, dict):
         for key, value in list(verdict.items()):
@@ -962,10 +1073,22 @@ def _signals(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None 
         for item in facts.get("first_screen_blocks", [])
         if isinstance(item, dict) and item.get("tag") in {"a", "button"}
     ][:8]
+    cta_groups = facts.get("cta_groups", {}) if isinstance(facts.get("cta_groups"), dict) else {}
     booking_ctas = [
         str(item.get("text", ""))
         for item in facts.get("cta_candidates", [])
-        if isinstance(item, dict) and item.get("booking_related")
+        if isinstance(item, dict) and item.get("category") == "booking_cta"
+    ][:8]
+    if not booking_ctas:
+        booking_ctas = [str(item) for item in cta_groups.get("booking_cta", [])][:8]
+    contact_ctas = [str(item) for item in cta_groups.get("contact_cta", [])][:8]
+    form_submit_ctas = [str(item) for item in cta_groups.get("form_submit", [])][:8]
+    secondary_ctas = [str(item) for item in cta_groups.get("secondary_cta", [])][:8]
+    navigation_links = [str(item) for item in cta_groups.get("navigation_link", [])][:8]
+    first_screen_booking_ctas = [
+        str(item.get("text", ""))
+        for item in facts.get("cta_candidates", [])
+        if isinstance(item, dict) and item.get("category") == "booking_cta" and str(item.get("source", "")).startswith("first_screen")
     ][:8]
     return {
         "cta_matches": cta,
@@ -988,6 +1111,11 @@ def _signals(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None 
         "niche_scores": niche_scores,
         "first_screen_ctas": _unique(first_screen_ctas)[:8],
         "booking_ctas": _unique(booking_ctas)[:8],
+        "first_screen_booking_ctas": _unique(first_screen_booking_ctas)[:8],
+        "contact_ctas": _unique(contact_ctas)[:8],
+        "form_submit_ctas": _unique(form_submit_ctas)[:8],
+        "secondary_ctas": _unique(secondary_ctas)[:8],
+        "navigation_links": _unique(navigation_links)[:8],
         "has_contacts": parser.phone_links > 0 or parser.email_links > 0 or parser.whatsapp_links > 0,
         "has_form_or_button": parser.forms > 0 or parser.buttons > 0 or bool(cta),
     }
@@ -1052,7 +1180,10 @@ def _scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any], c
 
 
 def _hotel_scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any]) -> list[dict[str, Any]]:
-    booking_cta = bool(signals.get("booking_ctas")) or bool(signals.get("hotel_booking_matches")) or any("book" in item.lower() or "брон" in item.lower() for item in parser.button_texts)
+    booking_cta = bool(signals.get("booking_ctas"))
+    first_screen_booking_cta = bool(signals.get("first_screen_booking_ctas"))
+    contact_cta = bool(signals.get("contact_ctas")) or parser.phone_links + parser.whatsapp_links > 0
+    mostly_navigation = bool(signals.get("navigation_links")) and not booking_cta
     direct = bool(signals.get("hotel_direct_booking_matches"))
     rooms = bool(signals.get("hotel_room_matches"))
     trust = bool(signals.get("hotel_review_matches") or signals.get("trust_matches") or parser.images > 3)
@@ -1072,10 +1203,10 @@ def _hotel_scorecards(parser: _PageParser, word_count: int, signals: dict[str, A
         ),
         (
             "CTA бронирования",
-            _score(38, (booking_cta, 24), (parser.forms > 0, 10), (parser.phone_links + parser.whatsapp_links > 0, 8)),
+            _hotel_cta_score(booking_cta, first_screen_booking_cta, contact_cta, parser.forms > 0, mostly_navigation),
             [
-                "Основное действие для отеля должно вести к проверке дат, цены или бронированию номера.",
-                "CTA должен звучать как действие гостя: проверить номера, узнать цену на даты, забронировать.",
+                _hotel_cta_problem(signals),
+                "CTA должен звучать как действие гостя: проверить свободные номера, узнать цену на даты, забронировать номер.",
             ],
         ),
         (
@@ -1112,7 +1243,7 @@ def _hotel_scorecards(parser: _PageParser, word_count: int, signals: dict[str, A
         ),
         (
             "UX booking-сценария",
-            _score(40, (parser.viewport, 14), (booking_cta, 16), (signals["has_contacts"], 8), (parser.links < 220, 5)),
+            _score(38, (parser.viewport, 12), (first_screen_booking_cta, 14), (booking_cta, 8), (signals["has_contacts"], 6), (parser.links < 220, 4)),
             [
                 "Путь от первого экрана до выбора дат и номера должен быть коротким и очевидным.",
                 "На мобильном экране кнопка бронирования и быстрый контакт должны быть доступны без поиска.",
@@ -1127,7 +1258,54 @@ def _hotel_scorecards(parser: _PageParser, word_count: int, signals: dict[str, A
             ],
         ),
     ]
-    return [{"area": area, "score": score, "explanation": _score_explanation(score), "problems": problems[:3]} for area, score, problems in raw]
+    return [{"area": area, "score": score, "explanation": _hotel_score_explanation(area, score, signals), "problems": problems[:3]} for area, score, problems in raw]
+
+
+def _hotel_cta_score(booking_cta: bool, first_screen_booking_cta: bool, contact_cta: bool, has_form: bool, mostly_navigation: bool) -> int:
+    score = _score(34, (booking_cta, 18), (first_screen_booking_cta, 22), (contact_cta, 8), (has_form, 5))
+    if not booking_cta:
+        score = min(score, 72)
+    if not first_screen_booking_cta:
+        score = min(score, 76)
+    if mostly_navigation:
+        score = min(score, 66)
+    return score
+
+
+def _hotel_cta_problem(signals: dict[str, Any]) -> str:
+    booking = _display_cta_texts(list(signals.get("booking_ctas", [])))
+    navigation = _clean_cta_list(list(signals.get("navigation_links", [])))
+    contact = _clean_cta_list(list(signals.get("contact_ctas", [])))
+    if booking and booking != ["не обнаружено в собранных данных"]:
+        return f"Найдены CTA бронирования: {', '.join(booking)}. Проверьте, видны ли они на первом экране и ведут ли сразу к датам/цене."
+    if navigation:
+        return f"В собранных данных видна в основном навигация: {', '.join(navigation[:5])}. Это помогает изучать сайт, но не заменяет CTA бронирования."
+    if contact:
+        return f"Найдены быстрые контакты: {', '.join(contact)}. Для отеля этого мало без отдельного действия “Проверить свободные номера”."
+    return "Явный CTA бронирования не обнаружен в собранных данных: пользователю нужно самому искать путь к датам, цене и номеру."
+
+
+def _hotel_score_explanation(area: str, score: int, signals: dict[str, Any]) -> str:
+    if area == "CTA бронирования":
+        if not signals.get("booking_ctas"):
+            return "Оценка снижена: конверсионный CTA бронирования не найден, а навигационные ссылки не считаются полноценным booking-сценарием."
+        if not signals.get("first_screen_booking_ctas"):
+            return "CTA бронирования найден, но нет подтверждения, что он заметен на первом экране. Для отеля это критично."
+        return "CTA бронирования найден и выглядит ближе к целевому сценарию: теперь важно связать его с датами, ценой и доверием."
+    if area == "Прямое бронирование":
+        if not signals.get("hotel_direct_booking_matches"):
+            return "Оценка снижена: не обнаружен явный аргумент, почему бронировать напрямую выгоднее, чем через OTA/Booking."
+        if not signals.get("booking_ctas"):
+            return "Есть намёк на официальный сайт, но он не связан с заметным действием бронирования. Гость всё ещё может уйти сравнивать условия на Booking."
+    if area == "Номера и категории" and not signals.get("hotel_availability_matches"):
+        return "Есть признаки номеров, но путь к датам, цене и доступности нужно сделать заметнее."
+    if area == "UX booking-сценария" and not signals.get("booking_ctas"):
+        return "Путь к бронированию выглядит непрямым: пользователь видит разделы сайта, но не видит очевидный следующий шаг к датам и цене."
+    if area == "Аудитории: туристы / бизнес / мероприятия" and not signals.get("hotel_business_matches"):
+        return "Сценарии гостей нужно развести сильнее: турист, бизнес-гость и организатор мероприятия принимают решение по разным причинам."
+    if area == "Конференции, ресторан и SPA" and not signals.get("hotel_food_spa_matches"):
+        return "Дополнительные услуги не работают как отдельные продающие входы: им нужны свои CTA и короткие причины перейти дальше."
+    return _score_explanation(score)
 
 
 def _hotel_score_cap(signals: dict[str, Any]) -> int:
@@ -1136,6 +1314,10 @@ def _hotel_score_cap(signals: dict[str, Any]) -> int:
         cap = min(cap, 74)
     if not signals.get("hotel_booking_matches") and not signals.get("booking_ctas"):
         cap = min(cap, 70)
+    if not signals.get("booking_ctas"):
+        cap = min(cap, 72)
+    if signals.get("booking_ctas") and not signals.get("first_screen_booking_ctas"):
+        cap = min(cap, 78)
     if not signals.get("hotel_availability_matches"):
         cap = min(cap, 76)
     if not signals.get("hotel_room_matches"):
@@ -1187,9 +1369,15 @@ def _top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], c
 
 def _hotel_top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], scores: list[dict[str, Any]]) -> list[dict[str, str]]:
     buttons = ", ".join(parser.button_texts[:6]) if parser.button_texts else "кнопки не найдены"
-    cta_evidence = _display_cta_texts(list(signals.get("booking_ctas", [])) + parser.button_texts + parser.link_texts)
-    if cta_evidence:
+    cta_evidence = _display_cta_texts(list(signals.get("booking_ctas", [])) + list(signals.get("contact_ctas", [])))
+    form_evidence = _clean_cta_list(list(signals.get("form_submit_ctas", [])))
+    navigation_evidence = _clean_cta_list(list(signals.get("navigation_links", [])))
+    if cta_evidence and cta_evidence != ["не обнаружено в собранных данных"]:
         buttons = ", ".join(cta_evidence)
+    elif form_evidence:
+        buttons = f"booking CTA не обнаружен; найдена обычная отправка формы: {', '.join(form_evidence[:3])}"
+    elif navigation_evidence:
+        buttons = f"конверсионные CTA не обнаружены; навигация: {', '.join(navigation_evidence[:6])}"
     h2 = ", ".join(parser.h2[:6]) if parser.h2 else "разделы H2 не найдены"
     issues: list[dict[str, str]] = []
 
@@ -1207,14 +1395,14 @@ def _hotel_top_issues(parser: _PageParser, word_count: int, signals: dict[str, A
         ),
         _issue(
             "Сделать CTA бронирования главным действием",
-            f"Кнопки и ссылки должны вести гостя к проверке дат и цены, а не просто к общему просмотру страницы. Найдено: {buttons}.",
+            f"На странице есть разделы номеров и контактов, но путь к проверке дат и цены не выглядит как главное действие. Найдено: {buttons}.",
             "Для отеля главный сценарий — проверить свободные номера, увидеть цену на даты и забронировать.",
             "Закрепить формулировки “Проверить свободные номера”, “Забронировать номер”, “Узнать цену на даты” на первом экране, в блоке номеров и в финале страницы.",
             "низкая",
             "высокий",
             "P1",
             "дизайнер/разработчик",
-            evidence=f"Найденные кнопки: {buttons}",
+            evidence=f"Конверсионные CTA: {buttons}",
         ),
         _issue(
             "Добавить быстрые причины выбрать этот отель",
@@ -1414,6 +1602,63 @@ def _hotel_rewritten_copy(context: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _ready_hero(context: dict[str, Any]) -> dict[str, Any]:
+    if _is_hotel_context(context):
+        region = f" в {context['region']}" if context.get("region") else ""
+        return {
+            "title": "Готовый первый экран",
+            "h1": f"Отель{region} для деловых поездок, отдыха и мероприятий",
+            "subheadline": "Проверьте свободные номера на нужные даты, сравните категории и забронируйте напрямую на официальном сайте.",
+            "primary_button": "Проверить свободные номера",
+            "secondary_button": "Забронировать конференц-зал",
+            "advantages": [
+                "Прямое бронирование без лишних посредников",
+                f"Удобная локация{region or ' рядом с ключевыми точками города'}",
+                "Номера, ресторан и конференц-залы в одном месте",
+            ],
+            "microcopy": "Покажем доступные категории, условия проживания и актуальную цену на выбранные даты.",
+            "visual": "Фотография номера или фасада с живым светом, рядом мини-карточка с датами заезда/выезда и кнопкой проверки наличия.",
+            "trust_elements": [
+                "рейтинг и количество отзывов",
+                "адрес/локация рядом с CTA",
+                "телефон или WhatsApp для быстрого уточнения",
+            ],
+        }
+    return {
+        "title": "Готовый первый экран",
+        "h1": f"{_capitalize(context['site_type'])}: понятное предложение для цели “{context['goal']}”",
+        "subheadline": "Покажите результат, для кого услуга, почему вам можно доверять и какой следующий шаг сделать.",
+        "primary_button": _cta_variants(context)[0],
+        "secondary_button": "Получить консультацию",
+        "advantages": ["понятный результат", "быстрый следующий шаг", "доказательства доверия рядом с CTA"],
+        "microcopy": "Ответим и подскажем лучший следующий шаг без лишней сложности.",
+        "visual": "Фото продукта, команды или результата, которое подтверждает оффер.",
+        "trust_elements": ["отзывы", "кейсы", "контакты"],
+    }
+
+
+def _one_day_plan(context: dict[str, Any], signals: dict[str, Any]) -> list[dict[str, str]]:
+    if _is_hotel_context(context):
+        tasks = [
+            ("Заменить главный CTA", "дизайнер/разработчик", "30 минут", "Путь к бронированию станет очевиднее", "Первый экран и sticky/mobile CTA"),
+            ("Добавить 3 причины бронировать напрямую", "маркетолог/копирайтер", "1 час", "Меньше уходов на Booking/OTA", "Рядом с основной кнопкой и перед блоком номеров"),
+            ("Добавить блок для бизнес-гостей", "копирайтер", "1-1,5 часа", "Страница начнёт говорить с гостями в командировке", "После блока номеров или перед конференц-залами"),
+            ("Добавить быстрый контакт рядом с бронированием", "разработчик", "30-45 минут", "Гость сможет уточнить условия без поиска контактов", "Hero, блок номеров, мобильная версия"),
+            ("Добавить FAQ по оплате, отмене и заселению", "контент-менеджер", "1-2 часа", "Снимаются сомнения перед выбором дат", "Перед финальным CTA"),
+        ]
+        if signals.get("booking_ctas"):
+            tasks[0] = ("Усилить видимость booking CTA", "дизайнер/разработчик", "30 минут", "Существующее действие бронирования станет главным", "Первый экран, блок номеров, финальный CTA")
+        return [
+            {"task": task, "owner": owner, "time": time, "expected_effect": effect, "placement": placement}
+            for task, owner, time, effect, placement in tasks
+        ]
+    return [
+        {"task": "Уточнить H1 и основной CTA", "owner": "копирайтер/дизайнер", "time": "1 час", "expected_effect": "Пользователь быстрее поймёт оффер", "placement": "Первый экран"},
+        {"task": "Добавить 3 факта доверия", "owner": "маркетолог", "time": "1 час", "expected_effect": "Больше уверенности перед заявкой", "placement": "Рядом с CTA"},
+        {"task": "Сократить путь до заявки", "owner": "разработчик", "time": "1-2 часа", "expected_effect": "Меньше потерь на форме", "placement": "Hero и финальный блок"},
+    ]
+
+
 def _recommended_structure(context: dict[str, Any]) -> list[dict[str, str]]:
     if _is_hotel_context(context):
         return _hotel_recommended_structure(context)
@@ -1597,6 +1842,7 @@ def _evidence(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None
             "first_screen_blocks": facts.get("first_screen_blocks", [])[:12],
             "first_screen_text": facts.get("first_screen_text", "")[:700],
             "cta_texts": facts.get("cta_texts", [])[:12],
+            "cta_groups": facts.get("cta_groups", {}),
             "forms": facts.get("forms", {}),
             "links": facts.get("links", {}),
             "images": facts.get("images", {}),
