@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import ipaddress
+import json
+import os
 import re
 import socket
+import hashlib
 from html.parser import HTMLParser
 from typing import Any
 from urllib.error import HTTPError, URLError
@@ -13,6 +16,20 @@ from urllib.request import HTTPRedirectHandler, Request, build_opener
 MAX_HTML_BYTES = 350_000
 TIMEOUT_SECONDS = 10
 MAX_REDIRECTS = 4
+FIRST_SCREEN_LIMIT = 40
+MAX_FACT_ITEMS = 24
+
+NICHE_KEYWORDS: dict[str, list[str]] = {
+    "hotel": ["отель", "гостиниц", "hotel", "номер", "номера", "rooms", "проживание", "заезд", "выезд", "booking", "брон"],
+    "clinic": ["клиник", "врач", "пациент", "лечение", "диагност", "прием", "записаться", "стоматолог", "медицин", "clinic", "doctor", "patient", "diagnostic", "treatment", "appointment"],
+    "logistics": ["логист", "доставка", "груз", "перевоз", "склад", "фулфил", "транспорт", "экспед", "logistics", "delivery", "cargo", "freight", "warehouse"],
+    "ecommerce": ["купить", "корзина", "каталог", "товар", "доставка", "оплата", "заказ", "скидка", "магазин", "shop", "cart", "catalog", "product", "checkout"],
+    "b2b_services": ["b2b", "агентство", "услуги для бизнеса", "внедрение", "интеграц", "аудит", "консалт", "digital"],
+    "restaurant": ["ресторан", "меню", "бронь стола", "доставка еды", "кухня", "банкет", "завтрак", "бар", "restaurant", "menu", "table booking", "cuisine"],
+    "real_estate": ["недвиж", "квартир", "жк", "ипотек", "застройщик", "новострой", "планиров", "площадь", "real estate", "apartment", "mortgage", "developer"],
+    "education": ["курс", "обучение", "программа", "студент", "урок", "преподав", "школа", "университет", "course", "education", "student", "lesson", "school", "university"],
+    "generic_landing": ["заявка", "консультация", "оффер", "получить", "заказать", "рассчитать"],
+}
 
 
 class SiteAnalysisError(ValueError):
@@ -45,6 +62,7 @@ class _PageParser(HTMLParser):
         self.h2: list[str] = []
         self.h3: list[str] = []
         self.links = 0
+        self.link_texts: list[str] = []
         self.images = 0
         self.images_without_alt = 0
         self.buttons = 0
@@ -110,6 +128,8 @@ class _PageParser(HTMLParser):
                 self.h3.append(value)
             elif tag == "button" and value:
                 self.button_texts.append(value)
+            elif tag == "a" and value:
+                self.link_texts.append(value)
             self._capture = None
             self._buffer = []
 
@@ -185,12 +205,14 @@ def analyze_html(
     mode: str = "quick",
     competitor: str = "",
     concern: str = "",
+    audit_facts: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     parser = _PageParser()
     parser.feed(html)
+    soup_facts = _extract_with_beautifulsoup(html)
     text = _clean_text(" ".join(parser.text_parts))
     words = re.findall(r"[A-Za-zА-Яа-яЁё0-9]{3,}", text)
-    signals = _signals(parser, text)
+    signals = _signals(parser, text, audit_facts)
     context = _context(site_type, goal, audience, region, mode, competitor, concern)
     context = _apply_detected_vertical(context, signals)
     scores = _scorecards(parser, len(words), signals, context)
@@ -215,7 +237,7 @@ def analyze_html(
         "implementation_plan": implementation_plan,
         "priority_matrix": implementation_plan,
         "questions": _questions(context),
-        "evidence": _evidence(parser, text),
+        "evidence": _evidence(parser, text, audit_facts),
         "priority_recommendations": _legacy_recommendations(top_issues),
         "checks": {
             "title": parser.title,
@@ -245,6 +267,15 @@ def analyze_html(
                 "rooms_mentions": signals.get("hotel_room_matches", []),
                 "ota_mentions": signals.get("hotel_ota_matches", []),
             },
+            "niche_scores": signals.get("niche_scores", {}),
+            "audit_engine": {
+                "rendered_dom_used": bool((audit_facts or {}).get("engine", {}).get("rendered_dom_used")),
+                "render_reason": (audit_facts or {}).get("engine", {}).get("render_reason", ""),
+                "screenshot_captured": bool((audit_facts or {}).get("screenshot", {}).get("captured")),
+                "first_screen_blocks": len((audit_facts or {}).get("first_screen_blocks", [])),
+                "extraction_method": (audit_facts or {}).get("extraction_method", "html_parser"),
+                "pagespeed": (audit_facts or {}).get("pagespeed", {"enabled": False}),
+            },
             "word_count": len(words),
             "truncated": truncated,
             "technical_check_limited": True,
@@ -254,6 +285,323 @@ def analyze_html(
     if _is_hotel_context(context):
         overall = min(overall, _hotel_score_cap(signals))
     result["overall_score"] = overall
+    return result
+
+
+def analyze_site_improvements(
+    url: str,
+    *,
+    site_type: str = "",
+    goal: str = "",
+    audience: str = "",
+    region: str = "",
+    mode: str = "quick",
+    competitor: str = "",
+    concern: str = "",
+) -> dict[str, Any]:
+    normalized = _validate_public_url(url)
+    try:
+        page = _collect_page_evidence(normalized)
+    except HTTPError as exc:
+        return _error_result(normalized, f"Сайт вернул HTTP {exc.code}. Проверьте URL или доступность страницы.")
+    except (URLError, TimeoutError, OSError, SiteAnalysisError) as exc:
+        return _error_result(normalized, str(exc) or "Не удалось открыть сайт.")
+    return analyze_html(
+        page["html"],
+        url=page["final_url"],
+        http_status=page["status"],
+        truncated=page["truncated"],
+        site_type=site_type,
+        goal=goal,
+        audience=audience,
+        region=region,
+        mode=mode,
+        competitor=competitor,
+        concern=concern,
+        audit_facts=page["facts"],
+    )
+
+
+def _collect_page_evidence(url: str) -> dict[str, Any]:
+    static_page = _fetch_static_html(url)
+    rendered = _rendered_page_evidence(static_page["final_url"])
+    html = str(rendered.get("html") or static_page["html"])
+    facts = _extract_audit_facts(
+        html,
+        str(rendered.get("final_url") or static_page["final_url"]),
+        rendered_facts=rendered.get("facts") if rendered.get("html") else None,
+        screenshot=rendered.get("screenshot"),
+        engine_status={
+            "static_html_used": True,
+            "rendered_dom_used": bool(rendered.get("html")),
+            "render_reason": str(rendered.get("reason", "")),
+            "content_type": static_page["content_type"],
+        },
+    )
+    return {
+        "html": html,
+        "final_url": str(rendered.get("final_url") or static_page["final_url"]),
+        "status": int(rendered.get("status") or static_page["status"]),
+        "truncated": bool(static_page["truncated"] or rendered.get("truncated")),
+        "facts": facts,
+    }
+
+
+def _fetch_static_html(url: str) -> dict[str, Any]:
+    request = Request(
+        url,
+        headers={
+            "User-Agent": "HolyMedia-MCP-SiteAnalysis/2.1",
+            "Accept": "text/html,application/xhtml+xml",
+        },
+    )
+    opener = build_opener(_SafeRedirectHandler())
+    with opener.open(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310 - URL is validated against SSRF targets.
+        final_url = _validate_public_url(str(response.geturl() or url))
+        content_type = str(response.headers.get("content-type", ""))
+        status = int(getattr(response, "status", 200) or 200)
+        raw = response.read(MAX_HTML_BYTES + 1)
+    if "html" not in content_type.lower():
+        raise SiteAnalysisError("Ссылка открылась, но это не HTML-страница.")
+    return {
+        "html": raw[:MAX_HTML_BYTES].decode(_charset_from_content_type(content_type), errors="replace"),
+        "final_url": final_url,
+        "status": status,
+        "content_type": content_type,
+        "truncated": len(raw) > MAX_HTML_BYTES,
+    }
+
+
+def _rendered_page_evidence(url: str) -> dict[str, Any]:
+    try:
+        from playwright.sync_api import Error as PlaywrightError
+        from playwright.sync_api import sync_playwright
+    except Exception:
+        return {"reason": "playwright_not_installed"}
+
+    def _route_guard(route: Any) -> None:
+        request_url = route.request.url
+        parsed = urlparse(request_url)
+        if parsed.scheme not in {"http", "https"}:
+            route.abort()
+            return
+        try:
+            _validate_public_url(request_url)
+        except SiteAnalysisError:
+            route.abort()
+            return
+        route.continue_()
+
+    try:
+        with sync_playwright() as playwright:
+            browser = playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
+            page = browser.new_page(viewport={"width": 1365, "height": 768}, java_script_enabled=True)
+            page.route("**/*", _route_guard)
+            response = page.goto(url, wait_until="domcontentloaded", timeout=TIMEOUT_SECONDS * 1000)
+            final_url = _validate_public_url(page.url)
+            try:
+                page.wait_for_load_state("networkidle", timeout=2500)
+            except PlaywrightError:
+                pass
+            first_screen = page.evaluate(
+                """
+                () => Array.from(document.body.querySelectorAll('h1,h2,h3,p,a,button,[role="button"],input,textarea,select,form,section,article,header'))
+                  .map((el) => {
+                    const rect = el.getBoundingClientRect();
+                    const text = (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('placeholder') || '').replace(/\\s+/g, ' ').trim();
+                    return { tag: el.tagName.toLowerCase(), text, top: Math.round(rect.top), left: Math.round(rect.left), width: Math.round(rect.width), height: Math.round(rect.height), href: el.href || '' };
+                  })
+                  .filter((item) => item.text && item.height > 0 && item.width > 0 && item.top < window.innerHeight && item.top >= -20)
+                  .slice(0, 40)
+                """
+            )
+            screenshot = page.screenshot(full_page=False, type="png", timeout=5000)
+            html = page.content()[:MAX_HTML_BYTES]
+            browser.close()
+        return {
+            "html": html,
+            "final_url": final_url,
+            "status": int(response.status if response else 200),
+            "truncated": len(html) >= MAX_HTML_BYTES,
+            "screenshot": {
+                "captured": True,
+                "mime": "image/png",
+                "bytes": len(screenshot),
+                "sha256": hashlib.sha256(screenshot).hexdigest(),
+            },
+            "facts": {"first_screen_blocks": first_screen},
+        }
+    except Exception as exc:
+        return {"reason": f"render_failed:{type(exc).__name__}"}
+
+
+def _extract_audit_facts(
+    html: str,
+    url: str,
+    *,
+    rendered_facts: dict[str, Any] | None = None,
+    screenshot: dict[str, Any] | None = None,
+    engine_status: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    parser = _PageParser()
+    parser.feed(html)
+    soup_facts = _extract_with_beautifulsoup(html)
+    text = _clean_text(" ".join(parser.text_parts))
+    links = _extract_links(html, url)
+    structured = _extract_structured_data(html)
+    first_screen_blocks = (rendered_facts or {}).get("first_screen_blocks") or _fallback_first_screen_blocks(parser)
+    ctas = _unique(parser.button_texts + parser.link_texts + [item["text"] for item in first_screen_blocks if item.get("tag") in {"a", "button"}])[:MAX_FACT_ITEMS]
+    images = _extract_images(html)
+    facts = {
+        "engine": engine_status or {"static_html_used": True, "rendered_dom_used": False},
+        "extraction_method": "beautifulsoup" if soup_facts else "html_parser",
+        "url": url,
+        "title": soup_facts.get("title") or parser.title,
+        "description": soup_facts.get("description") or parser.meta_description,
+        "h1": (soup_facts.get("h1") or parser.h1)[:MAX_FACT_ITEMS],
+        "h2": (soup_facts.get("h2") or parser.h2)[:MAX_FACT_ITEMS],
+        "h3": (soup_facts.get("h3") or parser.h3)[:MAX_FACT_ITEMS],
+        "cta_texts": ctas,
+        "forms": {"count": parser.forms, "inputs": parser.inputs},
+        "contacts": {
+            "phone_links": parser.phone_links,
+            "email_links": parser.email_links,
+            "whatsapp_links": parser.whatsapp_links,
+            "phones": _unique(re.findall(r"(?:\+?\d[\d\s().-]{7,}\d)", text))[:8],
+            "emails": _unique(re.findall(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", text))[:8],
+        },
+        "links": links,
+        "images": images,
+        "structured_data": structured,
+        "word_count": len(re.findall(r"[A-Za-zА-Яа-яЁё0-9]{3,}", text)),
+        "first_screen_blocks": first_screen_blocks[:FIRST_SCREEN_LIMIT],
+        "first_screen_text": _clean_text(" ".join(item.get("text", "") for item in first_screen_blocks))[:1500],
+        "screenshot": screenshot or {"captured": False},
+        "accessibility": _accessibility_signals(parser, images),
+        "pagespeed": _pagespeed_signals(url),
+    }
+    return facts
+
+
+def _extract_with_beautifulsoup(html: str) -> dict[str, Any]:
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return {}
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        soup = BeautifulSoup(html, "html.parser")
+    title = _clean_text(soup.title.get_text(" ")) if soup.title else ""
+    description_node = soup.find("meta", attrs={"name": re.compile("^description$", re.I)})
+    description = _clean_text(str(description_node.get("content", ""))) if description_node else ""
+    return {
+        "title": title,
+        "description": description,
+        "h1": [_clean_text(node.get_text(" ")) for node in soup.find_all("h1") if _clean_text(node.get_text(" "))],
+        "h2": [_clean_text(node.get_text(" ")) for node in soup.find_all("h2") if _clean_text(node.get_text(" "))],
+        "h3": [_clean_text(node.get_text(" ")) for node in soup.find_all("h3") if _clean_text(node.get_text(" "))],
+    }
+
+
+def _extract_links(html: str, base_url: str) -> dict[str, Any]:
+    hrefs = re.findall(r"<a\b[^>]*?href=[\"']([^\"']+)[\"']", html, flags=re.I)
+    base_host = urlparse(base_url).hostname or ""
+    samples: list[str] = []
+    internal = external = 0
+    for href in hrefs[:300]:
+        absolute = urljoin(base_url, href)
+        host = urlparse(absolute).hostname or ""
+        if not host or host == base_host:
+            internal += 1
+        else:
+            external += 1
+        if len(samples) < 12:
+            samples.append(absolute)
+    return {"count": len(hrefs), "internal_count": internal, "external_count": external, "samples": samples}
+
+
+def _extract_images(html: str) -> dict[str, Any]:
+    images = re.findall(r"<img\b([^>]*)>", html, flags=re.I)
+    without_alt = 0
+    missing_samples: list[str] = []
+    for attrs in images:
+        src_match = re.search(r"src=[\"']([^\"']+)[\"']", attrs, flags=re.I)
+        alt_match = re.search(r"alt=[\"']([^\"']*)[\"']", attrs, flags=re.I)
+        if not alt_match or not alt_match.group(1).strip():
+            without_alt += 1
+            if len(missing_samples) < 8:
+                missing_samples.append(src_match.group(1) if src_match else "img без src")
+    return {"count": len(images), "without_alt": without_alt, "missing_alt_samples": missing_samples}
+
+
+def _extract_structured_data(html: str) -> dict[str, Any]:
+    scripts = re.findall(r"<script\b[^>]*type=[\"']application/ld\+json[\"'][^>]*>(.*?)</script>", html, flags=re.I | re.S)
+    types: list[str] = []
+    for raw in scripts[:8]:
+        try:
+            data = json.loads(raw.strip())
+        except json.JSONDecodeError:
+            continue
+        items = data if isinstance(data, list) else [data]
+        for item in items:
+            if isinstance(item, dict):
+                value = item.get("@type")
+                if isinstance(value, str):
+                    types.append(value)
+                elif isinstance(value, list):
+                    types.extend(str(part) for part in value[:3])
+    return {"present": bool(scripts), "count": len(scripts), "types": _unique(types)[:12]}
+
+
+def _fallback_first_screen_blocks(parser: _PageParser) -> list[dict[str, Any]]:
+    blocks: list[dict[str, Any]] = []
+    for tag, values in (("h1", parser.h1), ("h2", parser.h2), ("h3", parser.h3), ("button", parser.button_texts), ("a", parser.link_texts)):
+        for value in values[:8]:
+            blocks.append({"tag": tag, "text": value})
+    for value in [part for part in parser.text_parts if len(part) > 24][:16]:
+        blocks.append({"tag": "text", "text": value})
+    return blocks[:FIRST_SCREEN_LIMIT]
+
+
+def _accessibility_signals(parser: _PageParser, images: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "images_without_alt": images.get("without_alt", parser.images_without_alt),
+        "empty_buttons": max(0, parser.buttons - len(parser.button_texts)),
+        "forms_without_visible_fields": parser.forms > 0 and parser.inputs == 0,
+        "note": "Быстрая проверка доступности: alt, пустые кнопки и базовая структура форм.",
+    }
+
+
+def _pagespeed_signals(url: str) -> dict[str, Any]:
+    if os.getenv("AD_MCP_SITE_AUDIT_PAGESPEED", "").lower() not in {"1", "true", "yes"}:
+        return {"enabled": False, "reason": "disabled"}
+    try:
+        api_url = "https://www.googleapis.com/pagespeedonline/v5/runPagespeed?strategy=mobile&url=" + url
+        request = Request(api_url, headers={"User-Agent": "HolyMedia-MCP-SiteAnalysis/2.1"})
+        with build_opener().open(request, timeout=8) as response:  # noqa: S310 - Google endpoint, target URL is encoded in query.
+            payload = json.loads(response.read(200_000).decode("utf-8", errors="replace"))
+        lighthouse = payload.get("lighthouseResult", {}).get("categories", {})
+        return {
+            "enabled": True,
+            "performance": round(float(lighthouse.get("performance", {}).get("score", 0)) * 100),
+            "accessibility": round(float(lighthouse.get("accessibility", {}).get("score", 0)) * 100),
+            "best_practices": round(float(lighthouse.get("best-practices", {}).get("score", 0)) * 100),
+        }
+    except Exception as exc:
+        return {"enabled": True, "error": type(exc).__name__}
+
+
+def _unique(values: list[str]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        clean = _clean_text(str(value))
+        key = clean.lower()
+        if not clean or key in seen:
+            continue
+        seen.add(key)
+        result.append(clean)
     return result
 
 
@@ -284,8 +632,16 @@ def _context(site_type: str, goal: str, audience: str, region: str, mode: str, c
     }
 
 
-def _signals(parser: _PageParser, text: str) -> dict[str, Any]:
-    lower = text.lower()
+def _signals(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None = None) -> dict[str, Any]:
+    facts = audit_facts or {}
+    facts_text = " ".join(
+        [
+            str(facts.get("first_screen_text", "")),
+            " ".join(str(item) for item in facts.get("cta_texts", [])),
+            " ".join(str(item.get("text", "")) for item in facts.get("first_screen_blocks", []) if isinstance(item, dict)),
+        ]
+    )
+    lower = f"{text} {facts_text}".lower()
     hotel = _matches(lower, ["отель", "гостиниц", "hotel", "номер", "номера", "rooms", "проживание", "заезд", "выезд"])
     hotel_booking = _matches(lower, ["забронировать", "бронир", "booking", "book now", "проверить свободные", "свободные номера", "даты", "заезд", "выезд"])
     hotel_direct = _matches(lower, ["официальный сайт", "на сайте выгоднее", "лучший тариф", "без комиссии", "прямое бронир", "гарантия цены", "book direct"])
@@ -300,6 +656,15 @@ def _signals(parser: _PageParser, text: str) -> dict[str, Any]:
     price = _matches(lower, ["цена", "стоимость", "тариф", "прайс", "рассчитать"])
     process = _matches(lower, ["как это работает", "этап", "процесс", "шаг", "схема"])
     faq = _matches(lower, ["faq", "вопрос", "ответ", "часто задаваем"])
+    niche_scores = {
+        niche: sum(1 for keyword in keywords if keyword in lower)
+        for niche, keywords in NICHE_KEYWORDS.items()
+    }
+    first_screen_ctas = [
+        str(item.get("text", ""))
+        for item in facts.get("first_screen_blocks", [])
+        if isinstance(item, dict) and item.get("tag") in {"a", "button"}
+    ][:8]
     return {
         "cta_matches": cta,
         "trust_matches": trust,
@@ -315,6 +680,8 @@ def _signals(parser: _PageParser, text: str) -> dict[str, Any]:
         "hotel_food_spa_matches": hotel_food_spa,
         "hotel_location_matches": hotel_location,
         "hotel_review_matches": hotel_reviews,
+        "niche_scores": niche_scores,
+        "first_screen_ctas": _unique(first_screen_ctas)[:8],
         "has_contacts": parser.phone_links > 0 or parser.email_links > 0 or parser.whatsapp_links > 0,
         "has_form_or_button": parser.forms > 0 or parser.buttons > 0 or bool(cta),
     }
@@ -323,6 +690,12 @@ def _signals(parser: _PageParser, text: str) -> dict[str, Any]:
 def _apply_detected_vertical(context: dict[str, Any], signals: dict[str, Any]) -> dict[str, Any]:
     site_type = context["site_type"].lower()
     goal = context["goal"].lower()
+    niche_scores = signals.get("niche_scores", {})
+    detected_vertical = ""
+    if isinstance(niche_scores, dict) and niche_scores:
+        best_niche, best_score = max(niche_scores.items(), key=lambda item: int(item[1]))
+        if int(best_score) >= 2:
+            detected_vertical = str(best_niche)
     hotel_score = (
         len(signals.get("hotel_matches", []))
         + len(signals.get("hotel_booking_matches", []))
@@ -331,7 +704,8 @@ def _apply_detected_vertical(context: dict[str, Any], signals: dict[str, Any]) -
         + len(signals.get("hotel_food_spa_matches", []))
     )
     is_hotel = any(word in site_type for word in ["отель", "гостини", "hotel"]) or "брон" in goal or hotel_score >= 3
-    context["vertical"] = "hotel" if is_hotel else "generic"
+    context["vertical"] = "hotel" if (is_hotel or detected_vertical == "hotel") else (detected_vertical or "generic_landing")
+    context["niche_scores"] = niche_scores
     if is_hotel:
         if not any(word in site_type for word in ["отель", "гостини", "hotel"]):
             context["site_type"] = "отель"
@@ -851,18 +1225,35 @@ def _dedupe_issues(items: list[dict[str, str]]) -> list[dict[str, str]]:
     return result
 
 
-def _evidence(parser: _PageParser, text: str) -> dict[str, Any]:
+def _evidence(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None = None) -> dict[str, Any]:
     snippets = [part for part in parser.text_parts if len(part) > 28][:6]
+    facts = audit_facts or {}
     return {
         "title": parser.title,
         "h1": parser.h1[:3],
         "h2": parser.h2[:6],
+        "h3": parser.h3[:6],
         "buttons": parser.button_texts[:6],
+        "links_text": parser.link_texts[:8],
         "text_snippets": snippets,
         "contacts": {
             "phone_links": parser.phone_links,
             "email_links": parser.email_links,
             "whatsapp_links": parser.whatsapp_links,
+        },
+        "audit_engine": {
+            "rendered_dom_used": bool(facts.get("engine", {}).get("rendered_dom_used")),
+            "render_reason": facts.get("engine", {}).get("render_reason", ""),
+            "screenshot": facts.get("screenshot", {"captured": False}),
+            "first_screen_blocks": facts.get("first_screen_blocks", [])[:12],
+            "first_screen_text": facts.get("first_screen_text", "")[:700],
+            "cta_texts": facts.get("cta_texts", [])[:12],
+            "forms": facts.get("forms", {}),
+            "links": facts.get("links", {}),
+            "images": facts.get("images", {}),
+            "structured_data": facts.get("structured_data", {}),
+            "accessibility": facts.get("accessibility", {}),
+            "pagespeed": facts.get("pagespeed", {"enabled": False}),
         },
     }
 

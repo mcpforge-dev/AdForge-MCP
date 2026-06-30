@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from ad_mcp.tools.site_analysis import SiteAnalysisError, analyze_html, analyze_site_improvements
+from ad_mcp.tools.site_analysis import SiteAnalysisError, _extract_audit_facts, analyze_html, analyze_site_improvements
 
 
 def test_analyze_html_returns_advanced_cro_report() -> None:
@@ -94,6 +94,105 @@ def test_hotel_analysis_uses_booking_context_and_honest_score() -> None:
     assert any("бронировать на сайте выгоднее" in title for title in titles)
     assert any("CTA бронирования" in title for title in titles)
     assert not any("alt" in title.lower() for title in titles[:3])
+
+
+def test_analyze_html_includes_evidence_based_audit_facts() -> None:
+    html = """
+    <!doctype html>
+    <html>
+      <head>
+        <title>Hotel booking</title>
+        <meta name="description" content="Direct hotel booking">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <script type="application/ld+json">{"@type":"Hotel","name":"Demo Hotel"}</script>
+      </head>
+      <body>
+        <h1>Hotel in Almaty</h1>
+        <h2>Rooms and direct booking</h2>
+        <p>Book direct, choose rooms, check dates, breakfast, restaurant and conference hall.</p>
+        <a href="tel:+77001234567">Call hotel</a>
+        <button>Book now</button>
+        <form><input name="date"></form>
+        <img src="/room.jpg">
+      </body>
+    </html>
+    """
+    audit_facts = {
+        "engine": {"rendered_dom_used": True, "render_reason": "", "static_html_used": True},
+        "screenshot": {"captured": True, "mime": "image/png", "bytes": 1200, "sha256": "abc"},
+        "first_screen_blocks": [
+            {"tag": "h1", "text": "Hotel in Almaty"},
+            {"tag": "button", "text": "Book now"},
+        ],
+        "first_screen_text": "Hotel in Almaty Book now",
+        "cta_texts": ["Book now"],
+        "forms": {"count": 1, "inputs": 1},
+        "links": {"count": 1, "internal_count": 1, "external_count": 0, "samples": []},
+        "images": {"count": 1, "without_alt": 1, "missing_alt_samples": ["/room.jpg"]},
+        "structured_data": {"present": True, "count": 1, "types": ["Hotel"]},
+        "accessibility": {"images_without_alt": 1},
+        "pagespeed": {"enabled": False, "reason": "disabled"},
+        "extraction_method": "html_parser",
+    }
+
+    result = analyze_html(html, url="https://hotel.example", audit_facts=audit_facts, mode="full")
+
+    assert result["checks"]["detected_vertical"] == "hotel"
+    assert result["checks"]["audit_engine"]["rendered_dom_used"] is True
+    assert result["checks"]["audit_engine"]["screenshot_captured"] is True
+    assert result["checks"]["niche_scores"]["hotel"] >= 2
+    evidence = result["evidence"]["audit_engine"]
+    assert evidence["first_screen_blocks"][0]["text"] == "Hotel in Almaty"
+    assert evidence["structured_data"]["types"] == ["Hotel"]
+    assert evidence["images"]["without_alt"] == 1
+
+
+def test_extract_audit_facts_collects_page_evidence_without_playwright() -> None:
+    html = """
+    <html>
+      <head>
+        <title>Demo landing</title>
+        <meta name="description" content="Helpful page">
+        <script type="application/ld+json">{"@type":"WebPage"}</script>
+      </head>
+      <body>
+        <h1>Demo service</h1>
+        <h2>How it works</h2>
+        <a href="/contact">Contact us</a>
+        <button>Get consultation</button>
+        <form><input name="phone"></form>
+        <img src="/hero.jpg">
+      </body>
+    </html>
+    """
+
+    facts = _extract_audit_facts(html, "https://example.com")
+
+    assert facts["title"] == "Demo landing"
+    assert facts["description"] == "Helpful page"
+    assert facts["cta_texts"] == ["Get consultation", "Contact us"]
+    assert facts["forms"]["count"] == 1
+    assert facts["links"]["count"] == 1
+    assert facts["images"]["without_alt"] == 1
+    assert facts["structured_data"]["present"] is True
+    assert facts["first_screen_blocks"]
+
+
+def test_niche_detection_supports_non_hotel_verticals() -> None:
+    html = """
+    <html>
+      <body>
+        <h1>Medical clinic</h1>
+        <p>Clinic doctors, patients, diagnostics, treatment and appointment booking.</p>
+        <button>Book appointment</button>
+      </body>
+    </html>
+    """
+
+    result = analyze_html(html, url="https://clinic.example")
+
+    assert result["checks"]["detected_vertical"] == "clinic"
+    assert result["checks"]["niche_scores"]["clinic"] >= 2
 
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1", "http://localhost", "http://10.0.0.1"])
