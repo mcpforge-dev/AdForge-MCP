@@ -195,6 +195,45 @@ def test_niche_detection_supports_non_hotel_verticals() -> None:
     assert result["checks"]["niche_scores"]["clinic"] >= 2
 
 
+def test_site_audit_dedupes_headings_and_filters_cta_noise() -> None:
+    html = """
+    <html>
+      <body>
+        <h1>Hotel Almaty</h1>
+        <h2>Conference halls</h2>
+        <h2>Conference halls</h2>
+        <a href="mailto:booking@example.com">booking@example.com</a>
+        <a href="/rooms">Rooms</a>
+        <a href="/room/standard">Standard double room with breakfast and a very long card description that should not be treated as CTA</a>
+        <button>Submit</button>
+        <img src="/room.jpg">
+      </body>
+    </html>
+    """
+
+    result = analyze_html(
+        html,
+        url="https://hotel.example",
+        site_type="hotel",
+        goal="booking",
+        audit_facts={
+            "cta_texts": [
+                "booking@example.com",
+                "Rooms",
+                "Standard double room with breakfast and a very long card description that should not be treated as CTA",
+                "Submit",
+            ],
+            "first_screen_blocks": [{"tag": "h2", "text": "Conference halls"}, {"tag": "h2", "text": "Conference halls"}],
+        },
+    )
+
+    assert result["evidence"]["h2"] == ["Conference halls"]
+    assert "booking@example.com" not in result["evidence"]["audit_engine"]["cta_texts"]
+    assert all(len(item) <= 70 for item in result["evidence"]["audit_engine"]["cta_texts"])
+    assert result["technical_notes"]
+    assert not any("alt" in item["title"].lower() for item in result["top_issues"])
+
+
 @pytest.mark.parametrize("url", ["http://127.0.0.1", "http://localhost", "http://10.0.0.1"])
 def test_analyze_site_rejects_private_targets(url: str) -> None:
     with pytest.raises(SiteAnalysisError):

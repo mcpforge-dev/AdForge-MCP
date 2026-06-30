@@ -18,6 +18,43 @@ TIMEOUT_SECONDS = 10
 MAX_REDIRECTS = 4
 FIRST_SCREEN_LIMIT = 40
 MAX_FACT_ITEMS = 24
+BOOKING_CTA_KEYWORDS = [
+    "book",
+    "booking",
+    "reserve",
+    "availability",
+    "room",
+    "rooms",
+    "price",
+    "date",
+    "dates",
+    "забронировать",
+    "бронь",
+    "бронировать",
+    "номера",
+    "номер",
+    "свободные",
+    "даты",
+    "цена",
+    "стоимость",
+]
+BOOKING_CTA_STRONG_KEYWORDS = [
+    "book",
+    "booking",
+    "reserve",
+    "availability",
+    "check availability",
+    "забронировать",
+    "бронь",
+    "бронировать",
+    "проверить",
+    "свободные",
+    "узнать цену",
+    "цена на даты",
+    "номера и цены",
+]
+GENERIC_SUBMIT_WORDS = {"отправить", "submit", "send", "ok", "далее"}
+CTA_NOISE_WORDS = {"ru", "kz", "en", "cn", "главная", "вернуться назад", "назад", "стать участником"}
 
 NICHE_KEYWORDS: dict[str, list[str]] = {
     "hotel": ["отель", "гостиниц", "hotel", "номер", "номера", "rooms", "проживание", "заезд", "выезд", "booking", "брон"],
@@ -210,13 +247,15 @@ def analyze_html(
     parser = _PageParser()
     parser.feed(html)
     soup_facts = _extract_with_beautifulsoup(html)
+    _normalize_parser(parser, audit_facts)
     text = _clean_text(" ".join(parser.text_parts))
     words = re.findall(r"[A-Za-zА-Яа-яЁё0-9]{3,}", text)
     signals = _signals(parser, text, audit_facts)
     context = _context(site_type, goal, audience, region, mode, competitor, concern)
     context = _apply_detected_vertical(context, signals)
     scores = _scorecards(parser, len(words), signals, context)
-    top_issues = _top_issues(parser, len(words), signals, context, scores)
+    top_issues = _business_top_issues(_top_issues(parser, len(words), signals, context, scores), context)
+    technical_notes = _technical_notes(parser, signals, context)
     quick_wins = _quick_wins(parser, signals, context)
     rewritten_copy = _rewritten_copy(parser, context)
     implementation_plan = _implementation_plan(top_issues, quick_wins)
@@ -231,6 +270,7 @@ def analyze_html(
         "scores": scores,
         "scorecards": scores,
         "top_issues": top_issues[:10 if context["mode"] == "full" else 6],
+        "technical_notes": technical_notes,
         "quick_wins": quick_wins,
         "rewritten_copy": rewritten_copy,
         "recommended_structure": _recommended_structure(context),
@@ -266,6 +306,10 @@ def analyze_html(
                 "direct_booking_mentions": signals.get("hotel_direct_booking_matches", []),
                 "rooms_mentions": signals.get("hotel_room_matches", []),
                 "ota_mentions": signals.get("hotel_ota_matches", []),
+                "availability_mentions": signals.get("hotel_availability_matches", []),
+                "transport_mentions": signals.get("hotel_transport_matches", []),
+                "faq_mentions": signals.get("hotel_faq_matches", []),
+                "booking_ctas": signals.get("booking_ctas", []),
             },
             "niche_scores": signals.get("niche_scores", {}),
             "audit_engine": {
@@ -281,11 +325,9 @@ def analyze_html(
             "technical_check_limited": True,
         },
     }
-    overall = round(sum(item["score"] for item in scores) / max(1, len(scores)))
-    if _is_hotel_context(context):
-        overall = min(overall, _hotel_score_cap(signals))
+    overall = _overall_score(scores, signals, context)
     result["overall_score"] = overall
-    return result
+    return _sanitize_result(result)
 
 
 def analyze_site_improvements(
@@ -449,8 +491,9 @@ def _extract_audit_facts(
     text = _clean_text(" ".join(parser.text_parts))
     links = _extract_links(html, url)
     structured = _extract_structured_data(html)
-    first_screen_blocks = (rendered_facts or {}).get("first_screen_blocks") or _fallback_first_screen_blocks(parser)
-    ctas = _unique(parser.button_texts + parser.link_texts + [item["text"] for item in first_screen_blocks if item.get("tag") in {"a", "button"}])[:MAX_FACT_ITEMS]
+    first_screen_blocks = _dedupe_blocks((rendered_facts or {}).get("first_screen_blocks") or _fallback_first_screen_blocks(parser))
+    cta_candidates = _extract_cta_candidates(html, first_screen_blocks)
+    ctas = [item["text"] for item in cta_candidates][:MAX_FACT_ITEMS]
     images = _extract_images(html)
     facts = {
         "engine": engine_status or {"static_html_used": True, "rendered_dom_used": False},
@@ -459,9 +502,10 @@ def _extract_audit_facts(
         "title": soup_facts.get("title") or parser.title,
         "description": soup_facts.get("description") or parser.meta_description,
         "h1": (soup_facts.get("h1") or parser.h1)[:MAX_FACT_ITEMS],
-        "h2": (soup_facts.get("h2") or parser.h2)[:MAX_FACT_ITEMS],
-        "h3": (soup_facts.get("h3") or parser.h3)[:MAX_FACT_ITEMS],
+        "h2": _unique((soup_facts.get("h2") or parser.h2))[:MAX_FACT_ITEMS],
+        "h3": _unique((soup_facts.get("h3") or parser.h3))[:MAX_FACT_ITEMS],
         "cta_texts": ctas,
+        "cta_candidates": cta_candidates[:MAX_FACT_ITEMS],
         "forms": {"count": parser.forms, "inputs": parser.inputs},
         "contacts": {
             "phone_links": parser.phone_links,
@@ -502,6 +546,121 @@ def _extract_with_beautifulsoup(html: str) -> dict[str, Any]:
         "h2": [_clean_text(node.get_text(" ")) for node in soup.find_all("h2") if _clean_text(node.get_text(" "))],
         "h3": [_clean_text(node.get_text(" ")) for node in soup.find_all("h3") if _clean_text(node.get_text(" "))],
     }
+
+
+def _extract_cta_candidates(html: str, first_screen_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    for text in _unique(_extract_attr_values(html, "aria-label") + _extract_attr_values(html, "title")):
+        _append_cta_candidate(candidates, text=text, href="", source="attribute")
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        for text in _unique(re.findall(r"<(?:button|a)\b[^>]*>(.*?)</(?:button|a)>", html, flags=re.I | re.S)):
+            clean = _clean_text(re.sub(r"<[^>]+>", " ", text))
+            _append_cta_candidate(candidates, text=clean, href="", source="html")
+    else:
+        try:
+            soup = BeautifulSoup(html, "lxml")
+        except Exception:
+            soup = BeautifulSoup(html, "html.parser")
+        selector = "a, button, [role='button'], input[type='submit'], input[type='button']"
+        for node in soup.select(selector)[:350]:
+            text = _clean_text(node.get_text(" ") or str(node.get("value", "")) or str(node.get("aria-label", "")) or str(node.get("title", "")))
+            href = _clean_text(str(node.get("href", "")))
+            _append_cta_candidate(candidates, text=text, href=href, source=node.name or "element")
+    for item in first_screen_blocks:
+        if not isinstance(item, dict) or item.get("tag") not in {"a", "button"}:
+            continue
+        _append_cta_candidate(candidates, text=str(item.get("text", "")), href=str(item.get("href", "")), source=f"first_screen_{item.get('tag', '')}")
+    return _rank_cta_candidates(candidates)
+
+
+def _append_cta_candidate(candidates: list[dict[str, Any]], *, text: str, href: str, source: str) -> None:
+    text = _clean_text(text)
+    href = _clean_text(href)
+    if not text and not href:
+        return
+    if not text and href:
+        text = _text_from_href(href)
+    lowered_text = text.lower()
+    haystack = f"{text} {href}".lower()
+    booking_related = any(keyword in haystack for keyword in BOOKING_CTA_STRONG_KEYWORDS) or lowered_text in {"номера", "rooms"}
+    if lowered_text in CTA_NOISE_WORDS:
+        return
+    if "@" in text:
+        return
+    if len(text) > 70:
+        return
+    if lowered_text.count(",") >= 2 and not booking_related:
+        return
+    generic_submit = lowered_text in GENERIC_SUBMIT_WORDS
+    candidates.append(
+        {
+            "text": text,
+            "href": href,
+            "source": source,
+            "booking_related": booking_related,
+            "generic_submit": generic_submit,
+        }
+    )
+
+
+def _rank_cta_candidates(candidates: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    ranked: list[dict[str, Any]] = []
+    for item in sorted(
+        candidates,
+        key=lambda value: (
+            not bool(value.get("booking_related")),
+            bool(value.get("generic_submit")),
+            0 if str(value.get("source", "")).startswith("first_screen") else 1,
+            _cta_source_priority(str(value.get("source", ""))),
+            len(str(value.get("text", ""))),
+        ),
+    ):
+        key = _semantic_key(f"{item.get('text', '')} {item.get('href', '')}")
+        if not key or key in seen:
+            continue
+        seen.add(key)
+        ranked.append(item)
+    return ranked[:MAX_FACT_ITEMS]
+
+
+def _cta_source_priority(source: str) -> int:
+    if source in {"button", "input", "first_screen_button"}:
+        return 0
+    if source in {"a", "first_screen_a"}:
+        return 1
+    if source == "attribute":
+        return 2
+    return 3
+
+
+def _extract_attr_values(html: str, attr: str) -> list[str]:
+    return re.findall(rf"\b{re.escape(attr)}=[\"']([^\"']+)[\"']", html, flags=re.I)
+
+
+def _text_from_href(href: str) -> str:
+    value = re.sub(r"[_/#?=&.-]+", " ", href)
+    value = _clean_text(value)
+    return value[-70:] if len(value) > 70 else value
+
+
+def _dedupe_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    result: list[dict[str, Any]] = []
+    for item in blocks:
+        if not isinstance(item, dict):
+            continue
+        text = _clean_text(str(item.get("text", "")))
+        key = f"{item.get('tag', '')}:{_semantic_key(text)}"
+        if not text or key in seen:
+            continue
+        seen.add(key)
+        clean_item = dict(item)
+        clean_item["text"] = text
+        result.append(clean_item)
+    return result[:FIRST_SCREEN_LIMIT]
 
 
 def _extract_links(html: str, base_url: str) -> dict[str, Any]:
@@ -605,6 +764,125 @@ def _unique(values: list[str]) -> list[str]:
     return result
 
 
+def _normalize_parser(parser: _PageParser, audit_facts: dict[str, Any] | None = None) -> None:
+    facts = audit_facts or {}
+    parser.h1 = _unique(parser.h1)
+    parser.h2 = _unique(parser.h2)
+    parser.h3 = _unique(parser.h3)
+    parser.button_texts = _unique(parser.button_texts + [item.get("text", "") for item in facts.get("cta_candidates", []) if isinstance(item, dict) and item.get("text")])
+    parser.link_texts = _unique(parser.link_texts)
+
+
+def _overall_score(scores: list[dict[str, Any]], signals: dict[str, Any], context: dict[str, Any]) -> int:
+    if not scores:
+        return 0
+    if not _is_hotel_context(context):
+        return round(sum(item["score"] for item in scores) / max(1, len(scores)))
+    weights = {
+        "Прямое бронирование": 1.45,
+        "CTA бронирования": 1.35,
+        "Номера и категории": 1.2,
+        "Доверие и выбор отеля": 1.1,
+        "UX booking-сценария": 1.25,
+        "Базовая техническая видимость": 0.55,
+    }
+    total = 0.0
+    weight_sum = 0.0
+    for item in scores:
+        weight = weights.get(str(item.get("area")), 1.0)
+        total += int(item.get("score", 0)) * weight
+        weight_sum += weight
+    overall = round(total / max(1.0, weight_sum))
+    return min(overall, _hotel_score_cap(signals))
+
+
+def _business_top_issues(items: list[dict[str, str]], context: dict[str, Any]) -> list[dict[str, str]]:
+    if not _is_hotel_context(context):
+        return _dedupe_issues(items)
+    technical_words = {"alt", "meta", "html", "viewport", "изображен", "описать ключевые фото"}
+    business: list[dict[str, str]] = []
+    for item in items:
+        title = item.get("title", "")
+        key = title.lower()
+        if item.get("priority") == "P3" or any(word in key for word in technical_words):
+            continue
+        business.append(item)
+    return _dedupe_issues(business)
+
+
+def _technical_notes(parser: _PageParser, signals: dict[str, Any], context: dict[str, Any]) -> list[dict[str, str]]:
+    notes: list[dict[str, str]] = []
+    if parser.images_without_alt:
+        notes.append(
+            {
+                "title": "Изображения без alt",
+                "detail": f"Найдено изображений без alt: {parser.images_without_alt} из {parser.images}. Это полезно исправить, но это не главный конверсионный приоритет.",
+                "priority": "low",
+            }
+        )
+    if not parser.meta_description:
+        notes.append({"title": "Meta description не найден", "detail": "Добавьте короткое описание страницы после бизнесовых правок оффера и CTA.", "priority": "low"})
+    if not parser.viewport:
+        notes.append({"title": "Viewport meta не найден", "detail": "Проверьте мобильную адаптацию и добавьте viewport meta.", "priority": "medium"})
+    if not parser.structured_data and _is_hotel_context(context):
+        notes.append({"title": "Structured data для отеля не обнаружены", "detail": "После правок контента можно добавить Hotel/LocalBusiness schema.", "priority": "low"})
+    return notes[:8]
+
+
+def _display_cta_texts(values: list[str]) -> list[str]:
+    result: list[str] = []
+    for value in _unique(values):
+        lowered = value.lower()
+        if lowered in CTA_NOISE_WORDS:
+            continue
+        if "@" in value:
+            continue
+        if re.search(r"\+\d[\d\s().-]{7,}", value):
+            continue
+        if len(value) > 70:
+            continue
+        if lowered.count(",") >= 2:
+            continue
+        if lowered in GENERIC_SUBMIT_WORDS and result:
+            continue
+        result.append(value)
+        if len(result) >= 8:
+            break
+    return result or ["не обнаружено в собранных данных"]
+
+
+def _sanitize_result(result: dict[str, Any]) -> dict[str, Any]:
+    result["top_issues"] = _dedupe_issues(result.get("top_issues", []))
+    evidence = result.get("evidence", {})
+    if isinstance(evidence, dict):
+        for key in ("h1", "h2", "h3", "buttons", "links_text", "text_snippets"):
+            if isinstance(evidence.get(key), list):
+                evidence[key] = _unique([str(item) for item in evidence[key]])
+        audit = evidence.get("audit_engine", {})
+        if isinstance(audit, dict):
+            audit["first_screen_blocks"] = _dedupe_blocks(audit.get("first_screen_blocks", []))
+            audit["cta_texts"] = _display_cta_texts([str(item) for item in audit.get("cta_texts", [])])
+    verdict = result.get("verdict", {})
+    if isinstance(verdict, dict):
+        for key, value in list(verdict.items()):
+            if isinstance(value, str):
+                verdict[key] = _clean_repeated_phrases(value)
+    if isinstance(result.get("summary"), str):
+        result["summary"] = _clean_repeated_phrases(result["summary"])
+    return result
+
+
+def _clean_repeated_phrases(value: str) -> str:
+    clean = _clean_text(value)
+    clean = re.sub(r"^(Главный риск:\s*){2,}", "Главный риск: ", clean, flags=re.I)
+    clean = re.sub(r"^(Самый быстрый выигрыш\s*[—-]\s*){2,}", "Самый быстрый выигрыш — ", clean, flags=re.I)
+    return clean
+
+
+def _semantic_key(value: str) -> str:
+    return re.sub(r"[^a-zа-яё0-9]+", " ", (value or "").lower()).strip()
+
+
 def build_site_analysis_tools() -> dict[str, callable]:
     return {"analyze_site_improvements": analyze_site_improvements}
 
@@ -651,6 +929,9 @@ def _signals(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None 
     hotel_food_spa = _matches(lower, ["ресторан", "завтрак", "spa", "спа", "сауна", "бар", "кухня"])
     hotel_location = _matches(lower, ["локац", "центр", "аэропорт", "вокзал", "рядом", "достопримеч", "алматы", "адрес"])
     hotel_reviews = _matches(lower, ["отзывы", "рейтинг", "звезд", "stars", "guest rating", "оценка гостей"])
+    hotel_transport = _matches(lower, ["трансфер", "парковка", "parking", "shuttle", "airport transfer", "такси"])
+    hotel_faq = _matches(lower, ["заселение", "выезд", "отмена", "оплата", "документ", "faq", "часто задаваем", "check-in", "check-out", "cancellation"])
+    hotel_availability = _matches(lower, ["свободные номера", "наличие", "availability", "проверить даты", "check availability", "цена на даты"])
     cta = _matches(lower, ["купить", "заказать", "оставить заявку", "записаться", "получить", "рассчитать", "консультация", "contact", "book", "order"])
     trust = _matches(lower, ["отзывы", "кейс", "сертификат", "гарантия", "партнер", "лет", "клиентов", "лицензия", "команда", "портфолио"])
     price = _matches(lower, ["цена", "стоимость", "тариф", "прайс", "рассчитать"])
@@ -664,6 +945,11 @@ def _signals(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None 
         str(item.get("text", ""))
         for item in facts.get("first_screen_blocks", [])
         if isinstance(item, dict) and item.get("tag") in {"a", "button"}
+    ][:8]
+    booking_ctas = [
+        str(item.get("text", ""))
+        for item in facts.get("cta_candidates", [])
+        if isinstance(item, dict) and item.get("booking_related")
     ][:8]
     return {
         "cta_matches": cta,
@@ -680,8 +966,12 @@ def _signals(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None 
         "hotel_food_spa_matches": hotel_food_spa,
         "hotel_location_matches": hotel_location,
         "hotel_review_matches": hotel_reviews,
+        "hotel_transport_matches": hotel_transport,
+        "hotel_faq_matches": hotel_faq,
+        "hotel_availability_matches": hotel_availability,
         "niche_scores": niche_scores,
         "first_screen_ctas": _unique(first_screen_ctas)[:8],
+        "booking_ctas": _unique(booking_ctas)[:8],
         "has_contacts": parser.phone_links > 0 or parser.email_links > 0 or parser.whatsapp_links > 0,
         "has_form_or_button": parser.forms > 0 or parser.buttons > 0 or bool(cta),
     }
@@ -746,7 +1036,7 @@ def _scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any], c
 
 
 def _hotel_scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any]) -> list[dict[str, Any]]:
-    booking_cta = bool(signals.get("hotel_booking_matches")) or any("book" in item.lower() or "брон" in item.lower() for item in parser.button_texts)
+    booking_cta = bool(signals.get("booking_ctas")) or bool(signals.get("hotel_booking_matches")) or any("book" in item.lower() or "брон" in item.lower() for item in parser.button_texts)
     direct = bool(signals.get("hotel_direct_booking_matches"))
     rooms = bool(signals.get("hotel_room_matches"))
     trust = bool(signals.get("hotel_review_matches") or signals.get("trust_matches") or parser.images > 3)
@@ -825,15 +1115,17 @@ def _hotel_scorecards(parser: _PageParser, word_count: int, signals: dict[str, A
 
 
 def _hotel_score_cap(signals: dict[str, Any]) -> int:
-    cap = 86
+    cap = 84
     if not signals.get("hotel_direct_booking_matches"):
-        cap = min(cap, 78)
-    if not signals.get("hotel_booking_matches"):
         cap = min(cap, 74)
-    if not signals.get("hotel_room_matches"):
+    if not signals.get("hotel_booking_matches") and not signals.get("booking_ctas"):
+        cap = min(cap, 70)
+    if not signals.get("hotel_availability_matches"):
         cap = min(cap, 76)
+    if not signals.get("hotel_room_matches"):
+        cap = min(cap, 72)
     if not signals.get("hotel_review_matches") and not signals.get("trust_matches"):
-        cap = min(cap, 80)
+        cap = min(cap, 76)
     return cap
 
 
@@ -879,6 +1171,9 @@ def _top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], c
 
 def _hotel_top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], scores: list[dict[str, Any]]) -> list[dict[str, str]]:
     buttons = ", ".join(parser.button_texts[:6]) if parser.button_texts else "кнопки не найдены"
+    cta_evidence = _display_cta_texts(list(signals.get("booking_ctas", [])) + parser.button_texts + parser.link_texts)
+    if cta_evidence:
+        buttons = ", ".join(cta_evidence)
     h2 = ", ".join(parser.h2[:6]) if parser.h2 else "разделы H2 не найдены"
     issues: list[dict[str, str]] = []
 
@@ -963,6 +1258,30 @@ def _hotel_top_issues(parser: _PageParser, word_count: int, signals: dict[str, A
             "P2",
             "контент-менеджер",
             evidence=f"Location signals: {', '.join(signals.get('hotel_location_matches', [])) or 'не найдены'}",
+        ))
+    if not signals.get("hotel_transport_matches"):
+        issues.append(_issue(
+            "Показать парковку, трансфер и удобство прибытия",
+            "Для гостя важно заранее понять, как добраться до отеля и где оставить автомобиль.",
+            "Трансфер, парковка и расстояния до аэропорта/центра снижают тревогу перед бронированием.",
+            "Добавить короткий блок “Как добраться”: парковка, трансфер, расстояние до аэропорта/центра и кнопка построения маршрута.",
+            "низкая",
+            "средний",
+            "P2",
+            "контент-менеджер",
+            evidence="Сигналы parking/transfer не обнаружены в собранных данных.",
+        ))
+    if not signals.get("hotel_faq_matches"):
+        issues.append(_issue(
+            "Добавить FAQ по заселению, отмене, оплате и документам",
+            "На странице не обнаружены ответы на частые вопросы гостя перед бронированием.",
+            "FAQ снимает сомнения перед выбором дат: документы, оплата, отмена, заезд/выезд, проживание с детьми.",
+            "Добавить 5-7 вопросов под финальным CTA и связать их с бронированием номера.",
+            "низкая",
+            "средний",
+            "P2",
+            "контент-менеджер",
+            evidence="FAQ/заселение/отмена/оплата/документы не обнаружены в собранных данных.",
         ))
     if parser.images_without_alt and len(issues) < 9:
         issues.append(_issue(
@@ -1052,10 +1371,24 @@ def _hotel_rewritten_copy(context: dict[str, Any]) -> dict[str, Any]:
             f"Отель{region} для деловых поездок, отдыха и мероприятий",
             f"Забронируйте номер{region} на официальном сайте отеля",
             "Комфортное проживание, конференции и ресторан в одном отеле",
+            f"Отель{region}: номера, конференц-залы и прямое бронирование",
+            f"Номера{region} для отдыха и бизнеса с бронированием напрямую",
         ],
         "subheadline": "Проверьте свободные номера на нужные даты, сравните категории и забронируйте напрямую: без лишних шагов, с понятными условиями и быстрым контактом с отелем.",
+        "subheadline_variants": [
+            "Выберите даты, посмотрите доступные категории номеров и забронируйте на официальном сайте без перехода на агрегаторы.",
+            "Для отдыха, командировки и мероприятий: номера, ресторан, конференц-залы и быстрый контакт с отелем.",
+            "Покажите гостю цену на даты, условия проживания и преимущества бронирования напрямую в одном понятном сценарии.",
+        ],
         "cta_variants": _cta_variants(context),
         "hero_text": "Покажите на первом экране: город/район, главный тип гостей, 2-3 причины выбрать отель, кнопку проверки дат и короткую выгоду бронирования напрямую.",
+        "direct_booking_block": [
+            "Лучшие условия при бронировании на официальном сайте.",
+            "Прямая связь с отелем без посредников и лишних комиссий.",
+            "Актуальные категории номеров, условия отмены и быстрый ответ по датам.",
+        ],
+        "business_guests_block": "Для командировок: удобная локация, документы для отчётности, быстрый Wi‑Fi, завтрак и возможность уточнить ранний заезд или поздний выезд.",
+        "events_block": "Для мероприятий: покажите вместимость залов, форматы рассадки, оборудование, питание и отдельный CTA “Забронировать конференц-зал”.",
         "why_choose_us": [
             "Бронируя на официальном сайте, гость получает актуальные условия и прямую связь с отелем.",
             "Номера, ресторан, конференц-залы и дополнительные услуги собраны в одном понятном сценарии.",
@@ -1183,7 +1516,7 @@ def _verdict(parser: _PageParser, word_count: int, signals: dict[str, Any], cont
                 "Страница открывается и даёт материал для анализа отельного сценария.",
                 "Можно быстро усилить путь гостя от первого экрана до проверки дат и бронирования.",
             ],
-            "main_risk": "Главный риск: гость уйдёт сравнивать цену и условия на Booking/OTA, если сайт не объясняет выгоду прямого бронирования.",
+            "main_risk": "Гость уйдёт сравнивать цену и условия на Booking/OTA, если сайт не объясняет выгоду прямого бронирования.",
             "fastest_win": "Самый быстрый выигрыш — заменить главный CTA на “Проверить свободные номера” и добавить рядом 3 причины бронировать напрямую.",
             "weakest_areas": [item["area"] for item in weakest],
         }
@@ -1195,7 +1528,7 @@ def _verdict(parser: _PageParser, word_count: int, signals: dict[str, Any], cont
             "Страница открывается и даёт материал для анализа.",
             "Есть базовая структура контента." if parser.h1 or parser.h2 else "Контент можно быстро пересобрать в понятную структуру.",
         ],
-        "main_risk": f"Главный риск: пользователь не увидит достаточно причин оставить {context['goal']} прямо сейчас.",
+        "main_risk": f"Пользователь не увидит достаточно причин оставить {context['goal']} прямо сейчас.",
         "fastest_win": "Самый быстрый выигрыш — переписать первый экран: конкретный H1, короткий подзаголовок, один заметный CTA и 2-3 факта доверия.",
         "weakest_areas": [item["area"] for item in weakest],
     }
@@ -1217,7 +1550,7 @@ def _dedupe_issues(items: list[dict[str, str]]) -> list[dict[str, str]]:
     seen: set[str] = set()
     result: list[dict[str, str]] = []
     for item in items:
-        key = re.sub(r"[^a-zа-я0-9]+", " ", item["title"].lower()).strip()
+        key = _semantic_key(item.get("title", ""))
         if key in seen:
             continue
         seen.add(key)
@@ -1284,7 +1617,7 @@ def _rewrite_h1(parser: _PageParser, context: dict[str, Any]) -> str:
 
 def _cta_variants(context: dict[str, Any]) -> list[str]:
     if _is_hotel_context(context):
-        return ["Проверить свободные номера", "Забронировать номер", "Узнать цену на даты", "Забронировать конференц-зал"]
+        return ["Проверить свободные номера", "Забронировать номер", "Узнать цену на даты", "Забронировать конференц-зал", "Посмотреть номера и цены"]
 
     goal = context["goal"].lower()
     if "звон" in goal:
