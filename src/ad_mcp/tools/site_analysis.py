@@ -214,6 +214,7 @@ def analyze_html(
         "implementation_plan": implementation_plan,
         "priority_matrix": implementation_plan,
         "questions": _questions(context),
+        "evidence": _evidence(parser, text),
         "priority_recommendations": _legacy_recommendations(top_issues),
         "checks": {
             "title": parser.title,
@@ -315,32 +316,39 @@ def _scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any], c
 
 def _top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], context: dict[str, Any], scores: list[dict[str, Any]]) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
+    h1_value = parser.h1[0] if parser.h1 else ""
+    buttons = ", ".join(parser.button_texts[:4]) if parser.button_texts else "кнопки не найдены"
     if not parser.h1 or len(parser.h1) != 1 or _looks_generic(parser.h1[0] if parser.h1 else ""):
-        issues.append(_issue("Усилить главный заголовок", "Первый экран не даёт достаточно конкретного обещания.", "Рекламный трафик быстро уходит, если не понимает выгоду.", "Переписать H1 под результат, аудиторию и следующий шаг.", "низкая", "высокий", "P1", "копирайтер"))
+        issues.append(_issue("Усилить главный заголовок", f"Текущий H1 выглядит слишком общим: “{h1_value or 'не найден'}”.", "Рекламный трафик быстро уходит, если не понимает выгоду.", "Переписать H1 под результат, аудиторию и следующий шаг.", "низкая", "высокий", "P1", "копирайтер", evidence=f"H1: {h1_value or 'не найден'}"))
     if not signals["has_form_or_button"]:
-        issues.append(_issue("Добавить заметный CTA", "На странице не найден явный призыв к действию.", "Пользователь может понять услугу, но не совершить целевое действие.", "Добавить кнопку на первом экране и повторить CTA после смысловых блоков.", "низкая", "высокий", "P1", "дизайнер/разработчик"))
+        issues.append(_issue("Добавить заметный CTA", "На странице не найден явный призыв к действию.", "Пользователь может понять услугу, но не совершить целевое действие.", "Добавить кнопку на первом экране и повторить CTA после смысловых блоков.", "низкая", "высокий", "P1", "дизайнер/разработчик", evidence=f"Найденные кнопки: {buttons}"))
+    elif not signals["cta_matches"]:
+        issues.append(_issue("Сделать CTA более продающим", f"Кнопки есть, но их формулировки выглядят нейтрально: {buttons}.", "Нейтральные кнопки хуже объясняют ценность следующего шага.", f"Заменить основную кнопку на “{_cta_variants(context)[0]}” и повторить её после ключевых блоков.", "низкая", "высокий", "P1", "копирайтер/дизайнер", evidence=f"Кнопки: {buttons}"))
     if not signals["trust_matches"]:
-        issues.append(_issue("Добавить блок доверия", "На странице мало доказательств реальности и опыта компании.", "Без доверия заявки становятся дороже, особенно с холодного трафика.", "Добавить кейсы, отзывы, цифры, сертификаты, клиентов или фото команды.", "средняя", "высокий", "P1", "маркетолог"))
+        issues.append(_issue("Добавить блок доверия", "На странице мало доказательств реальности и опыта компании.", "Без доверия заявки становятся дороже, особенно с холодного трафика.", "Добавить кейсы, отзывы, цифры, сертификаты, клиентов или фото команды.", "средняя", "высокий", "P1", "маркетолог", evidence="Сигналы доверия в тексте не найдены или выражены слабо."))
     if len(parser.h2) < 3:
-        issues.append(_issue("Пересобрать структуру блоков", "Страница выглядит недостаточно разложенной по смысловым этапам.", "Посетитель не получает аргументы в правильном порядке.", "Добавить блоки: для кого, что получите, как это работает, почему мы, FAQ.", "средняя", "средний", "P2", "дизайнер/копирайтер"))
+        issues.append(_issue("Пересобрать структуру блоков", f"Найдено мало смысловых разделов H2: {len(parser.h2)}.", "Посетитель не получает аргументы в правильном порядке.", "Добавить блоки: для кого, что получите, как это работает, почему мы, FAQ.", "средняя", "средний", "P2", "дизайнер/копирайтер", evidence=f"H2: {', '.join(parser.h2[:4]) or 'не найдены'}"))
     if not parser.viewport:
         issues.append(_issue("Исправить мобильную адаптацию", "Не найден viewport meta.", "Мобильный рекламный трафик может видеть страницу некорректно.", "Добавить viewport и проверить первый экран на телефоне.", "низкая", "высокий", "P1", "разработчик"))
     if not parser.meta_description:
-        issues.append(_issue("Добавить описание страницы", "Нет meta description.", "Это снижает понятность страницы для систем и превью.", "Добавить короткое описание с оффером и CTA.", "низкая", "средний", "P3", "копирайтер"))
+        issues.append(_issue("Добавить описание страницы", "Нет meta description.", "Это снижает понятность страницы для систем и превью.", "Добавить короткое описание с оффером и CTA.", "низкая", "средний", "P3", "копирайтер", evidence="Meta description не найден."))
     if parser.images_without_alt:
-        issues.append(_issue("Описать ключевые изображения", "Часть изображений без alt.", "Системам анализа и пользователям с ассистивными технологиями сложнее понять страницу.", "Добавить alt к важным изображениям, особенно к кейсам, людям и услугам.", "низкая", "низкий", "P3", "разработчик"))
+        issues.append(_issue("Описать ключевые изображения", f"Изображений без alt: {parser.images_without_alt} из {parser.images}.", "Системам анализа и пользователям с ассистивными технологиями сложнее понять страницу.", "Добавить alt к важным изображениям, особенно к кейсам, людям и услугам.", "низкая", "низкий", "P3", "разработчик", evidence=f"Images: {parser.images}, without alt: {parser.images_without_alt}"))
     if not signals["process_matches"]:
-        issues.append(_issue("Показать процесс работы", "Не найден понятный блок этапов.", "Пользователь не понимает, что произойдёт после заявки.", "Добавить 3-5 шагов: заявка, аудит, предложение, запуск, отчёт.", "средняя", "средний", "P2", "маркетолог/копирайтер"))
+        issues.append(_issue("Показать процесс работы", "Не найден понятный блок этапов.", "Пользователь не понимает, что произойдёт после заявки.", "Добавить 3-5 шагов: заявка, аудит, предложение, запуск, отчёт.", "средняя", "средний", "P2", "маркетолог/копирайтер", evidence="Слова про этапы/процесс не найдены."))
     if not signals["has_contacts"]:
-        issues.append(_issue("Сделать контакты видимыми", "Не найдены явные телефон, email или WhatsApp-ссылка.", "Часть пользователей хочет быстрый контакт без формы.", "Добавить телефон/мессенджер в шапку и финальный CTA.", "низкая", "средний", "P2", "разработчик"))
+        issues.append(_issue("Сделать контакты видимыми", "Не найдены явные телефон, email или WhatsApp-ссылка.", "Часть пользователей хочет быстрый контакт без формы.", "Добавить телефон/мессенджер в шапку и финальный CTA.", "низкая", "средний", "P2", "разработчик", evidence="tel/mailto/WhatsApp ссылки не найдены."))
     if word_count < 250:
-        issues.append(_issue("Добавить объясняющий контент", "На странице мало текста для принятия решения.", "Пользователь не получает достаточно аргументов до заявки.", "Коротко раскрыть выгоды, процесс, доказательства и ответы на возражения.", "средняя", "средний", "P2", "копирайтер"))
+        issues.append(_issue("Добавить объясняющий контент", f"На странице мало текста для принятия решения: около {word_count} слов.", "Пользователь не получает достаточно аргументов до заявки.", "Коротко раскрыть выгоды, процесс, доказательства и ответы на возражения.", "средняя", "средний", "P2", "копирайтер", evidence=f"Word count: {word_count}"))
     while len(issues) < 10:
         weakest = min(scores, key=lambda item: int(item["score"]))
-        issues.append(_issue(f"Усилить направление: {weakest['area']}", weakest["problems"][0], "Это влияет на качество и количество заявок.", "Проверить блок вручную и внедрить правки из плана ниже.", "средняя", "средний", "P2", "маркетолог"))
+        title = f"Усилить направление: {weakest['area']}"
+        if any(item["title"] == title for item in issues):
+            break
+        issues.append(_issue(title, weakest["problems"][0], "Это влияет на качество и количество заявок.", "Проверить блок вручную и внедрить правки из плана ниже.", "средняя", "средний", "P2", "маркетолог", evidence=f"Оценка направления: {weakest['score']}/100"))
         if len(issues) > 10:
             break
-    return issues[:10]
+    return _dedupe_issues(issues)[:10]
 
 
 def _quick_wins(parser: _PageParser, signals: dict[str, Any], context: dict[str, Any]) -> list[dict[str, str]]:
@@ -449,8 +457,36 @@ def _legacy_recommendations(top_issues: list[dict[str, str]]) -> list[dict[str, 
     ]
 
 
-def _issue(title: str, problem: str, why: str, what: str, difficulty: str, effect: str, priority: str, owner: str) -> dict[str, str]:
-    return {"title": title, "problem": problem, "why_it_matters": why, "what_to_do": what, "difficulty": difficulty, "effect": effect, "priority": priority, "owner": owner}
+def _issue(title: str, problem: str, why: str, what: str, difficulty: str, effect: str, priority: str, owner: str, *, evidence: str = "") -> dict[str, str]:
+    return {"title": title, "problem": problem, "why_it_matters": why, "what_to_do": what, "difficulty": difficulty, "effect": effect, "priority": priority, "owner": owner, "evidence": evidence}
+
+
+def _dedupe_issues(items: list[dict[str, str]]) -> list[dict[str, str]]:
+    seen: set[str] = set()
+    result: list[dict[str, str]] = []
+    for item in items:
+        key = re.sub(r"[^a-zа-я0-9]+", " ", item["title"].lower()).strip()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(item)
+    return result
+
+
+def _evidence(parser: _PageParser, text: str) -> dict[str, Any]:
+    snippets = [part for part in parser.text_parts if len(part) > 28][:6]
+    return {
+        "title": parser.title,
+        "h1": parser.h1[:3],
+        "h2": parser.h2[:6],
+        "buttons": parser.button_texts[:6],
+        "text_snippets": snippets,
+        "contacts": {
+            "phone_links": parser.phone_links,
+            "email_links": parser.email_links,
+            "whatsapp_links": parser.whatsapp_links,
+        },
+    }
 
 
 def _score(base: int, *rules: tuple[bool, int]) -> int:

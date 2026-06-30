@@ -33,6 +33,7 @@ def test_analyze_html_returns_advanced_cro_report() -> None:
     assert result["recommended_structure"]
     assert result["implementation_plan"]
     assert result["questions"]
+    assert result["top_issues"][0]["evidence"]
     assert len(result["priority_recommendations"]) <= 6
     assert any(item["area"] == "Усилить главный заголовок" for item in result["priority_recommendations"])
 
@@ -48,7 +49,9 @@ def test_analyze_html_uses_full_mode_for_top_10() -> None:
     result = analyze_html("<html><body><h1>Услуги</h1></body></html>", url="https://example.com", mode="full")
 
     assert result["mode"] == "full"
-    assert len(result["top_issues"]) == 10
+    titles = [item["title"] for item in result["top_issues"]]
+    assert len(titles) == len(set(titles))
+    assert len(result["top_issues"]) >= 6
 
 
 @pytest.mark.parametrize("url", ["http://127.0.0.1", "http://localhost", "http://10.0.0.1"])

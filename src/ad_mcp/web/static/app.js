@@ -110,6 +110,7 @@
     el.siteAnalysisSubmit = document.getElementById("site-analysis-submit");
     el.siteAnalysisHistory = document.getElementById("site-analysis-history");
     el.siteAnalysisResult = document.getElementById("site-analysis-result");
+    el.reportLoadingModal = document.getElementById("report-loading-modal");
     el.nextSteps = document.getElementById("next-steps");
     el.mcpUrl = document.getElementById("mcp-url");
     el.copyMcpUrl = document.getElementById("copy-mcp-url");
@@ -568,7 +569,7 @@
       el.siteAnalysisForm.addEventListener("submit", runSiteAnalysis);
     }
     if (el.siteAnalysisResult) {
-      el.siteAnalysisResult.addEventListener("click", handleSiteAnalysisCopy);
+      el.siteAnalysisResult.addEventListener("click", handleSiteAnalysisAction);
     }
     document.querySelectorAll("[data-client-modal-close]").forEach((node) => {
       node.addEventListener("click", () => closeClientModal());
@@ -1201,7 +1202,7 @@
     const reportText = siteAnalysisMarkdown(analysis);
     const heroText = heroCopyMarkdown(analysis);
     const tasksText = tasksMarkdown(analysis);
-    state.siteAnalysisCopy = { reportText, heroText, tasksText };
+    state.siteAnalysisCopy = { reportText, heroText, tasksText, analysis };
     if (analysis.status !== "ok") {
       el.siteAnalysisResult.innerHTML = `
         <div class="site-analysis-report">
@@ -1217,6 +1218,7 @@
     el.siteAnalysisResult.innerHTML = `
       <div class="site-analysis-report">
         <div class="site-analysis-actions">
+          <button type="button" class="btn btn--primary btn--small" data-site-download>Скачать отчёт</button>
           <button type="button" class="btn btn--secondary btn--small" data-site-copy="report">Скопировать отчёт</button>
           <button type="button" class="btn btn--secondary btn--small" data-site-copy="tasks">Скопировать задачи для команды</button>
           <button type="button" class="btn btn--secondary btn--small" data-site-copy="hero">Скопировать тексты для hero</button>
@@ -1232,13 +1234,25 @@
           </div>
         </div>
         ${renderAssumptions(analysis.assumptions || [])}
-        ${renderScorecards(analysis.scores || [])}
-        ${renderTopIssues(analysis.top_issues || [])}
-        ${renderQuickWins(analysis.quick_wins || [])}
-        ${renderRewrittenCopy(analysis.rewritten_copy || {})}
-        ${renderRecommendedStructure(analysis.recommended_structure || [])}
-        ${renderImplementationPlan(analysis.implementation_plan || [])}
-        ${renderQuestions(analysis.questions || [])}
+        <div class="site-result-tabs" role="tablist" aria-label="Разделы отчёта">
+          ${[
+            ["issues", "Топ улучшений"],
+            ["wins", "Что поправить"],
+            ["copy", "Готовые тексты"],
+            ["structure", "Структура"],
+            ["plan", "План внедрения"],
+            ["questions", "Вопросы"],
+          ].map(([id, label], index) => `<button type="button" class="${index === 0 ? "is-active" : ""}" data-site-tab="${id}">${label}</button>`).join("")}
+        </div>
+        <div class="site-result-panel is-active" data-site-panel="issues">
+          ${renderScorecards(analysis.scores || [])}
+          ${renderTopIssues(analysis.top_issues || [])}
+        </div>
+        <div class="site-result-panel" data-site-panel="wins" hidden>${renderQuickWins(analysis.quick_wins || [])}</div>
+        <div class="site-result-panel" data-site-panel="copy" hidden>${renderRewrittenCopy(analysis.rewritten_copy || {})}</div>
+        <div class="site-result-panel" data-site-panel="structure" hidden>${renderRecommendedStructure(analysis.recommended_structure || [])}</div>
+        <div class="site-result-panel" data-site-panel="plan" hidden>${renderImplementationPlan(analysis.implementation_plan || [])}</div>
+        <div class="site-result-panel" data-site-panel="questions" hidden>${renderQuestions(analysis.questions || [])}</div>
       </div>
     `;
   }
@@ -1282,16 +1296,57 @@
     }
   }
 
-  async function handleSiteAnalysisCopy(event) {
-    const target = event.target.closest("[data-site-copy], [data-site-repeat]");
+  async function handleSiteAnalysisAction(event) {
+    const target = event.target.closest("[data-site-copy], [data-site-repeat], [data-site-tab], [data-site-download]");
     if (!target) return;
     if (target.dataset.siteRepeat !== undefined) {
       el.siteAnalysisForm?.scrollIntoView({ behavior: "smooth", block: "start" });
       return;
     }
+    if (target.dataset.siteTab) {
+      const id = target.dataset.siteTab;
+      el.siteAnalysisResult.querySelectorAll("[data-site-tab]").forEach((tab) => tab.classList.toggle("is-active", tab.dataset.siteTab === id));
+      el.siteAnalysisResult.querySelectorAll("[data-site-panel]").forEach((panel) => {
+        panel.hidden = panel.dataset.sitePanel !== id;
+        panel.classList.toggle("is-active", panel.dataset.sitePanel === id);
+      });
+      return;
+    }
+    if (target.dataset.siteDownload !== undefined) {
+      await downloadSiteAnalysisReport();
+      return;
+    }
     const key = target.dataset.siteCopy === "tasks" ? "tasksText" : target.dataset.siteCopy === "hero" ? "heroText" : "reportText";
     await copyText(state.siteAnalysisCopy[key] || "");
     toast("Скопировано", "success");
+  }
+
+  async function downloadSiteAnalysisReport() {
+    const analysis = state.siteAnalysisCopy.analysis;
+    if (!analysis) return;
+    showReportLoading(true);
+    try {
+      await new Promise((resolve) => setTimeout(resolve, 350));
+      const html = siteAnalysisDocumentHtml(analysis);
+      const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = `HolyMedia-MCP-site-audit-${safeFileDate()}.doc`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(link.href);
+      toast("Отчёт скачан", "success");
+    } catch (error) {
+      showClientMessage("Не удалось собрать отчёт", humanizeError(error), "error");
+    } finally {
+      showReportLoading(false);
+    }
+  }
+
+  function showReportLoading(visible) {
+    if (!el.reportLoadingModal) return;
+    el.reportLoadingModal.hidden = !visible;
   }
 
   function renderAssumptions(items) {
@@ -1317,6 +1372,7 @@
         <p><strong>Проблема:</strong> ${esc(item.problem || "")}</p>
         <p><strong>Почему важно:</strong> ${esc(item.why_it_matters || "")}</p>
         <p><strong>Что сделать:</strong> ${esc(item.what_to_do || "")}</p>
+        ${item.evidence ? `<p><strong>Что найдено:</strong> ${esc(item.evidence)}</p>` : ""}
       </article>
     `).join("")}</div></div>`;
   }
@@ -1385,6 +1441,30 @@
 
   function tasksMarkdown(analysis) {
     return (analysis.implementation_plan || []).map((x) => `${x.priority} · ${x.owner}: ${x.task} | влияние: ${x.impact} | сложность: ${x.difficulty}`).join("\n");
+  }
+
+  function siteAnalysisDocumentHtml(analysis) {
+    const rows = (analysis.implementation_plan || []).map((x) => `<tr><td>${esc(x.task)}</td><td>${esc(x.impact)}</td><td>${esc(x.difficulty)}</td><td>${esc(x.priority)}</td><td>${esc(x.owner)}</td></tr>`).join("");
+    return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
+      <style>body{font-family:Arial,sans-serif;line-height:1.45;color:#111}h1,h2{color:#0b1730}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d7dce8;padding:8px;text-align:left}.score{font-size:28px;font-weight:700}</style>
+      </head><body>
+      <h1>AI-анализ сайта HolyMedia MCP</h1>
+      <p><strong>Сайт:</strong> ${esc(analysis.url || "")}</p>
+      <p><strong>Дата:</strong> ${esc(new Date().toLocaleString())}</p>
+      <p class="score">Оценка: ${esc(String(analysis.overall_score || "—"))}/100</p>
+      <h2>Краткий вердикт</h2><p>${esc(analysis.verdict?.summary || analysis.summary || "")}</p>
+      <p><strong>Главный риск:</strong> ${esc(analysis.verdict?.main_risk || "")}</p>
+      <p><strong>Быстрый выигрыш:</strong> ${esc(analysis.verdict?.fastest_win || "")}</p>
+      <h2>Топ улучшений</h2>${(analysis.top_issues || []).map((x) => `<h3>${esc(x.priority)} · ${esc(x.title)}</h3><p><strong>Проблема:</strong> ${esc(x.problem)}</p><p><strong>Что найдено:</strong> ${esc(x.evidence || "")}</p><p><strong>Что сделать:</strong> ${esc(x.what_to_do)}</p>`).join("")}
+      <h2>Быстрые победы</h2><ul>${(analysis.quick_wins || []).map((x) => `<li><strong>${esc(x.title)}</strong>: ${esc(x.action)}</li>`).join("")}</ul>
+      <h2>Готовые тексты</h2><pre>${esc(heroCopyMarkdown(analysis))}</pre>
+      <h2>Структура страницы</h2><ol>${(analysis.recommended_structure || []).map((x) => `<li><strong>${esc(x.block)}</strong> — ${esc(x.purpose)}</li>`).join("")}</ol>
+      <h2>План внедрения</h2><table><tr><th>Задача</th><th>Влияние</th><th>Сложность</th><th>Приоритет</th><th>Ответственный</th></tr>${rows}</table>
+      </body></html>`;
+  }
+
+  function safeFileDate() {
+    return new Date().toISOString().slice(0, 10);
   }
 
   function priorityLabel(priority) {
