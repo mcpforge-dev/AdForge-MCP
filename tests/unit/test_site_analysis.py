@@ -54,6 +54,48 @@ def test_analyze_html_uses_full_mode_for_top_10() -> None:
     assert len(result["top_issues"]) >= 6
 
 
+def test_hotel_analysis_uses_booking_context_and_honest_score() -> None:
+    html = """
+    <!doctype html>
+    <html>
+      <head>
+        <title>Kazzhol Hotel Almaty</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+      </head>
+      <body>
+        <h1>Отель Kazzhol в Алматы</h1>
+        <h2>Номера</h2>
+        <p>Гостиница предлагает номера standard и suite, ресторан, завтрак и проживание в центре Алматы.</p>
+        <h2>Конференции</h2>
+        <p>Есть конференц-залы для мероприятий и деловых поездок.</p>
+        <button>Подробнее</button>
+        <img src="/room.jpg">
+      </body>
+    </html>
+    """
+
+    result = analyze_html(
+        html,
+        url="https://kazzhol.example/ru/almaty/main/",
+        site_type="отель",
+        goal="бронирования",
+        mode="full",
+        region="Алматы",
+    )
+
+    assert result["status"] == "ok"
+    assert result["checks"]["detected_vertical"] == "hotel"
+    assert result["overall_score"] < 90
+    ctas = result["rewritten_copy"]["cta_variants"]
+    assert "Забронировать номер" in ctas
+    assert "Проверить свободные номера" in ctas
+    assert all("Записаться" not in item for item in ctas)
+    titles = [item["title"] for item in result["top_issues"][:5]]
+    assert any("бронировать на сайте выгоднее" in title for title in titles)
+    assert any("CTA бронирования" in title for title in titles)
+    assert not any("alt" in title.lower() for title in titles[:3])
+
+
 @pytest.mark.parametrize("url", ["http://127.0.0.1", "http://localhost", "http://10.0.0.1"])
 def test_analyze_site_rejects_private_targets(url: str) -> None:
     with pytest.raises(SiteAnalysisError):

@@ -1444,6 +1444,51 @@
   }
 
   function siteAnalysisDocumentHtml(analysis) {
+    const scoreRows = (analysis.scores || []).map((x) => `<tr><td>${esc(x.area)}</td><td class="num">${esc(String(x.score))}/100</td><td>${esc(x.explanation || "")}</td></tr>`).join("");
+    const issueRows = (analysis.top_issues || []).map((x) => `
+      <tr>
+        <td class="num">${esc(x.priority || "P2")}</td>
+        <td><strong>${esc(x.title || "")}</strong><br><span>${esc(x.problem || "")}</span></td>
+        <td>${esc(x.what_to_do || "")}</td>
+        <td>${esc(x.evidence || "")}</td>
+      </tr>
+    `).join("");
+    const planRows = (analysis.implementation_plan || []).map((x) => `<tr><td>${esc(x.task)}</td><td>${esc(x.impact)}</td><td>${esc(x.difficulty)}</td><td>${esc(x.priority)}</td><td>${esc(x.owner)}</td></tr>`).join("");
+    const copy = analysis.rewritten_copy || {};
+    return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
+      <style>
+        @page{margin:22mm 18mm}body{font-family:Arial,sans-serif;line-height:1.5;color:#111827;background:#fff}h1{font-size:28px;margin:0 0 12px;color:#0b1730}h2{font-size:19px;margin:28px 0 10px;color:#0b1730;border-bottom:2px solid #e5e7eb;padding-bottom:6px}h3{font-size:15px;margin:18px 0 6px;color:#111827}p{margin:6px 0 10px}.cover{background:#0f172a;color:#fff;border-radius:18px;padding:28px;margin-bottom:22px}.cover h1{color:#fff}.cover p{color:#cbd5e1}.score{display:inline-block;background:#eef2ff;color:#1d4ed8;border-radius:14px;padding:12px 18px;font-size:30px;font-weight:700;margin-top:8px}.meta{width:100%;margin-top:18px}.meta td{border:0;padding:5px 0;color:#cbd5e1}.section-note{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:12px 0}table{border-collapse:collapse;width:100%;margin:12px 0 18px}td,th{border:1px solid #d7dce8;padding:9px;vertical-align:top;text-align:left}th{background:#f1f5f9;color:#0f172a}.num{white-space:nowrap;font-weight:700;color:#1d4ed8}ul,ol{margin-top:8px}.copy-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:10px 0}.small{color:#64748b;font-size:12px}
+      </style>
+      </head><body>
+      <section class="cover">
+        <h1>AI-анализ сайта HolyMedia MCP</h1>
+        <p>Краткий продуктовый и конверсионный аудит публичной страницы. Это не Google Search Console и не технический SEO-аудит.</p>
+        <div class="score">${esc(String(analysis.overall_score || "—"))}/100</div>
+        <table class="meta">
+          <tr><td><strong>Сайт:</strong></td><td>${esc(analysis.url || "")}</td></tr>
+          <tr><td><strong>Дата:</strong></td><td>${esc(new Date().toLocaleString())}</td></tr>
+          <tr><td><strong>Режим:</strong></td><td>${esc(analysis.mode || "")}</td></tr>
+        </table>
+      </section>
+      <h2>Краткий вердикт</h2>
+      <div class="section-note">
+        <p>${esc(analysis.verdict?.summary || analysis.summary || "")}</p>
+        <p><strong>Главный риск:</strong> ${esc(analysis.verdict?.main_risk || "")}</p>
+        <p><strong>Быстрый выигрыш:</strong> ${esc(analysis.verdict?.fastest_win || "")}</p>
+      </div>
+      <h2>Оценка по направлениям</h2><table><tr><th>Направление</th><th>Оценка</th><th>Комментарий</th></tr>${scoreRows}</table>
+      <h2>Топ улучшений</h2><table><tr><th>Приоритет</th><th>Проблема</th><th>Что сделать</th><th>Что найдено</th></tr>${issueRows}</table>
+      <h2>Быстрые правки</h2><ul>${(analysis.quick_wins || []).map((x) => `<li><strong>${esc(x.title)}</strong>: ${esc(x.action)} <span class="small">(${esc(x.time || "")})</span></li>`).join("")}</ul>
+      <h2>Готовые тексты</h2>
+      <div class="copy-box"><h3>H1</h3>${(copy.h1_variants || []).map((item) => `<p>${esc(item)}</p>`).join("")}</div>
+      <div class="copy-box"><h3>Подзаголовок</h3><p>${esc(copy.subheadline || "")}</p></div>
+      <div class="copy-box"><h3>CTA</h3>${(copy.cta_variants || []).map((item) => `<p>${esc(item)}</p>`).join("")}</div>
+      <div class="copy-box"><h3>Текст формы</h3><p>${esc(copy.form_text || "")}</p></div>
+      <h2>Рекомендуемая структура страницы</h2><ol>${(analysis.recommended_structure || []).map((x) => `<li><strong>${esc(x.block)}</strong> — ${esc(x.purpose)}</li>`).join("")}</ol>
+      <h2>План внедрения</h2><table><tr><th>Задача</th><th>Влияние</th><th>Сложность</th><th>Приоритет</th><th>Ответственный</th></tr>${planRows}</table>
+      <h2>Вопросы для уточнения</h2><ol>${(analysis.questions || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ol>
+      </body></html>`;
+
     const rows = (analysis.implementation_plan || []).map((x) => `<tr><td>${esc(x.task)}</td><td>${esc(x.impact)}</td><td>${esc(x.difficulty)}</td><td>${esc(x.priority)}</td><td>${esc(x.owner)}</td></tr>`).join("");
     return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
       <style>body{font-family:Arial,sans-serif;line-height:1.45;color:#111}h1,h2{color:#0b1730}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d7dce8;padding:8px;text-align:left}.score{font-size:28px;font-weight:700}</style>

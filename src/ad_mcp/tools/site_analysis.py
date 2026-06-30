@@ -192,6 +192,7 @@ def analyze_html(
     words = re.findall(r"[A-Za-zА-Яа-яЁё0-9]{3,}", text)
     signals = _signals(parser, text)
     context = _context(site_type, goal, audience, region, mode, competitor, concern)
+    context = _apply_detected_vertical(context, signals)
     scores = _scorecards(parser, len(words), signals, context)
     top_issues = _top_issues(parser, len(words), signals, context, scores)
     quick_wins = _quick_wins(parser, signals, context)
@@ -236,12 +237,23 @@ def analyze_html(
             "whatsapp_links": parser.whatsapp_links,
             "cta_mentions": signals["cta_matches"],
             "trust_signals": signals["trust_matches"],
+            "detected_vertical": context.get("vertical", "generic"),
+            "hotel_signals": {
+                "hotel_mentions": signals.get("hotel_matches", []),
+                "booking_mentions": signals.get("hotel_booking_matches", []),
+                "direct_booking_mentions": signals.get("hotel_direct_booking_matches", []),
+                "rooms_mentions": signals.get("hotel_room_matches", []),
+                "ota_mentions": signals.get("hotel_ota_matches", []),
+            },
             "word_count": len(words),
             "truncated": truncated,
             "technical_check_limited": True,
         },
     }
-    result["overall_score"] = round(sum(item["score"] for item in scores) / max(1, len(scores)))
+    overall = round(sum(item["score"] for item in scores) / max(1, len(scores)))
+    if _is_hotel_context(context):
+        overall = min(overall, _hotel_score_cap(signals))
+    result["overall_score"] = overall
     return result
 
 
@@ -274,6 +286,15 @@ def _context(site_type: str, goal: str, audience: str, region: str, mode: str, c
 
 def _signals(parser: _PageParser, text: str) -> dict[str, Any]:
     lower = text.lower()
+    hotel = _matches(lower, ["отель", "гостиниц", "hotel", "номер", "номера", "rooms", "проживание", "заезд", "выезд"])
+    hotel_booking = _matches(lower, ["забронировать", "бронир", "booking", "book now", "проверить свободные", "свободные номера", "даты", "заезд", "выезд"])
+    hotel_direct = _matches(lower, ["официальный сайт", "на сайте выгоднее", "лучший тариф", "без комиссии", "прямое бронир", "гарантия цены", "book direct"])
+    hotel_rooms = _matches(lower, ["номер", "номера", "категории номеров", "standard", "suite", "люкс", "апартаменты", "room"])
+    hotel_ota = _matches(lower, ["booking.com", "ostrovok", "agoda", "expedia", "tripadvisor", "airbnb"])
+    hotel_business = _matches(lower, ["бизнес", "командиров", "деловая поездка", "conference", "конференц", "переговор", "мероприят"])
+    hotel_food_spa = _matches(lower, ["ресторан", "завтрак", "spa", "спа", "сауна", "бар", "кухня"])
+    hotel_location = _matches(lower, ["локац", "центр", "аэропорт", "вокзал", "рядом", "достопримеч", "алматы", "адрес"])
+    hotel_reviews = _matches(lower, ["отзывы", "рейтинг", "звезд", "stars", "guest rating", "оценка гостей"])
     cta = _matches(lower, ["купить", "заказать", "оставить заявку", "записаться", "получить", "рассчитать", "консультация", "contact", "book", "order"])
     trust = _matches(lower, ["отзывы", "кейс", "сертификат", "гарантия", "партнер", "лет", "клиентов", "лицензия", "команда", "портфолио"])
     price = _matches(lower, ["цена", "стоимость", "тариф", "прайс", "рассчитать"])
@@ -285,12 +306,48 @@ def _signals(parser: _PageParser, text: str) -> dict[str, Any]:
         "price_matches": price,
         "process_matches": process,
         "faq_matches": faq,
+        "hotel_matches": hotel,
+        "hotel_booking_matches": hotel_booking,
+        "hotel_direct_booking_matches": hotel_direct,
+        "hotel_room_matches": hotel_rooms,
+        "hotel_ota_matches": hotel_ota,
+        "hotel_business_matches": hotel_business,
+        "hotel_food_spa_matches": hotel_food_spa,
+        "hotel_location_matches": hotel_location,
+        "hotel_review_matches": hotel_reviews,
         "has_contacts": parser.phone_links > 0 or parser.email_links > 0 or parser.whatsapp_links > 0,
         "has_form_or_button": parser.forms > 0 or parser.buttons > 0 or bool(cta),
     }
 
 
+def _apply_detected_vertical(context: dict[str, Any], signals: dict[str, Any]) -> dict[str, Any]:
+    site_type = context["site_type"].lower()
+    goal = context["goal"].lower()
+    hotel_score = (
+        len(signals.get("hotel_matches", []))
+        + len(signals.get("hotel_booking_matches", []))
+        + len(signals.get("hotel_room_matches", []))
+        + len(signals.get("hotel_business_matches", []))
+        + len(signals.get("hotel_food_spa_matches", []))
+    )
+    is_hotel = any(word in site_type for word in ["отель", "гостини", "hotel"]) or "брон" in goal or hotel_score >= 3
+    context["vertical"] = "hotel" if is_hotel else "generic"
+    if is_hotel:
+        if not any(word in site_type for word in ["отель", "гостини", "hotel"]):
+            context["site_type"] = "отель"
+        if not context["goal"] or "заяв" in goal:
+            context["goal"] = "бронирования"
+    return context
+
+
+def _is_hotel_context(context: dict[str, Any]) -> bool:
+    return context.get("vertical") == "hotel"
+
+
 def _scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any], context: dict[str, Any]) -> list[dict[str, Any]]:
+    if _is_hotel_context(context):
+        return _hotel_scorecards(parser, word_count, signals)
+
     first_screen = _score(62, (len(parser.h1) == 1, 12), (bool(parser.h1 and len(parser.h1[0]) >= 28), 10), (signals["has_form_or_button"], 12), (bool(signals["trust_matches"]), 8), (word_count <= 1200, 6))
     offer = _score(55, (bool(parser.h1), 12), (bool(signals["price_matches"] or context["goal"]), 8), (word_count >= 250, 10), (not _looks_generic(parser.h1[0] if parser.h1 else ""), 10))
     cta = _score(45, (signals["has_form_or_button"], 22), (bool(signals["cta_matches"]), 15), (parser.forms > 0, 8), (parser.phone_links + parser.whatsapp_links > 0, 7))
@@ -314,7 +371,102 @@ def _scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any], c
     return [{"area": area, "score": score, "explanation": _score_explanation(score), "problems": problems[:3]} for area, score, problems in raw]
 
 
+def _hotel_scorecards(parser: _PageParser, word_count: int, signals: dict[str, Any]) -> list[dict[str, Any]]:
+    booking_cta = bool(signals.get("hotel_booking_matches")) or any("book" in item.lower() or "брон" in item.lower() for item in parser.button_texts)
+    direct = bool(signals.get("hotel_direct_booking_matches"))
+    rooms = bool(signals.get("hotel_room_matches"))
+    trust = bool(signals.get("hotel_review_matches") or signals.get("trust_matches") or parser.images > 3)
+    business = bool(signals.get("hotel_business_matches"))
+    food_spa = bool(signals.get("hotel_food_spa_matches"))
+    location = bool(signals.get("hotel_location_matches") or signals["has_contacts"])
+    ota_mentions = bool(signals.get("hotel_ota_matches"))
+
+    raw = [
+        (
+            "Прямое бронирование",
+            _score(34, (direct, 22), (booking_cta, 14), (bool(signals.get("price_matches")), 8), (not ota_mentions, 4)),
+            [
+                "Нужен явный аргумент, почему гостю выгодно бронировать на официальном сайте, а не через OTA/Booking.",
+                "Покажите лучший тариф, бонус, бесплатную отмену, ранний заезд или другой понятный direct-booking benefit.",
+            ],
+        ),
+        (
+            "CTA бронирования",
+            _score(38, (booking_cta, 24), (parser.forms > 0, 10), (parser.phone_links + parser.whatsapp_links > 0, 8)),
+            [
+                "Основное действие для отеля должно вести к проверке дат, цены или бронированию номера.",
+                "CTA должен звучать как действие гостя: проверить номера, узнать цену на даты, забронировать.",
+            ],
+        ),
+        (
+            "Номера и категории",
+            _score(36, (rooms, 22), (parser.images > 4, 10), (bool(signals.get("price_matches")), 10), (word_count >= 450, 6)),
+            [
+                "Гость должен быстро понять категории номеров, отличия, фото, вместимость и что входит в стоимость.",
+                "Если цены/даты скрыты, нужен быстрый путь к booking engine или запросу цены.",
+            ],
+        ),
+        (
+            "Доверие и выбор отеля",
+            _score(42, (trust, 20), (location, 10), (parser.structured_data, 6), (signals["has_contacts"], 8)),
+            [
+                "Для отеля важны отзывы, рейтинг, реальные фото, адрес, локация и понятные контакты.",
+                "Нужно дать гостю быстрые причины выбрать именно этот отель.",
+            ],
+        ),
+        (
+            "Аудитории: туристы / бизнес / мероприятия",
+            _score(32, (business, 18), (food_spa, 10), (len(parser.h2) >= 5, 8), (word_count >= 700, 6)),
+            [
+                "Отель продаёт разным аудиториям: туристам, бизнес-гостям, участникам мероприятий, гостям ресторана/SPA.",
+                "Если все аудитории смешаны, посетитель не видит свой сценарий и хуже доходит до бронирования.",
+            ],
+        ),
+        (
+            "Конференции, ресторан и SPA",
+            _score(35, (business, 16), (food_spa, 16), (parser.images > 6, 6)),
+            [
+                "Дополнительные направления отеля должны быть отдельными входами: конференц-зал, ресторан, SPA, мероприятия.",
+                "Для каждого направления нужен свой CTA: забронировать зал, посмотреть меню, уточнить условия.",
+            ],
+        ),
+        (
+            "UX booking-сценария",
+            _score(40, (parser.viewport, 14), (booking_cta, 16), (signals["has_contacts"], 8), (parser.links < 220, 5)),
+            [
+                "Путь от первого экрана до выбора дат и номера должен быть коротким и очевидным.",
+                "На мобильном экране кнопка бронирования и быстрый контакт должны быть доступны без поиска.",
+            ],
+        ),
+        (
+            "Базовая техническая видимость",
+            _score(48, (bool(parser.title and len(parser.title) >= 25), 10), (bool(parser.meta_description), 8), (len(parser.h1) == 1, 8), (parser.viewport, 10), (parser.images_without_alt < max(1, parser.images // 2), 5)),
+            [
+                "Это не SEO-аудит, но title, H1, description и alt помогают странице быть понятной людям и системам.",
+                "Техническая часть не должна перекрывать главные конверсионные проблемы отеля.",
+            ],
+        ),
+    ]
+    return [{"area": area, "score": score, "explanation": _score_explanation(score), "problems": problems[:3]} for area, score, problems in raw]
+
+
+def _hotel_score_cap(signals: dict[str, Any]) -> int:
+    cap = 86
+    if not signals.get("hotel_direct_booking_matches"):
+        cap = min(cap, 78)
+    if not signals.get("hotel_booking_matches"):
+        cap = min(cap, 74)
+    if not signals.get("hotel_room_matches"):
+        cap = min(cap, 76)
+    if not signals.get("hotel_review_matches") and not signals.get("trust_matches"):
+        cap = min(cap, 80)
+    return cap
+
+
 def _top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], context: dict[str, Any], scores: list[dict[str, Any]]) -> list[dict[str, str]]:
+    if _is_hotel_context(context):
+        return _hotel_top_issues(parser, word_count, signals, scores)
+
     issues: list[dict[str, str]] = []
     h1_value = parser.h1[0] if parser.h1 else ""
     buttons = ", ".join(parser.button_texts[:4]) if parser.button_texts else "кнопки не найдены"
@@ -351,7 +503,128 @@ def _top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], c
     return _dedupe_issues(issues)[:10]
 
 
+def _hotel_top_issues(parser: _PageParser, word_count: int, signals: dict[str, Any], scores: list[dict[str, Any]]) -> list[dict[str, str]]:
+    buttons = ", ".join(parser.button_texts[:6]) if parser.button_texts else "кнопки не найдены"
+    h2 = ", ".join(parser.h2[:6]) if parser.h2 else "разделы H2 не найдены"
+    issues: list[dict[str, str]] = []
+
+    issues.extend([
+        _issue(
+            "Сделать блок “Почему бронировать на сайте выгоднее”",
+            "Даже если на странице есть элементы бронирования, выгода прямого бронирования должна быть видна как отдельный коммерческий аргумент.",
+            "Гость сравнивает официальный сайт с Booking/OTA. Если выгода не очевидна, он уходит на агрегатор или откладывает решение.",
+            "Вынести рядом с первым CTA 3-4 причины: лучший тариф, бонус при бронировании напрямую, бесплатная отмена, ранний заезд/поздний выезд или прямой контакт с отелем.",
+            "средняя",
+            "высокий",
+            "P1",
+            "маркетолог/копирайтер",
+            evidence=f"Direct-booking signals: {', '.join(signals.get('hotel_direct_booking_matches', [])) or 'явно не найдены'}",
+        ),
+        _issue(
+            "Сделать CTA бронирования главным действием",
+            f"Кнопки и ссылки должны вести гостя к проверке дат и цены, а не просто к общему просмотру страницы. Найдено: {buttons}.",
+            "Для отеля главный сценарий — проверить свободные номера, увидеть цену на даты и забронировать.",
+            "Закрепить формулировки “Проверить свободные номера”, “Забронировать номер”, “Узнать цену на даты” на первом экране, в блоке номеров и в финале страницы.",
+            "низкая",
+            "высокий",
+            "P1",
+            "дизайнер/разработчик",
+            evidence=f"Найденные кнопки: {buttons}",
+        ),
+        _issue(
+            "Добавить быстрые причины выбрать этот отель",
+            "Пользователь должен за 5-7 секунд увидеть, почему этот отель подходит именно ему.",
+            "Цена редко является единственным фактором. Для прямого бронирования нужны локация, рейтинг, фото, завтрак, парковка, сервис и понятные условия.",
+            "Добавить компактный блок из 4-6 преимуществ: локация, рейтинг гостей, завтрак, ресторан/SPA, конференц-залы, парковка, трансфер или круглосуточная стойка.",
+            "средняя",
+            "высокий",
+            "P1",
+            "маркетолог",
+            evidence=f"Trust/location signals: {', '.join((signals.get('hotel_review_matches') or []) + (signals.get('hotel_location_matches') or [])) or 'нужно усилить'}",
+        ),
+        _issue(
+            "Развести аудитории: туристы, бизнес-гости и мероприятия",
+            "Отель продаёт разные сценарии, но в общем потоке страницы пользователь может не увидеть свой путь.",
+            "Турист ищет локацию и комфорт, бизнес-гость — документы и удобства, организатор — залы и условия мероприятий.",
+            "Сделать отдельные карточки или секции: “Для отдыха”, “Для деловой поездки”, “Для конференций и мероприятий” с отдельными CTA.",
+            "средняя",
+            "средний",
+            "P2",
+            "маркетолог/копирайтер",
+            evidence=f"H2: {h2}",
+        ),
+        _issue(
+            "Связать номера с датами, ценой и бронированием",
+            "Блок номеров должен не просто показывать категории, а вести к выбору дат и бронированию.",
+            "Гость выбирает конкретный номер под даты, бюджет и количество гостей. Без этой связки путь до покупки длиннее.",
+            "Для каждой категории добавить фото, вместимость, что входит в стоимость и CTA “Узнать цену на даты”.",
+            "средняя",
+            "высокий",
+            "P1",
+            "контент-менеджер/разработчик",
+            evidence=f"Room signals: {', '.join(signals.get('hotel_room_matches', [])) or 'слабые или не найдены'}",
+        ),
+    ])
+
+    if not signals.get("hotel_food_spa_matches"):
+        issues.append(_issue(
+            "Выделить ресторан, завтрак и SPA как отдельные причины выбора",
+            "Ресторан, завтрак, SPA или дополнительные услуги не выглядят как самостоятельные аргументы бронирования.",
+            "Дополнительные сервисы помогают повысить ценность номера и удержать гостя на официальном сайте.",
+            "Добавить компактный блок с фото и CTA: “Посмотреть ресторан”, “Уточнить SPA”, “Узнать, что входит в проживание”.",
+            "низкая",
+            "средний",
+            "P2",
+            "контент-менеджер",
+            evidence=f"Food/SPA signals: {', '.join(signals.get('hotel_food_spa_matches', [])) or 'не найдены'}",
+        ))
+    if not signals.get("hotel_location_matches"):
+        issues.append(_issue(
+            "Сделать локацию коммерческим аргументом",
+            "Адрес и близость к важным точкам не раскрыты как причина выбрать отель.",
+            "Для отеля локация часто продаёт не хуже цены: центр, аэропорт, бизнес-районы, достопримечательности, транспорт.",
+            "Добавить блок “Рядом с отелем”: 4-6 точек, время в пути, карта, кнопка “Построить маршрут”.",
+            "низкая",
+            "средний",
+            "P2",
+            "контент-менеджер",
+            evidence=f"Location signals: {', '.join(signals.get('hotel_location_matches', [])) or 'не найдены'}",
+        ))
+    if parser.images_without_alt and len(issues) < 9:
+        issues.append(_issue(
+            "Описать ключевые фото номеров и инфраструктуры",
+            f"Изображений без alt: {parser.images_without_alt} из {parser.images}.",
+            "Для отеля фотографии продают номер, ресторан, SPA и конференц-залы. Описания помогают понять, что именно показано.",
+            "Добавить alt только к важным фото: категория номера, ресторан, конференц-зал, фасад, локация.",
+            "низкая",
+            "низкий",
+            "P3",
+            "контент-менеджер/разработчик",
+            evidence=f"Images: {parser.images}, without alt: {parser.images_without_alt}",
+        ))
+    while len(issues) < 8:
+        weakest = min(scores, key=lambda item: int(item["score"]))
+        title = f"Усилить направление: {weakest['area']}"
+        if any(item["title"] == title for item in issues):
+            break
+        issues.append(_issue(
+            title,
+            weakest["problems"][0],
+            "Это влияет на путь гостя от первого экрана до бронирования.",
+            "Проверить этот блок вручную и внедрить правки из структуры отчёта.",
+            "средняя",
+            "средний",
+            "P2",
+            "маркетолог",
+            evidence=f"Оценка направления: {weakest['score']}/100",
+        ))
+    return _dedupe_issues(issues)[:10]
+
+
 def _quick_wins(parser: _PageParser, signals: dict[str, Any], context: dict[str, Any]) -> list[dict[str, str]]:
+    if _is_hotel_context(context):
+        return _hotel_quick_wins(signals)
+
     return [
         {"title": "Переписать H1 под результат", "action": _rewrite_h1(parser, context), "time": "15 минут"},
         {"title": "Заменить CTA", "action": f"Поставьте кнопку “{_cta_variants(context)[0]}” на первом экране.", "time": "10 минут"},
@@ -362,7 +635,24 @@ def _quick_wins(parser: _PageParser, signals: dict[str, Any], context: dict[str,
     ]
 
 
+def _hotel_quick_wins(signals: dict[str, Any]) -> list[dict[str, str]]:
+    wins = [
+        {"title": "Заменить главный CTA", "action": "Поставить на первый экран кнопку “Проверить свободные номера” или “Узнать цену на даты”.", "time": "10 минут"},
+        {"title": "Добавить блок direct booking", "action": "Сформулировать 3 причины бронировать на официальном сайте: лучший тариф, бонус, бесплатная отмена или прямой контакт с отелем.", "time": "30 минут"},
+        {"title": "Разделить аудитории", "action": "Добавить короткие карточки “Для отдыха”, “Для деловой поездки”, “Для конференций и мероприятий”.", "time": "45 минут"},
+        {"title": "Усилить блок номеров", "action": "Для каждой категории показать фото, вместимость, что входит в стоимость и кнопку “Узнать цену на даты”.", "time": "60 минут"},
+        {"title": "Добавить доверие рядом с CTA", "action": "Поставить рядом с кнопкой рейтинг, количество отзывов, локацию и быстрый контакт.", "time": "30 минут"},
+        {"title": "Сделать локацию преимуществом", "action": "Показать, сколько минут до центра, аэропорта, бизнес-района или популярных точек Алматы.", "time": "30 минут"},
+    ]
+    if signals.get("hotel_direct_booking_matches"):
+        wins[1] = {"title": "Сделать выгоду прямого бронирования заметнее", "action": "Вынести existing direct-booking выгоду в hero и повторить перед блоком номеров.", "time": "20 минут"}
+    return wins
+
+
 def _rewritten_copy(parser: _PageParser, context: dict[str, Any]) -> dict[str, Any]:
+    if _is_hotel_context(context):
+        return _hotel_rewritten_copy(context)
+
     return {
         "h1_variants": [
             _rewrite_h1(parser, context),
@@ -381,7 +671,30 @@ def _rewritten_copy(parser: _PageParser, context: dict[str, Any]) -> dict[str, A
     }
 
 
+def _hotel_rewritten_copy(context: dict[str, Any]) -> dict[str, Any]:
+    region = f" в {context['region']}" if context.get("region") else ""
+    return {
+        "h1_variants": [
+            f"Отель{region} для деловых поездок, отдыха и мероприятий",
+            f"Забронируйте номер{region} на официальном сайте отеля",
+            "Комфортное проживание, конференции и ресторан в одном отеле",
+        ],
+        "subheadline": "Проверьте свободные номера на нужные даты, сравните категории и забронируйте напрямую: без лишних шагов, с понятными условиями и быстрым контактом с отелем.",
+        "cta_variants": _cta_variants(context),
+        "hero_text": "Покажите на первом экране: город/район, главный тип гостей, 2-3 причины выбрать отель, кнопку проверки дат и короткую выгоду бронирования напрямую.",
+        "why_choose_us": [
+            "Бронируя на официальном сайте, гость получает актуальные условия и прямую связь с отелем.",
+            "Номера, ресторан, конференц-залы и дополнительные услуги собраны в одном понятном сценарии.",
+            "Локация, реальные фото, отзывы и быстрый контакт помогают принять решение без ухода на агрегаторы.",
+        ],
+        "form_text": "Укажите даты проживания и количество гостей — мы покажем доступные номера и актуальную стоимость.",
+    }
+
+
 def _recommended_structure(context: dict[str, Any]) -> list[dict[str, str]]:
+    if _is_hotel_context(context):
+        return _hotel_recommended_structure(context)
+
     blocks = [
         ("Hero / оффер / CTA", "Сразу объяснить услугу, выгоду и следующий шаг."),
         ("Для кого", "Назвать аудитории и ситуации, где предложение особенно полезно."),
@@ -394,6 +707,22 @@ def _recommended_structure(context: dict[str, Any]) -> list[dict[str, str]]:
     ]
     if "магаз" in context["site_type"].lower():
         blocks.insert(3, ("Категории / популярные товары", "Сократить путь до выбора и покупки."))
+    return [{"block": block, "purpose": purpose} for block, purpose in blocks]
+
+
+def _hotel_recommended_structure(context: dict[str, Any]) -> list[dict[str, str]]:
+    blocks = [
+        ("Hero: отель + бронирование", "Сразу показать город/район, для кого отель, кнопку “Проверить свободные номера” и выгоду прямого бронирования."),
+        ("Booking engine / проверка дат", "Дать быстрый ввод дат, гостей и категорий номеров или понятный переход к бронированию."),
+        ("Почему бронировать на сайте выгоднее", "Показать лучший тариф, бонусы, бесплатную отмену, прямой контакт или другие преимущества без OTA-комиссии."),
+        ("Номера и категории", "Фото, вместимость, что входит в цену, отличия категорий и CTA “Узнать цену на даты”."),
+        ("Для кого этот отель", "Развести сценарии: туристы, бизнес-гости, семьи, мероприятия, конференции."),
+        ("Локация и что рядом", "Карта, время до аэропорта/центра/деловых районов/достопримечательностей."),
+        ("Конференц-залы и мероприятия", "Отдельный блок с вместимостью, форматами посадки и CTA “Забронировать конференц-зал”."),
+        ("Ресторан / завтрак / SPA", "Показать дополнительные причины выбрать отель и повысить ценность проживания."),
+        ("Отзывы, рейтинг и реальные фото", "Подтвердить доверие: рейтинг гостей, отзывы, фото номеров и инфраструктуры."),
+        ("FAQ и финальный CTA", "Ответить на вопросы про заселение, отмену, парковку, документы, оплату и повторить бронирование."),
+    ]
     return [{"block": block, "purpose": purpose} for block, purpose in blocks]
 
 
@@ -411,6 +740,9 @@ def _implementation_plan(top_issues: list[dict[str, str]], quick_wins: list[dict
 
 
 def _questions(context: dict[str, Any]) -> list[str]:
+    if _is_hotel_context(context):
+        return _hotel_questions(context)
+
     questions = [
         "Кто основная целевая аудитория страницы?",
         "Какое действие важнее всего: заявка, звонок, продажа, бронь или консультация?",
@@ -425,7 +757,25 @@ def _questions(context: dict[str, Any]) -> list[str]:
     return questions[:5]
 
 
+def _hotel_questions(context: dict[str, Any]) -> list[str]:
+    questions = [
+        "Какая главная аудитория страницы: туристы, бизнес-гости, семьи, мероприятия или все сразу?",
+        "Есть ли реальная выгода бронировать напрямую на официальном сайте: тариф, бонус, отмена, ранний заезд?",
+        "Какие категории номеров нужно продавать в первую очередь и что входит в стоимость?",
+        "Какие сильные стороны локации важнее всего: центр, аэропорт, бизнес-район, достопримечательности?",
+        "Нужно ли отдельно продвигать конференц-залы, ресторан, SPA или мероприятия?",
+    ]
+    if context.get("audience"):
+        questions[0] = f"Правильно ли считать основной аудиторией отеля: {context['audience']}?"
+    if context.get("competitor"):
+        questions.append(f"Чем отель должен отличаться от конкурента {context['competitor']}: цена, локация, сервис, номера или мероприятия?")
+    return questions[:6]
+
+
 def _summary(parser: _PageParser, word_count: int, signals: dict[str, Any], context: dict[str, Any]) -> str:
+    if _is_hotel_context(context):
+        return _hotel_summary(signals)
+
     if not parser.title and not parser.h1:
         return "Страница загружается, но базовая структура с title/H1 выглядит слабой: оффер нужно прояснить."
     if signals["has_form_or_button"] and signals["trust_matches"]:
@@ -435,7 +785,35 @@ def _summary(parser: _PageParser, word_count: int, signals: dict[str, Any], cont
     return "Страница доступна для анализа. Ниже — приоритеты по первому экрану, офферу, текстам, UX и конверсии."
 
 
+def _hotel_summary(signals: dict[str, Any]) -> str:
+    missing: list[str] = []
+    if not signals.get("hotel_direct_booking_matches"):
+        missing.append("выгоду прямого бронирования")
+    if not signals.get("hotel_booking_matches"):
+        missing.append("явный CTA бронирования")
+    if not signals.get("hotel_room_matches"):
+        missing.append("номера и категории")
+    if not signals.get("hotel_business_matches"):
+        missing.append("сценарии для бизнес-гостей и мероприятий")
+    if not missing:
+        return "Страница похожа на отельный сайт с базовыми сигналами бронирования, но её стоит усилить direct-booking аргументами, сегментами гостей и более явным путём к выбору дат."
+    return f"Страница анализируется как отель. Главные зоны роста: {', '.join(missing[:4])}. Приоритет — увеличить прямые бронирования, а не просто улучшать общий текст сайта."
+
+
 def _verdict(parser: _PageParser, word_count: int, signals: dict[str, Any], context: dict[str, Any], scores: list[dict[str, Any]]) -> dict[str, Any]:
+    if _is_hotel_context(context):
+        weakest = sorted(scores, key=lambda item: item["score"])[:3]
+        return {
+            "summary": _hotel_summary(signals),
+            "does_well": [
+                "Страница открывается и даёт материал для анализа отельного сценария.",
+                "Можно быстро усилить путь гостя от первого экрана до проверки дат и бронирования.",
+            ],
+            "main_risk": "Главный риск: гость уйдёт сравнивать цену и условия на Booking/OTA, если сайт не объясняет выгоду прямого бронирования.",
+            "fastest_win": "Самый быстрый выигрыш — заменить главный CTA на “Проверить свободные номера” и добавить рядом 3 причины бронировать напрямую.",
+            "weakest_areas": [item["area"] for item in weakest],
+        }
+
     weakest = sorted(scores, key=lambda item: item["score"])[:3]
     return {
         "summary": _summary(parser, word_count, signals, context),
@@ -505,11 +883,18 @@ def _score_explanation(score: int) -> str:
 
 
 def _rewrite_h1(parser: _PageParser, context: dict[str, Any]) -> str:
+    if _is_hotel_context(context):
+        region = f" в {context['region']}" if context.get("region") else ""
+        return f"Отель{region} для комфортного проживания, деловых поездок и прямого бронирования"
+
     region = f" в {context['region']}" if context["region"] else ""
     return f"{_capitalize(context['site_type'])}{region}, который помогает получать {context['goal']} без лишних шагов"
 
 
 def _cta_variants(context: dict[str, Any]) -> list[str]:
+    if _is_hotel_context(context):
+        return ["Проверить свободные номера", "Забронировать номер", "Узнать цену на даты", "Забронировать конференц-зал"]
+
     goal = context["goal"].lower()
     if "звон" in goal:
         return ["Заказать звонок", "Обсудить задачу", "Получить консультацию"]
