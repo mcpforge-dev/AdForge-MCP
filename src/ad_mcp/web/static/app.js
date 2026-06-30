@@ -744,8 +744,8 @@
   function applyPreviewBadge(capabilities) {
     if (!el.previewBadge) return;
     const enabled = capabilities?.preview_only?.enabled !== false;
-    el.previewBadge.textContent = enabled ? "Изменения только после подтверждения" : "Режим подтверждения выключен";
-    el.previewBadge.className = `badge ${enabled ? "badge--ok" : "badge--err"}`;
+    el.previewBadge.textContent = enabled ? "Безопасный режим: без автозапуска" : "Режим подтверждения выключен";
+    el.previewBadge.className = `badge ${enabled ? "badge--info" : "badge--err"}`;
   }
 
   function renderMcpPanel() {

@@ -110,6 +110,22 @@ def test_favicon_png_is_publicly_served(tmp_path) -> None:
     assert body.startswith(b"\x89PNG")
 
 
+def test_favicon_ico_serves_png_icon(tmp_path) -> None:
+    settings = Settings(project_root=tmp_path, env="development", web_host="127.0.0.1", web_api_token="")
+    base_url, close = _serve(settings)
+    try:
+        request = Request(f"{base_url}/favicon.ico")
+        with urlopen(request, timeout=5) as response:  # noqa: S310 - local unit-test server.
+            body = response.read()
+            content_type = response.headers.get("content-type", "")
+    finally:
+        close()
+
+    assert response.status == 200
+    assert "image/png" in content_type
+    assert body.startswith(b"\x89PNG")
+
+
 def test_auth_login_rate_limit_blocks_repeated_failures(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,

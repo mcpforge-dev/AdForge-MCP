@@ -5,9 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HolyMedia MCP — рекламные кабинеты в AI</title>
   <meta name="description" content="HolyMedia MCP подключает рекламные кабинеты к AI-клиентам и помогает быстро смотреть аккаунты, кампании, статусы, метрики и точки роста сайта.">
-    <link rel="icon" href="/favicon.png" type="image/png">
-    <link rel="icon" href="/favicon.svg" type="image/svg+xml">
-    <link rel="apple-touch-icon" href="/apple-touch-icon.png">
+    <link rel="icon" href="/favicon.ico?v=3" type="image/png">
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
@@ -212,8 +211,10 @@
         <button type="button" class="nav-tab is-active" data-nav="overview">Начало работы</button>
         <button type="button" class="nav-tab" data-nav="connections">Подключения</button>
         <button type="button" class="nav-tab" data-nav="mcp">MCP</button>
+        <button type="button" class="nav-tab" data-nav="site-analysis">Анализ сайта</button>
         <button type="button" class="nav-tab" data-nav="profile">Профиль</button>
       </nav>
+      <span id="preview-badge" class="badge badge--info" title="HolyMedia MCP не запускает изменения в рекламных кабинетах без вашего подтверждения.">Безопасный режим: без автозапуска</span>
     </div>
 
     <main class="main">
@@ -362,21 +363,29 @@
               <code>Какие кампании сейчас активны?</code>
             </div>
           </div>
-          <div class="setup-card site-analysis-card">
-            <div>
-              <h3 class="card__title">5. AI-анализ сайта</h3>
-              <p class="card__hint">Введите адрес сайта, а HolyMedia MCP подготовит короткий список приоритетных улучшений по первому экрану, офферу, текстам, удобству, доверию и конверсии.</p>
-            </div>
-            <form id="site-analysis-form" class="site-analysis-form">
-              <input id="site-analysis-url" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com" required>
-              <button id="site-analysis-submit" type="submit" class="btn btn--primary btn--small">Проанализировать</button>
-            </form>
-            <div class="site-analysis-examples">
-              <span>Пример запроса для AI: “Проанализируй сайт и скажи, что мешает заявкам”.</span>
-              <span>Проверяем только публичные страницы, без личных кабинетов и закрытых адресов.</span>
-            </div>
-            <div id="site-analysis-result" class="site-analysis-result" hidden></div>
+        </article>
+      </section>
+
+      <!-- Site Analysis -->
+      <section id="section-site-analysis" class="section" data-section="site-analysis" hidden>
+        <div class="section-head">
+          <h2>AI-анализ сайта</h2>
+          <p class="section-head__sub">Проверьте публичную страницу и получите короткий список улучшений по первому экрану, офферу, текстам, удобству, доверию и конверсии.</p>
+        </div>
+        <article class="card site-analysis-card site-analysis-card--wide">
+          <div>
+            <h3 class="card__title">Что можно улучшить на сайте</h3>
+            <p class="card__hint">Вставьте URL страницы. HolyMedia MCP не заходит в закрытые кабинеты и не проверяет внутренние адреса, а анализирует только публичный сайт.</p>
           </div>
+          <form id="site-analysis-form" class="site-analysis-form">
+            <input id="site-analysis-url" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com" required>
+            <button id="site-analysis-submit" type="submit" class="btn btn--primary btn--small">Проанализировать</button>
+          </form>
+          <div class="site-analysis-examples">
+            <span>Пример для AI-клиента: “Проанализируй сайт и скажи, что мешает заявкам”.</span>
+            <span>Результат будет коротким: только приоритетные рекомендации без длинного технического отчёта.</span>
+          </div>
+          <div id="site-analysis-result" class="site-analysis-result" hidden></div>
         </article>
       </section>
 

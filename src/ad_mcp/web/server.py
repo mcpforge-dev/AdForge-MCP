@@ -578,7 +578,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_file(STATIC_ROOT / "app.css", "text/css; charset=utf-8")
             if route == "/assets/app.js":
                 return self._send_file(STATIC_ROOT / "app.js", "application/javascript; charset=utf-8")
-            if route in {"/favicon.png", "/apple-touch-icon.png"}:
+            if route in {"/favicon.ico", "/favicon.png", "/apple-touch-icon.png"}:
                 return self._send_file(STATIC_ROOT / "favicon.png", "image/png")
             if route in {"/favicon.svg", "/apple-touch-icon.svg"}:
                 return self._send_file(STATIC_ROOT / "favicon.svg", "image/svg+xml")
