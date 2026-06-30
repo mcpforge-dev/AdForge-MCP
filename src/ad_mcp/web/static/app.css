@@ -994,6 +994,19 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .grid-2 > * { min-width: 0; }
 
+.overview-main-grid {
+  align-items: stretch;
+}
+
+.overview-main-grid > .card {
+  min-height: 268px;
+}
+
+.overview-progress-card {
+  display: flex;
+  flex-direction: column;
+}
+
 .site-analysis-card {
   display: flex;
   flex-direction: column;
@@ -1115,6 +1128,27 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .steps li.is-done { color: var(--text); }
 .steps li.is-done::before { content: "✓"; color: var(--ok); border-color: rgba(62, 207, 142, 0.4); background: var(--ok-bg); }
+
+.overview-next-note {
+  margin-top: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  background: var(--bg-inset);
+  padding: 14px;
+  display: grid;
+  gap: 6px;
+}
+
+.overview-next-note strong {
+  color: var(--text);
+  font-size: 13.5px;
+}
+
+.overview-next-note span {
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.55;
+}
 
 .mcp-card { display: flex; flex-direction: column; }
 

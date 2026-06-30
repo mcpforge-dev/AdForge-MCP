@@ -1130,6 +1130,7 @@
       stat("Подключенные платформы", String(connectedPlatforms.length)),
       stat("Рекламные аккаунты", String(connectedAccounts)),
       stat("AI-подключение", plainValue(state.mcpUrlCopied ? "URL скопирован" : "Ожидает настройки")),
+      stat("Режим работы", plainValue("Без автозапуска")),
     ];
     el.overviewStats.innerHTML = stats.join("");
 
@@ -1139,9 +1140,6 @@
       { text: "Подключите рекламную платформу", done: connectedPlatforms.length > 0 || hasPending(platforms) },
       { text: "Выберите рекламные аккаунты", done: connectedAccounts > 0 },
       { text: "Скопируйте MCP URL", done: state.mcpUrlCopied },
-      { text: "Подключите HolyMedia MCP в Codex, Claude или ChatGPT", done: false },
-      { text: "Перезапустите MCP / откройте новый чат", done: false },
-      { text: "Задайте AI первый вопрос по аккаунтам, кампаниям или метрикам", done: false },
     ];
     el.nextSteps.innerHTML = steps
       .map((s) => `<li class="${s.done ? "is-done" : ""}">${esc(s.text)}</li>`)
