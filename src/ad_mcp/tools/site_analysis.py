@@ -849,6 +849,8 @@ def _display_cta_texts(values: list[str]) -> list[str]:
         lowered = value.lower()
         if lowered in CTA_NOISE_WORDS:
             continue
+        if _looks_like_url_noise(value):
+            continue
         if "@" in value:
             continue
         if re.search(r"\+\d[\d\s().-]{7,}", value):

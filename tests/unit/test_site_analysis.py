@@ -219,6 +219,7 @@ def test_site_audit_dedupes_headings_and_filters_cta_noise() -> None:
         audit_facts={
             "cta_texts": [
                 "booking@example.com",
+                "https://www.facebook.com/HotelKazzolAlmaty",
                 "Rooms",
                 "Standard double room with breakfast and a very long card description that should not be treated as CTA",
                 "Submit",
@@ -229,6 +230,7 @@ def test_site_audit_dedupes_headings_and_filters_cta_noise() -> None:
 
     assert result["evidence"]["h2"] == ["Conference halls"]
     assert "booking@example.com" not in result["evidence"]["audit_engine"]["cta_texts"]
+    assert not any("facebook" in item.lower() for item in result["evidence"]["audit_engine"]["cta_texts"])
     assert all(len(item) <= 70 for item in result["evidence"]["audit_engine"]["cta_texts"])
     assert result["technical_notes"]
     assert not any("alt" in item["title"].lower() for item in result["top_issues"])
