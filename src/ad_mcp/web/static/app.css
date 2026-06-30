@@ -1107,7 +1107,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
   align-items: center;
-  column-gap: 12px;
+  column-gap: 18px;
   font-size: 14px;
   color: var(--text-muted);
 }
