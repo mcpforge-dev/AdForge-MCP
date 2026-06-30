@@ -580,12 +580,17 @@ def _append_cta_candidate(candidates: list[dict[str, Any]], *, text: str, href: 
     href = _clean_text(href)
     if not text and not href:
         return
+    derived_from_href = not text and bool(href)
     if not text and href:
         text = _text_from_href(href)
     lowered_text = text.lower()
     haystack = f"{text} {href}".lower()
     booking_related = any(keyword in haystack for keyword in BOOKING_CTA_STRONG_KEYWORDS) or lowered_text in {"номера", "rooms"}
+    if derived_from_href and not booking_related:
+        return
     if lowered_text in CTA_NOISE_WORDS:
+        return
+    if _looks_like_url_noise(text) and not booking_related:
         return
     if "@" in text:
         return
@@ -644,6 +649,15 @@ def _text_from_href(href: str) -> str:
     value = re.sub(r"[_/#?=&.-]+", " ", href)
     value = _clean_text(value)
     return value[-70:] if len(value) > 70 else value
+
+
+def _looks_like_url_noise(text: str) -> bool:
+    lowered = text.lower()
+    url_tokens = ("http", "www", ".com", ".kz", ".ru", "facebook", "instagram", "youtube", "t.me", "wa.me")
+    if any(token in lowered for token in url_tokens):
+        return True
+    parts = lowered.split()
+    return len(parts) >= 3 and parts[0] in {"ru", "en", "kz", "kk", "cn"}
 
 
 def _dedupe_blocks(blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
