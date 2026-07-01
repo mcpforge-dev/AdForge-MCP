@@ -1566,15 +1566,36 @@
       </tr>
     `).join("");
     const planRows = (analysis.implementation_plan || []).map((x) => `<tr><td>${esc(x.task)}</td><td>${esc(x.impact)}</td><td>${esc(x.difficulty)}</td><td>${esc(x.priority)}</td><td>${esc(x.owner)}</td></tr>`).join("");
+    const oneDayRows = (analysis.one_day_plan || []).map((x) => `<tr><td>${esc(x.task)}</td><td>${esc(x.owner)}</td><td>${esc(x.time)}</td><td>${esc(x.expected_effect)}</td><td>${esc(x.placement)}</td></tr>`).join("");
     const copy = analysis.rewritten_copy || {};
+    const hero = analysis.ready_hero || {};
     return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
       <style>
-        @page{margin:22mm 18mm}body{font-family:Arial,sans-serif;line-height:1.5;color:#111827;background:#fff}h1{font-size:28px;margin:0 0 12px;color:#0b1730}h2{font-size:19px;margin:28px 0 10px;color:#0b1730;border-bottom:2px solid #e5e7eb;padding-bottom:6px}h3{font-size:15px;margin:18px 0 6px;color:#111827}p{margin:6px 0 10px}.cover{background:#0f172a;color:#fff;border-radius:18px;padding:28px;margin-bottom:22px}.cover h1{color:#fff}.cover p{color:#cbd5e1}.score{display:inline-block;background:#eef2ff;color:#1d4ed8;border-radius:14px;padding:12px 18px;font-size:30px;font-weight:700;margin-top:8px}.meta{width:100%;margin-top:18px}.meta td{border:0;padding:5px 0;color:#cbd5e1}.section-note{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:12px 0}table{border-collapse:collapse;width:100%;margin:12px 0 18px}td,th{border:1px solid #d7dce8;padding:9px;vertical-align:top;text-align:left}th{background:#f1f5f9;color:#0f172a}.num{white-space:nowrap;font-weight:700;color:#1d4ed8}ul,ol{margin-top:8px}.copy-box{background:#f8fafc;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:10px 0}.small{color:#64748b;font-size:12px}
+        @page{margin:22mm 18mm}
+        body{font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;background:#fff;font-size:13.5px}
+        h1{font-size:28px;line-height:1.18;margin:0 0 10px;color:#111827}
+        h2{font-size:18px;margin:26px 0 10px;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:7px}
+        h3{font-size:15px;margin:16px 0 6px;color:#111827}
+        p{margin:6px 0 10px}
+        .cover{border:1px solid #d9e0ea;border-radius:16px;padding:26px;margin-bottom:22px;background:#f8fafc}
+        .cover p{color:#526174;max-width:680px}
+        .score{display:inline-block;background:#ecfdf3;color:#087443;border:1px solid #bfebcf;border-radius:12px;padding:10px 16px;font-size:28px;font-weight:700;margin-top:8px}
+        .meta{width:100%;margin-top:16px}.meta td{border:0;border-top:1px solid #e5e7eb;padding:7px 0;color:#526174}
+        .section-note,.copy-box{background:#fbfcfe;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:12px 0}
+        .hero-box{border:1px solid #d9e0ea;border-radius:14px;padding:16px;margin:12px 0;background:#fff}
+        .hero-buttons span{display:inline-block;border:1px solid #d9e0ea;border-radius:10px;padding:7px 10px;margin:4px 6px 4px 0;font-weight:700}
+        table{border-collapse:collapse;width:100%;margin:12px 0 18px}
+        td,th{border:1px solid #d9e0ea;padding:8px;vertical-align:top;text-align:left}
+        th{background:#f3f6fa;color:#111827}
+        .num{white-space:nowrap;font-weight:700;color:#374151}
+        .small{color:#6b7280;font-size:12px}
+        .muted{color:#6b7280}
+        ul,ol{margin-top:8px}
       </style>
       </head><body>
       <section class="cover">
         <h1>AI-анализ сайта HolyMedia MCP</h1>
-        <p>Краткий продуктовый и конверсионный аудит публичной страницы. Это не Google Search Console и не технический SEO-аудит.</p>
+        <p>Продуктовый и конверсионный аудит публичной страницы: что мешает заявкам, какие правки важнее и что можно передать команде в работу.</p>
         <div class="score">${esc(String(analysis.overall_score || "—"))}/100</div>
         <table class="meta">
           <tr><td><strong>Сайт:</strong></td><td>${esc(analysis.url || "")}</td></tr>
@@ -1590,6 +1611,16 @@
       </div>
       <h2>Оценка по направлениям</h2><table><tr><th>Направление</th><th>Оценка</th><th>Комментарий</th></tr>${scoreRows}</table>
       <h2>Топ улучшений</h2><table><tr><th>Приоритет</th><th>Проблема</th><th>Что сделать</th><th>Что найдено</th></tr>${issueRows}</table>
+      <h2>Готовый первый экран</h2>
+      <div class="hero-box">
+        <h3>${esc(hero.h1 || "")}</h3>
+        <p>${esc(hero.subheadline || "")}</p>
+        <p class="hero-buttons"><span>${esc(hero.primary_button || "")}</span><span>${esc(hero.secondary_button || "")}</span></p>
+        <p><strong>Преимущества:</strong> ${(hero.advantages || []).map((x) => esc(x)).join("; ")}</p>
+        <p><strong>Микротекст:</strong> ${esc(hero.microcopy || "")}</p>
+        <p><strong>Визуал:</strong> ${esc(hero.visual || "")}</p>
+      </div>
+      <h2>Что сделать за 1 день</h2><table><tr><th>Задача</th><th>Кто делает</th><th>Время</th><th>Ожидаемый эффект</th><th>Где внедрить</th></tr>${oneDayRows}</table>
       <h2>Быстрые правки</h2><ul>${(analysis.quick_wins || []).map((x) => `<li><strong>${esc(x.title)}</strong>: ${esc(x.action)} <span class="small">(${esc(x.time || "")})</span></li>`).join("")}</ul>
       <h2>Готовые тексты</h2>
       <div class="copy-box"><h3>H1</h3>${(copy.h1_variants || []).map((item) => `<p>${esc(item)}</p>`).join("")}</div>
@@ -1599,24 +1630,6 @@
       <h2>Рекомендуемая структура страницы</h2><ol>${(analysis.recommended_structure || []).map((x) => `<li><strong>${esc(x.block)}</strong> — ${esc(x.purpose)}</li>`).join("")}</ol>
       <h2>План внедрения</h2><table><tr><th>Задача</th><th>Влияние</th><th>Сложность</th><th>Приоритет</th><th>Ответственный</th></tr>${planRows}</table>
       <h2>Вопросы для уточнения</h2><ol>${(analysis.questions || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ol>
-      </body></html>`;
-
-    const rows = (analysis.implementation_plan || []).map((x) => `<tr><td>${esc(x.task)}</td><td>${esc(x.impact)}</td><td>${esc(x.difficulty)}</td><td>${esc(x.priority)}</td><td>${esc(x.owner)}</td></tr>`).join("");
-    return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
-      <style>body{font-family:Arial,sans-serif;line-height:1.45;color:#111}h1,h2{color:#0b1730}table{border-collapse:collapse;width:100%}td,th{border:1px solid #d7dce8;padding:8px;text-align:left}.score{font-size:28px;font-weight:700}</style>
-      </head><body>
-      <h1>AI-анализ сайта HolyMedia MCP</h1>
-      <p><strong>Сайт:</strong> ${esc(analysis.url || "")}</p>
-      <p><strong>Дата:</strong> ${esc(new Date().toLocaleString())}</p>
-      <p class="score">Оценка: ${esc(String(analysis.overall_score || "—"))}/100</p>
-      <h2>Краткий вердикт</h2><p>${esc(analysis.verdict?.summary || analysis.summary || "")}</p>
-      <p><strong>Главный риск:</strong> ${esc(analysis.verdict?.main_risk || "")}</p>
-      <p><strong>Быстрый выигрыш:</strong> ${esc(analysis.verdict?.fastest_win || "")}</p>
-      <h2>Топ улучшений</h2>${(analysis.top_issues || []).map((x) => `<h3>${esc(x.priority)} · ${esc(x.title)}</h3><p><strong>Проблема:</strong> ${esc(x.problem)}</p><p><strong>Что найдено:</strong> ${esc(x.evidence || "")}</p><p><strong>Что сделать:</strong> ${esc(x.what_to_do)}</p>`).join("")}
-      <h2>Быстрые победы</h2><ul>${(analysis.quick_wins || []).map((x) => `<li><strong>${esc(x.title)}</strong>: ${esc(x.action)}</li>`).join("")}</ul>
-      <h2>Готовые тексты</h2><pre>${esc(heroCopyMarkdown(analysis))}</pre>
-      <h2>Структура страницы</h2><ol>${(analysis.recommended_structure || []).map((x) => `<li><strong>${esc(x.block)}</strong> — ${esc(x.purpose)}</li>`).join("")}</ol>
-      <h2>План внедрения</h2><table><tr><th>Задача</th><th>Влияние</th><th>Сложность</th><th>Приоритет</th><th>Ответственный</th></tr>${rows}</table>
       </body></html>`;
   }
 
