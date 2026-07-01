@@ -17,3 +17,6 @@ tokens/*
 !tokens/.gitkeep
 logs/*
 !logs/.gitkeep
+.openhands/*.local.*
+.openhands/state/
+.openhands/logs/
