@@ -1,5 +1,5 @@
 param(
-    [switch]$AllowNoDocker
+    [switch]$NpmMode
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,8 +14,41 @@ Set-Location $repoRoot
 Write-Host "HolyMedia MCP OpenHands launcher" -ForegroundColor Cyan
 Write-Host "Repository: $repoRoot"
 
+$hasDocker = Test-Command "docker"
+
+if (-not $NpmMode) {
+    if (-not $hasDocker) {
+        throw "Docker Desktop is required for the default sandboxed OpenHands launch."
+    }
+
+    $dockerVersion = (& docker --version).Trim()
+    Write-Host "Docker: $dockerVersion"
+
+    $openhandsHome = Join-Path $env:USERPROFILE ".openhands"
+    New-Item -ItemType Directory -Force -Path $openhandsHome | Out-Null
+
+    Write-Host ""
+    Write-Host "Starting OpenHands Agent Canvas in Docker..." -ForegroundColor Cyan
+    Write-Host "Mounted project: /projects/mcp-for-ads"
+    Write-Host "Do not paste secrets into OpenHands chats. Keep .env and tokens out of commits." -ForegroundColor Yellow
+    Write-Host ""
+
+    docker rm -f openhands-agent-canvas 2>$null | Out-Null
+    docker run -d `
+        --name openhands-agent-canvas `
+        -p 8000:8000 `
+        -v "${openhandsHome}:/home/openhands/.openhands" `
+        -v "${repoRoot}:/projects/mcp-for-ads" `
+        ghcr.io/openhands/agent-canvas:latest | Out-Host
+
+    Write-Host ""
+    Write-Host "OpenHands is starting at http://127.0.0.1:8000" -ForegroundColor Green
+    Write-Host "Check logs with: docker logs -f openhands-agent-canvas"
+    exit 0
+}
+
 if (-not (Test-Command "node")) {
-    throw "Node.js is required. Install Node.js 22.12 or newer."
+    throw "Node.js is required for -NpmMode. Install Node.js 22.12 or newer."
 }
 
 $nodeVersion = (& node --version).Trim()
@@ -25,30 +58,8 @@ if (-not (Test-Command "npm.cmd")) {
     throw "npm.cmd was not found. Reinstall Node.js or add it to PATH."
 }
 
-$hasDocker = Test-Command "docker"
-if ($hasDocker) {
-    $dockerVersion = (& docker --version).Trim()
-    Write-Host "Docker: $dockerVersion"
-} else {
-    Write-Warning "Docker was not found in this shell."
-    Write-Warning "OpenHands can run without Docker, but that gives the agent broader filesystem access."
-    if (-not $AllowNoDocker) {
-        Write-Host ""
-        Write-Host "Recommended next step:" -ForegroundColor Yellow
-        Write-Host "1. Install Docker Desktop with WSL 2 integration."
-        Write-Host "2. Run this script again."
-        Write-Host ""
-        Write-Host "If you still want to start Agent Canvas without Docker, run:"
-        Write-Host "powershell -ExecutionPolicy Bypass -File scripts\\run_openhands.ps1 -AllowNoDocker"
-        exit 2
-    }
-}
-
 Write-Host ""
-Write-Host "Starting OpenHands Agent Canvas..."
-Write-Host "Do not paste secrets into OpenHands chats. Keep .env and tokens out of commits." -ForegroundColor Yellow
-Write-Host "When the UI opens, select this repository and let AGENTS.md guide the agent."
-Write-Host ""
+Write-Host "Starting OpenHands Agent Canvas through npm..." -ForegroundColor Cyan
+Write-Host "NpmMode runs on the host machine and is less isolated than Docker." -ForegroundColor Yellow
 
 npm.cmd exec --yes --package @openhands/agent-canvas -- agent-canvas
-
