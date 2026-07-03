@@ -1194,7 +1194,9 @@ def main() -> None:
     AdsWebHandler.google_login = GoogleLoginService(settings)
     AdsWebHandler.site_analysis_history = SiteAnalysisHistoryStore(settings)
     if _api_token_required(settings) and not settings.web_api_token.strip():
-        LOGGER.warning("AD_MCP_WEB_API_TOKEN is required for beta/production web API access but is not configured.")
+        LOGGER.warning(
+            "AD_MCP_WEB_API_TOKEN is required for staging/beta/production web API access but is not configured."
+        )
     server = ThreadingHTTPServer((host, port), AdsWebHandler)
     print(f"Meta MCP web UI running at http://{host}:{port}")
     server.serve_forever()

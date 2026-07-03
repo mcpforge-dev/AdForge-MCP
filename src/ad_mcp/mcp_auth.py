@@ -48,7 +48,9 @@ def build_mcp_auth(settings: Settings) -> tuple[AuthSettings | None, StaticBeare
         return None, None
     token = settings.web_api_token.strip()
     if not token:
-        raise RuntimeError("AD_MCP_WEB_API_TOKEN is required for hosted MCP when beta, production, or network-exposed.")
+        raise RuntimeError(
+            "AD_MCP_WEB_API_TOKEN is required for hosted MCP when staging, beta, production, or network-exposed."
+        )
     issuer_url = settings.public_base_or_local_mcp_url
     resource_server_url = settings.public_mcp_url
     return (

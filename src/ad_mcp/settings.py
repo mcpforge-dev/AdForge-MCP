@@ -16,7 +16,7 @@ def is_network_exposed_host(host: str) -> bool:
 
 
 def is_strict_auth_env(env: str) -> bool:
-    return env.strip().lower() in {"beta", "production"}
+    return env.strip().lower() in {"staging", "beta", "production"}
 
 
 class Settings(BaseSettings):

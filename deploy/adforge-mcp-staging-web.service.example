@@ -1,0 +1,22 @@
+[Unit]
+Description=HolyMedia MCP staging web dashboard and API
+After=network.target
+
+[Service]
+Type=simple
+User=adforge
+Group=adforge
+WorkingDirectory=/opt/adforge-mcp-staging
+EnvironmentFile=/etc/adforge-mcp/adforge-mcp-staging.env
+Environment=AD_MCP_WEB_HOST=127.0.0.1
+Environment=AD_MCP_WEB_PORT=18765
+ExecStart=/opt/adforge-mcp-staging/.venv/bin/ad-mcp-web
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ReadWritePaths=/var/lib/adforge-mcp-staging /var/log/adforge-mcp-staging
+
+[Install]
+WantedBy=multi-user.target
