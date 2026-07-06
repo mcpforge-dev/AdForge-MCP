@@ -1709,16 +1709,17 @@
     el.seoNotice.innerHTML = "";
     const metrics = report.metrics || {};
     const range = report.date_range || {};
+    const previousRange = report.previous_date_range || {};
     const deltas = report.deltas || {};
     el.seoPanel.innerHTML = `
       <div class="seo-report-head">
         <div>
           <span class="seo-eyebrow">Google Search Console</span>
           <h3 class="seo-title">${esc(seoSelectedTitle(report.selected_property))}</h3>
-          <p class="card__hint">Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Данные read-only, без изменений в Search Console.</p>
+          <p class="card__hint">Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Сравнение: ${esc(previousRange.start_date || "")} - ${esc(previousRange.end_date || "")}. Данные read-only.</p>
         </div>
         <div class="seo-report-actions">
-          <button type="button" class="btn btn--secondary btn--small" data-seo-export="html">Скачать отчет</button>
+          <button type="button" class="btn btn--secondary btn--small" data-seo-export="doc">Скачать отчет</button>
           <button type="button" class="btn btn--secondary btn--small" data-seo-export="csv">CSV</button>
           <button type="button" class="btn btn--secondary btn--small" data-seo-connect>Переподключить</button>
         </div>
@@ -1729,14 +1730,15 @@
         ${seoMetricCard("CTR", metrics.ctr, deltas.ctr, "percent")}
         ${seoMetricCard("Средняя позиция", metrics.position, deltas.position, "number")}
       </div>
+      ${renderSeoExecutiveSummary(report)}
       ${renderSeoInsights(report.insights || [])}
+      ${renderSeoTrend(report.trend || [], metrics)}
       ${renderSeoProperties(report.property_summaries || [], report.selected_property)}
       <div class="seo-grid">
         ${renderSeoTable("Топ запросов", report.top_queries || [], "query")}
         ${renderSeoTable("Топ страниц", report.top_pages || [], "page")}
       </div>
       ${renderSeoOpportunities(report.opportunities || [])}
-      ${renderSeoTrend(report.trend || [])}
       ${renderSeoSitemaps(report.sitemaps || {})}
     `;
     el.seoPanel.querySelector("[data-seo-connect]")?.addEventListener("click", (event) => {
@@ -1826,6 +1828,71 @@
     return `<span class="seo-delta seo-delta--${tone}">${sign}${formatPercent(percent)} к прошлому периоду${suffix}</span>`;
   }
 
+  function renderSeoExecutiveSummary(report) {
+    const score = seoScore(report);
+    const items = seoExecutiveItems(report);
+    const tone = score >= 75 ? "good" : score >= 50 ? "mid" : "low";
+    return `
+      <section class="seo-executive">
+        <div class="seo-score seo-score--${tone}">
+          <span class="seo-score__label">SEO score</span>
+          <strong>${esc(score)}</strong>
+          <span>${score >= 75 ? "Сильная динамика" : score >= 50 ? "Есть точки роста" : "Нужна оптимизация"}</span>
+        </div>
+        <div class="seo-executive__body">
+          <div class="seo-subhead">
+            <h3 class="card__title">Короткий вывод</h3>
+            <span>для клиентского отчета</span>
+          </div>
+          <ul class="seo-summary-list">
+            ${items.map((item) => `<li>${esc(item)}</li>`).join("")}
+          </ul>
+        </div>
+      </section>
+    `;
+  }
+
+  function seoScore(report) {
+    const metrics = report.metrics || {};
+    const deltas = report.deltas || {};
+    let score = 55;
+    const ctr = Number(metrics.ctr || 0);
+    const position = Number(metrics.position || 0);
+    if (Number(deltas.clicks?.percent || 0) > 0) score += 12;
+    if (Number(deltas.impressions?.percent || 0) > 0) score += 8;
+    if (deltas.position?.improved === true) score += 8;
+    if (ctr >= 0.04) score += 10;
+    else if (ctr < 0.015) score -= 10;
+    if (position > 0 && position <= 10) score += 7;
+    else if (position >= 25) score -= 8;
+    if ((report.opportunities || []).length >= 3) score += 4;
+    return Math.max(0, Math.min(100, Math.round(score)));
+  }
+
+  function seoExecutiveItems(report) {
+    const metrics = report.metrics || {};
+    const deltas = report.deltas || {};
+    const topQuery = (report.top_queries || [])[0];
+    const topPage = (report.top_pages || [])[0];
+    const opportunity = (report.opportunities || [])[0];
+    const items = [];
+    items.push(`За период получено ${formatNumber(metrics.clicks)} кликов и ${formatNumber(metrics.impressions)} показов при CTR ${formatPercent(metrics.ctr)}.`);
+    if (deltas.clicks?.percent !== null && deltas.clicks?.percent !== undefined) {
+      const direction = Number(deltas.clicks.percent || 0) >= 0 ? "выросли" : "снизились";
+      items.push(`Клики ${direction} на ${formatPercent(Math.abs(Number(deltas.clicks.percent || 0)))} к предыдущему периоду.`);
+    }
+    if (topQuery?.query) {
+      items.push(`Главный поисковый запрос: «${topQuery.query}» — ${formatNumber(topQuery.clicks)} кликов, позиция ${formatNumber(topQuery.position)}.`);
+    }
+    if (topPage?.page) {
+      items.push(`Самая заметная страница: ${topPage.page} — ${formatNumber(topPage.impressions)} показов.`);
+    }
+    if (opportunity?.query) {
+      items.push(`Приоритет роста: усилить запрос «${opportunity.query}», где уже есть показы и позиция ${formatNumber(opportunity.position)}.`);
+    }
+    return items.slice(0, 5);
+  }
+
   function renderSeoInsights(insights) {
     if (!insights.length) return "";
     return `
@@ -1877,17 +1944,35 @@
     }
     return `
       <section class="seo-table">
-        <h3 class="card__title">${esc(title)}</h3>
-        <div class="seo-table__rows">
-          ${rows.map((row) => `
-            <div class="seo-row">
-              <strong>${esc(row[key] || "")}</strong>
-              <span>${esc(formatNumber(row.clicks))} кликов</span>
-              <span>${esc(formatNumber(row.impressions))} показов</span>
-              <span>CTR ${esc(formatPercent(row.ctr))}</span>
-              <span>Позиция ${esc(formatNumber(row.position))}</span>
-            </div>
-          `).join("")}
+        <div class="seo-table__head">
+          <h3 class="card__title">${esc(title)}</h3>
+          <span>${rows.length} строк</span>
+        </div>
+        <div class="seo-data-table-wrap">
+          <table class="seo-data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>${key === "query" ? "Запрос" : "Страница"}</th>
+                <th>Клики</th>
+                <th>Показы</th>
+                <th>CTR</th>
+                <th>Позиция</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((row, index) => `
+                <tr>
+                  <td><span class="seo-rank">${index + 1}</span></td>
+                  <td><strong>${esc(row[key] || "")}</strong></td>
+                  <td>${esc(formatNumber(row.clicks))}</td>
+                  <td>${esc(formatNumber(row.impressions))}</td>
+                  <td>${esc(formatPercent(row.ctr))}</td>
+                  <td>${esc(formatNumber(row.position))}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
         </div>
       </section>
     `;
@@ -1897,33 +1982,88 @@
     if (!rows.length) return "";
     return `
       <section class="seo-table">
-        <h3 class="card__title">Запросы для роста</h3>
+        <div class="seo-table__head">
+          <h3 class="card__title">Запросы для роста</h3>
+          <span>позиции 4-20</span>
+        </div>
         <p class="card__hint">Запросы с заметными показами и средней позицией 4-20: обычно их стоит проверить на соответствие страницы, сниппет и внутренние ссылки.</p>
-        <div class="seo-table__rows">
-          ${rows.map((row) => `
-            <div class="seo-row">
-              <strong>${esc(row.query || "")}</strong>
-              <span>${esc(formatNumber(row.impressions))} показов</span>
-              <span>${esc(formatNumber(row.clicks))} кликов</span>
-              <span>Позиция ${esc(formatNumber(row.position))}</span>
-            </div>
-          `).join("")}
+        <div class="seo-data-table-wrap">
+          <table class="seo-data-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Запрос</th>
+                <th>Показы</th>
+                <th>Клики</th>
+                <th>CTR</th>
+                <th>Позиция</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map((row, index) => `
+                <tr>
+                  <td><span class="seo-rank seo-rank--action">${index + 1}</span></td>
+                  <td><strong>${esc(row.query || "")}</strong></td>
+                  <td>${esc(formatNumber(row.impressions))}</td>
+                  <td>${esc(formatNumber(row.clicks))}</td>
+                  <td>${esc(formatPercent(row.ctr))}</td>
+                  <td>${esc(formatNumber(row.position))}</td>
+                </tr>
+              `).join("")}
+            </tbody>
+          </table>
         </div>
       </section>
     `;
   }
 
-  function renderSeoTrend(rows) {
+  function renderSeoTrend(rows, metrics = {}) {
     if (!rows.length) return "";
-    const max = Math.max(...rows.map((row) => Number(row.clicks || 0)), 1);
+    const values = rows.map((row) => Number(row.clicks || 0));
+    const max = Math.max(...values, 1);
+    const width = 720;
+    const height = 240;
+    const pad = 28;
+    const innerWidth = width - pad * 2;
+    const innerHeight = height - pad * 2;
+    const points = rows.map((row, index) => {
+      const x = pad + (rows.length === 1 ? innerWidth / 2 : (index / (rows.length - 1)) * innerWidth);
+      const y = pad + innerHeight - (Number(row.clicks || 0) / max) * innerHeight;
+      return { x, y, row };
+    });
+    const line = points.map((point, index) => `${index === 0 ? "M" : "L"} ${point.x.toFixed(1)} ${point.y.toFixed(1)}`).join(" ");
+    const area = `${line} L ${points[points.length - 1].x.toFixed(1)} ${height - pad} L ${points[0].x.toFixed(1)} ${height - pad} Z`;
+    const avg = rows.length ? Number(metrics.clicks || 0) / rows.length : 0;
     return `
-      <section class="seo-table">
-        <h3 class="card__title">Динамика кликов</h3>
-        <div class="seo-trend">
-          ${rows.map((row) => {
-            const height = Math.max(4, Math.round((Number(row.clicks || 0) / max) * 100));
-            return `<div class="seo-trend__bar" title="${escAttr(row.date || "")}: ${escAttr(formatNumber(row.clicks))} кликов"><span style="height:${height}%"></span><small>${esc(String(row.date || "").slice(5))}</small></div>`;
-          }).join("")}
+      <section class="seo-chart-card">
+        <div class="seo-table__head">
+          <div>
+            <h3 class="card__title">Динамика кликов</h3>
+            <p class="card__hint">Среднее за день: ${esc(formatNumber(avg))} кликов. Наведите на точки для значений.</p>
+          </div>
+          <span>max ${esc(formatNumber(max))}</span>
+        </div>
+        <div class="seo-line-chart" aria-label="Динамика кликов по дням">
+          <svg viewBox="0 0 ${width} ${height}" role="img">
+            <defs>
+              <linearGradient id="seoTrendFill" x1="0" x2="0" y1="0" y2="1">
+                <stop offset="0%" stop-color="currentColor" stop-opacity="0.28"></stop>
+                <stop offset="100%" stop-color="currentColor" stop-opacity="0.02"></stop>
+              </linearGradient>
+            </defs>
+            <line class="seo-axis" x1="${pad}" y1="${height - pad}" x2="${width - pad}" y2="${height - pad}"></line>
+            <line class="seo-axis" x1="${pad}" y1="${pad}" x2="${pad}" y2="${height - pad}"></line>
+            <path class="seo-area" d="${escAttr(area)}"></path>
+            <path class="seo-line" d="${escAttr(line)}"></path>
+            ${points.map((point) => `
+              <circle class="seo-point" cx="${point.x.toFixed(1)}" cy="${point.y.toFixed(1)}" r="4">
+                <title>${esc(point.row.date || "")}: ${esc(formatNumber(point.row.clicks))} кликов</title>
+              </circle>
+            `).join("")}
+            ${points.filter((_, index) => index === 0 || index === points.length - 1 || index % Math.ceil(points.length / 4) === 0).map((point) => `
+              <text class="seo-chart-label" x="${point.x.toFixed(1)}" y="${height - 7}" text-anchor="middle">${esc(String(point.row.date || "").slice(5))}</text>
+            `).join("")}
+          </svg>
         </div>
       </section>
     `;
@@ -1961,7 +2101,7 @@
       downloadText(`seo-report-${safeFileDate()}.csv`, seoCsv(report), "text/csv;charset=utf-8");
       return;
     }
-    downloadText(`seo-report-${safeFileDate()}.html`, seoHtml(report), "text/html;charset=utf-8");
+    downloadText(`seo-report-${safeFileDate()}.rtf`, seoRtf(report), "application/rtf;charset=utf-8");
   }
 
   function seoCsv(report) {
@@ -1971,30 +2111,61 @@
     return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
   }
 
-  function seoHtml(report) {
+  function seoRtf(report) {
     const metrics = report.metrics || {};
     const range = report.date_range || {};
-    return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>SEO отчет ${esc(seoSelectedTitle(report.selected_property))}</title>
-      <style>body{font-family:Arial,sans-serif;max-width:980px;margin:32px auto;color:#1f2937;line-height:1.5}h1,h2{margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{border:1px solid #d1d5db;border-radius:8px;padding:14px;margin:12px 0}.metric strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}small{color:#6b7280}</style>
-    </head><body>
-      <h1>SEO отчет: ${esc(seoSelectedTitle(report.selected_property))}</h1>
-      <p><small>Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Источник: Google Search Console.</small></p>
-      <section class="grid">
-        <div class="card metric"><span>Клики</span><strong>${esc(formatNumber(metrics.clicks))}</strong></div>
-        <div class="card metric"><span>Показы</span><strong>${esc(formatNumber(metrics.impressions))}</strong></div>
-        <div class="card metric"><span>CTR</span><strong>${esc(formatPercent(metrics.ctr))}</strong></div>
-        <div class="card metric"><span>Позиция</span><strong>${esc(formatNumber(metrics.position))}</strong></div>
-      </section>
-      <h2>Инсайты</h2><ul>${(report.insights || []).map((item) => `<li><strong>${esc(item.title || "")}</strong>: ${esc(item.text || "")}</li>`).join("")}</ul>
-      <h2>Топ запросов</h2>${seoHtmlTable(report.top_queries || [], "query")}
-      <h2>Топ страниц</h2>${seoHtmlTable(report.top_pages || [], "page")}
-      <h2>Запросы для роста</h2>${seoHtmlTable(report.opportunities || [], "query")}
-    </body></html>`;
+    const title = `SEO-отчет: ${seoSelectedTitle(report.selected_property)}`;
+    const lines = [
+      rtfHeading(title, 32),
+      rtfParagraph(`Период: ${range.start_date || ""} - ${range.end_date || ""}. Источник: Google Search Console. Доступ read-only.`),
+      rtfHeading("Ключевые метрики", 24),
+      rtfParagraph(`Клики: ${formatNumber(metrics.clicks)}   Показы: ${formatNumber(metrics.impressions)}   CTR: ${formatPercent(metrics.ctr)}   Средняя позиция: ${formatNumber(metrics.position)}`),
+      rtfHeading("Короткий вывод", 24),
+      ...seoExecutiveItems(report).map((item) => rtfBullet(item)),
+      rtfHeading("Инсайты", 24),
+      ...(report.insights || []).map((item) => rtfBullet(`${item.title || "Инсайт"}: ${item.text || ""}`)),
+      rtfHeading("Топ запросов", 24),
+      rtfPlainTable(report.top_queries || [], "query"),
+      rtfHeading("Топ страниц", 24),
+      rtfPlainTable(report.top_pages || [], "page"),
+      rtfHeading("Запросы для роста", 24),
+      rtfPlainTable(report.opportunities || [], "query"),
+    ];
+    return `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\fs22\\f0\\paperw11907\\paperh16840\\margl1134\\margr1134\\margt1134\\margb1134\n${lines.join("\\par\n")}\n}`;
   }
 
-  function seoHtmlTable(rows, key) {
-    if (!rows.length) return "<p>Данных нет.</p>";
-    return `<table><thead><tr><th>Название</th><th>Клики</th><th>Показы</th><th>CTR</th><th>Позиция</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row[key] || "")}</td><td>${esc(formatNumber(row.clicks))}</td><td>${esc(formatNumber(row.impressions))}</td><td>${esc(formatPercent(row.ctr))}</td><td>${esc(formatNumber(row.position))}</td></tr>`).join("")}</tbody></table>`;
+  function rtfHeading(text, size) {
+    return `\\b\\fs${size} ${rtfEscape(text)}\\b0\\fs22`;
+  }
+
+  function rtfParagraph(text) {
+    return rtfEscape(text);
+  }
+
+  function rtfBullet(text) {
+    return `\\bullet\\tab ${rtfEscape(text)}`;
+  }
+
+  function rtfPlainTable(rows, key) {
+    if (!rows.length) return rtfParagraph("Данных нет.");
+    const header = "Название | Клики | Показы | CTR | Позиция";
+    const body = rows.slice(0, 15).map((row) => [
+      row[key] || "",
+      formatNumber(row.clicks),
+      formatNumber(row.impressions),
+      formatPercent(row.ctr),
+      formatNumber(row.position),
+    ].join(" | "));
+    return [header, ...body].map((line) => rtfParagraph(line)).join("\\par\n");
+  }
+
+  function rtfEscape(value) {
+    return String(value ?? "").replace(/[\\{}]/g, "\\$&").replace(/\n/g, "\\par ").split("").map((char) => {
+      const code = char.charCodeAt(0);
+      if (code <= 127) return char;
+      const signed = code > 32767 ? code - 65536 : code;
+      return `\\u${signed}?`;
+    }).join("");
   }
 
   function downloadText(filename, text, type) {
