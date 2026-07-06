@@ -18,6 +18,7 @@ from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.emailer import PasswordResetEmailer
 from ad_mcp.web.google_login import GoogleLoginService
 from ad_mcp.web.hosted import HostedConnectionService
+from ad_mcp.web.seo import SearchConsoleReportService
 from ad_mcp.web.server import AdsWebHandler, _api_token_required, _extract_request_token, _request_token_is_valid
 from ad_mcp.web.service import MetaDashboardService
 
@@ -481,6 +482,7 @@ def _serve(settings: Settings, *, emailer: PasswordResetEmailer | None = None):
     AdsWebHandler.settings = settings
     AdsWebHandler.diagnostics = DiagnosticsService(settings)
     AdsWebHandler.hosted = HostedConnectionService(settings)
+    AdsWebHandler.seo = SearchConsoleReportService(settings)
     AdsWebHandler.service = MetaDashboardService(settings)
     AdsWebHandler.auth = AuthStore(settings)
     AdsWebHandler.emailer = emailer or PasswordResetEmailer(settings)

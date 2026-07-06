@@ -14,6 +14,7 @@ if TYPE_CHECKING:
 
 
 PROVIDER_NAMES = ("google_ads", "meta_ads", "tiktok_ads", "yandex_direct")
+CONNECTION_PROVIDER_NAMES = PROVIDER_NAMES + ("google_search_console",)
 
 SECRET_KEYS = {
     "access_token",
@@ -50,6 +51,9 @@ SAFE_ACCOUNT_KEYS = (
     "selection_disabled",
     "disabled_reason",
     "status",
+    "site_url",
+    "permission_level",
+    "property_type",
 )
 
 SAFE_ACCOUNT_LIST_KEYS = ("requested_permissions",)
@@ -264,7 +268,7 @@ class HostedConnectionStore:
         return selections
 
     def disconnect_provider(self, provider: str, workspace_id: str | None = None) -> dict[str, Any]:
-        if provider not in PROVIDER_NAMES:
+        if provider not in CONNECTION_PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
         if "_error" in data:
@@ -288,7 +292,7 @@ class HostedConnectionStore:
         workspace_id: str | None = None,
         user_id: str | None = None,
     ) -> dict[str, Any]:
-        if provider not in PROVIDER_NAMES:
+        if provider not in CONNECTION_PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
         if "_error" in data:
@@ -325,7 +329,7 @@ class HostedConnectionStore:
         user_id: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        if provider not in PROVIDER_NAMES:
+        if provider not in CONNECTION_PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
         if "_error" in data:
@@ -364,7 +368,7 @@ class HostedConnectionStore:
         workspace_id: str | None = None,
         user_id: str | None = None,
     ) -> None:
-        if provider not in PROVIDER_NAMES:
+        if provider not in CONNECTION_PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         if not state_id:
             raise ValueError("OAuth state id is required.")
@@ -393,7 +397,7 @@ class HostedConnectionStore:
         self._write(data)
 
     def consume_oauth_state(self, provider: str, state_id: str, workspace_id: str | None = None) -> None:
-        if provider not in PROVIDER_NAMES:
+        if provider not in CONNECTION_PROVIDER_NAMES:
             raise ValueError(f"Unsupported provider: {provider}")
         data = self.read()
         root = _scope_root(data, workspace_id)

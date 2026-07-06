@@ -77,6 +77,8 @@ class Settings(BaseSettings):
     google_ads_api_version: str = "v24"
     google_oauth_scopes: str = "https://www.googleapis.com/auth/adwords"
     google_oauth_state_ttl_seconds: int = 900
+    google_search_console_redirect_path: str = "/oauth/google-search-console/callback"
+    google_search_console_scopes: str = "https://www.googleapis.com/auth/webmasters.readonly"
     google_login_client_id: str = ""
     google_login_client_secret: str = ""
     google_login_redirect_path: str = "/auth/google/callback"

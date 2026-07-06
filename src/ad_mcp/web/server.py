@@ -29,6 +29,7 @@ from ad_mcp.web.diagnostics import DiagnosticsService
 from ad_mcp.web.emailer import EmailDeliveryError, PasswordResetEmailer
 from ad_mcp.web.google_login import GoogleLoginError, GoogleLoginService
 from ad_mcp.web.hosted import HostedConnectionService
+from ad_mcp.web.seo import SearchConsoleReportService
 from ad_mcp.web.service import MetaDashboardService
 from ad_mcp.web.site_analysis_history import SiteAnalysisHistoryStore
 
@@ -65,6 +66,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     settings = Settings()
     diagnostics = DiagnosticsService()
     hosted = HostedConnectionService()
+    seo = SearchConsoleReportService()
     service = MetaDashboardService()
     auth = AuthStore()
     emailer = PasswordResetEmailer()
@@ -633,6 +635,11 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._oauth_callback_response("meta_ads", self.hosted.meta_oauth_callback)
             if route == self.settings.google_oauth_redirect_path:
                 return self._oauth_callback_response("google_ads", lambda query: self.hosted.oauth_callback("google_ads", query))
+            if route == self.settings.google_search_console_redirect_path:
+                return self._oauth_callback_response(
+                    "google_search_console",
+                    lambda query: self.hosted.oauth_callback("google_search_console", query),
+                )
             if route == self.settings.tiktok_oauth_redirect_path:
                 return self._oauth_callback_response("tiktok_ads", lambda query: self.hosted.oauth_callback("tiktok_ads", query))
             if route == self.settings.yandex_oauth_redirect_path:
@@ -727,6 +734,16 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_json(self.hosted.oauth_authorization_info("google_ads", self._session_user()))
             if route == "/api/hosted/oauth/google/pending":
                 return self._send_json(self.hosted.oauth_pending("google_ads", str(query["pending_id"]), self._session_user()))
+            if route == "/api/hosted/oauth/search-console/start":
+                return self._redirect(self.hosted.oauth_redirect_url("google_search_console", self._session_user()))
+            if route == "/api/hosted/oauth/search-console/diagnostics":
+                return self._send_json(self.hosted.oauth_diagnostics("google_search_console"))
+            if route == "/api/hosted/oauth/search-console/authorize-url":
+                return self._send_json(self.hosted.oauth_authorization_info("google_search_console", self._session_user()))
+            if route == "/api/hosted/oauth/search-console/pending":
+                return self._send_json(
+                    self.hosted.oauth_pending("google_search_console", str(query["pending_id"]), self._session_user())
+                )
             if route == "/api/hosted/oauth/tiktok/start":
                 return self._redirect(self.hosted.oauth_redirect_url("tiktok_ads", self._session_user()))
             if route == "/api/hosted/oauth/tiktok/diagnostics":
@@ -748,6 +765,17 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if not user:
                     return
                 return self._send_json({"items": self.site_analysis_history.list_for_user(user.id)})
+            if route == "/api/seo/search-console":
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                return self._send_json(
+                    self.seo.report(
+                        user,
+                        site_url=str(query.get("site_url") or ""),
+                        days=int(query.get("days", "28")),
+                    )
+                )
 
             if route == "/api/meta/dashboard":
                 return self._send_json(self.service.dashboard(account_id=account_id, end_date=end_date))
@@ -1112,6 +1140,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if user:
                     self.auth.record_platform_connection(user, "google_ads", result.get("accounts", []))
                 return self._send_json(result)
+            if route == "/api/hosted/oauth/search-console/select":
+                user = self._session_user()
+                result = self.hosted.oauth_select("google_search_console", payload, user)
+                if user:
+                    self.auth.record_platform_connection(user, "google_search_console", result.get("accounts", []))
+                return self._send_json(result)
             if route == "/api/hosted/oauth/tiktok/select":
                 user = self._session_user()
                 result = self.hosted.oauth_select("tiktok_ads", payload, user)
@@ -1188,6 +1222,7 @@ def main() -> None:
     AdsWebHandler.settings = settings
     AdsWebHandler.diagnostics = DiagnosticsService(settings)
     AdsWebHandler.hosted = HostedConnectionService(settings)
+    AdsWebHandler.seo = SearchConsoleReportService(settings)
     AdsWebHandler.service = MetaDashboardService(settings)
     AdsWebHandler.auth = AuthStore(settings)
     AdsWebHandler.emailer = PasswordResetEmailer(settings)

@@ -8,7 +8,7 @@ from ad_mcp.core.config_loader import load_provider_from_connections
 from ad_mcp.core.connection_store import HostedConnectionStore, safe_account_summary
 from ad_mcp.settings import Settings
 from ad_mcp.web.meta_oauth import MetaOAuthService
-from ad_mcp.web.partner_oauth import GoogleOAuthService, TikTokOAuthService, YandexOAuthService
+from ad_mcp.web.partner_oauth import GoogleOAuthService, GoogleSearchConsoleOAuthService, TikTokOAuthService, YandexOAuthService
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,7 @@ class PlatformDescriptor:
 PLATFORMS = (
     PlatformDescriptor("meta_ads", "Meta Ads", "beta", True),
     PlatformDescriptor("google_ads", "Google Ads", "beta", True),
+    PlatformDescriptor("google_search_console", "Google Search Console", "beta", True),
     PlatformDescriptor("tiktok_ads", "TikTok Ads", "next", True),
     PlatformDescriptor("yandex_direct", "Yandex Direct", "next", True),
 )
@@ -29,6 +30,7 @@ PLATFORMS = (
 OAUTH_REDIRECT_SETTINGS = {
     "meta_ads": "meta_oauth_redirect_path",
     "google_ads": "google_oauth_redirect_path",
+    "google_search_console": "google_search_console_redirect_path",
     "tiktok_ads": "tiktok_oauth_redirect_path",
     "yandex_direct": "yandex_oauth_redirect_path",
 }
@@ -36,6 +38,7 @@ OAUTH_REDIRECT_SETTINGS = {
 OAUTH_PROVIDER_SLUGS = {
     "meta_ads": "meta",
     "google_ads": "google",
+    "google_search_console": "search-console",
     "tiktok_ads": "tiktok",
     "yandex_direct": "yandex",
 }
@@ -43,6 +46,7 @@ OAUTH_PROVIDER_SLUGS = {
 OAUTH_REQUIRED_ENV = {
     "meta_ads": ("AD_MCP_META_OAUTH_APP_ID", "AD_MCP_META_OAUTH_APP_SECRET"),
     "google_ads": ("AD_MCP_GOOGLE_OAUTH_CLIENT_ID", "AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET", "AD_MCP_GOOGLE_ADS_DEVELOPER_TOKEN"),
+    "google_search_console": ("AD_MCP_GOOGLE_OAUTH_CLIENT_ID", "AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET"),
     "tiktok_ads": ("AD_MCP_TIKTOK_OAUTH_APP_ID", "AD_MCP_TIKTOK_OAUTH_APP_SECRET"),
     "yandex_direct": ("AD_MCP_YANDEX_OAUTH_CLIENT_ID", "AD_MCP_YANDEX_OAUTH_CLIENT_SECRET"),
 }
@@ -50,6 +54,7 @@ OAUTH_REQUIRED_ENV = {
 OAUTH_OPTIONAL_ENV = {
     "meta_ads": ("AD_MCP_META_OAUTH_API_VERSION", "AD_MCP_META_OAUTH_SCOPES"),
     "google_ads": ("AD_MCP_GOOGLE_ADS_LOGIN_CUSTOMER_ID", "AD_MCP_GOOGLE_ADS_API_VERSION", "AD_MCP_GOOGLE_OAUTH_SCOPES"),
+    "google_search_console": ("AD_MCP_GOOGLE_SEARCH_CONSOLE_SCOPES",),
     "tiktok_ads": (
         "AD_MCP_TIKTOK_OAUTH_AUTH_URL",
         "AD_MCP_TIKTOK_OAUTH_TOKEN_URL",
@@ -77,6 +82,7 @@ ENV_TO_SETTING = {
     "AD_MCP_GOOGLE_ADS_LOGIN_CUSTOMER_ID": "google_ads_login_customer_id",
     "AD_MCP_GOOGLE_ADS_API_VERSION": "google_ads_api_version",
     "AD_MCP_GOOGLE_OAUTH_SCOPES": "google_oauth_scopes",
+    "AD_MCP_GOOGLE_SEARCH_CONSOLE_SCOPES": "google_search_console_scopes",
     "AD_MCP_TIKTOK_OAUTH_APP_ID": "tiktok_oauth_app_id",
     "AD_MCP_TIKTOK_OAUTH_APP_SECRET": "tiktok_oauth_app_secret",
     "AD_MCP_TIKTOK_OAUTH_AUTH_URL": "tiktok_oauth_auth_url",
@@ -108,6 +114,11 @@ OAUTH_PROVIDER_SETUP = {
         "Google Cloud Console: OAuth Client type должен быть Web application.",
         "Authorized redirect URI должен совпадать символ в символ: {redirect_url}",
         "Проверьте OAuth consent screen, test users, Google Ads API и AD_MCP_GOOGLE_ADS_DEVELOPER_TOKEN.",
+    ],
+    "google_search_console": [
+        "Google Cloud Console: OAuth Client type должен быть Web application.",
+        "Authorized redirect URI должен совпадать символ в символ: {redirect_url}",
+        "Включите Google Search Console API и добавьте scope https://www.googleapis.com/auth/webmasters.readonly в OAuth consent screen.",
     ],
     "tiktok_ads": [
         "TikTok for Business Developer: добавьте точный Redirect URL в приложение.",
@@ -142,6 +153,7 @@ class HostedConnectionService:
         self._store = HostedConnectionStore(self._settings.connection_store_file)
         self._meta_oauth = MetaOAuthService(self._settings)
         self._google_oauth = GoogleOAuthService(self._settings)
+        self._google_search_console_oauth = GoogleSearchConsoleOAuthService(self._settings)
         self._tiktok_oauth = TikTokOAuthService(self._settings)
         self._yandex_oauth = YandexOAuthService(self._settings)
 
@@ -639,6 +651,10 @@ class HostedConnectionService:
                 "Google OAuth must return a refresh_token; reconnect with consent prompt if it is absent.",
                 "customers:listAccessibleCustomers is used first; manager customer_client discovery is attempted best-effort.",
             ],
+            "google_search_console": [
+                "Google OAuth must return a refresh_token; reconnect with consent prompt if it is absent.",
+                "Search Console sites.list is used for property discovery; selected properties are saved separately from ad accounts.",
+            ],
             "tiktok_ads": [
                 "TikTok Business API OAuth endpoints are configurable because app/API versions can differ.",
                 "Callback accepts auth_code and code; advertiser discovery reads token payload or advertiser/get.",
@@ -676,6 +692,7 @@ class HostedConnectionService:
         services = {
             "meta_ads": self._meta_oauth,
             "google_ads": self._google_oauth,
+            "google_search_console": self._google_search_console_oauth,
             "tiktok_ads": self._tiktok_oauth,
             "yandex_direct": self._yandex_oauth,
         }

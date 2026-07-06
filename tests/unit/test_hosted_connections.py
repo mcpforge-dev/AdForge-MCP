@@ -207,13 +207,15 @@ def test_oauth_readiness_reports_all_live_redirects_and_blockers_without_secrets
     readiness = service.oauth_readiness()
     platforms = {item["provider"]: item for item in readiness["platforms"]}
 
-    assert readiness["summary"] == {"platform_count": 4, "ready_to_connect": 0, "blocked": 4}
+    assert readiness["summary"] == {"platform_count": 5, "ready_to_connect": 0, "blocked": 5}
     assert platforms["meta_ads"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/meta/callback"
     assert platforms["google_ads"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/google/callback"
+    assert platforms["google_search_console"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/google-search-console/callback"
     assert platforms["tiktok_ads"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/tiktok/callback"
     assert platforms["yandex_direct"]["expected_redirect_url"] == "https://mcp.holymedia.kz/oauth/yandex/callback"
     assert platforms["meta_ads"]["overall_status"] == "blocked_missing_credentials"
     assert platforms["google_ads"]["overall_status"] == "blocked_missing_credentials"
+    assert platforms["google_search_console"]["overall_status"] == "blocked_missing_credentials"
     assert platforms["tiktok_ads"]["overall_status"] == "blocked_provider_dashboard_check"
     assert platforms["yandex_direct"]["overall_status"] == "blocked_provider_dashboard_check"
     assert platforms["tiktok_ads"]["authorize_url"]["status"] == "blocked_public_disabled"

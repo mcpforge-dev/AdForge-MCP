@@ -137,6 +137,7 @@ OAuth можно оставить отключенным на staging. Если 
 ```text
 https://staging-mcp.holymedia.kz/oauth/meta/callback
 https://staging-mcp.holymedia.kz/oauth/google/callback
+https://staging-mcp.holymedia.kz/oauth/google-search-console/callback
 https://staging-mcp.holymedia.kz/oauth/tiktok/callback
 https://staging-mcp.holymedia.kz/oauth/yandex/callback
 ```

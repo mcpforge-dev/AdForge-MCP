@@ -1593,6 +1593,76 @@ select option {
   font-size: 12px;
 }
 
+/* ---------- SEO ---------- */
+
+.seo-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.seo-empty,
+.seo-report-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.seo-stats {
+  margin-top: 0;
+}
+
+.seo-properties {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.seo-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.seo-table {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-small);
+  background: var(--bg-inset);
+  padding: 14px;
+}
+
+.seo-table__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.seo-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) repeat(4, auto);
+  gap: 10px;
+  align-items: center;
+  border-bottom: 1px solid var(--border-soft);
+  padding-bottom: 8px;
+}
+
+.seo-row:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.seo-row strong {
+  font-weight: 500;
+  word-break: break-word;
+}
+
+.seo-row span {
+  color: var(--text-muted);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .report-loading-modal {
   position: fixed;
   inset: 0;
@@ -2325,6 +2395,9 @@ details.raw-json pre {
   .diag-grid { grid-template-columns: 1fr; }
   .admin-oauth-grid { grid-template-columns: 1fr; }
   .profile-grid { grid-template-columns: 1fr; }
+  .seo-grid { grid-template-columns: 1fr; }
+  .seo-row { grid-template-columns: 1fr 1fr; }
+  .seo-row strong { grid-column: 1 / -1; }
   .site-analysis-form--advanced,
   .site-score-grid,
   .site-hero-preview,
@@ -2370,6 +2443,10 @@ details.raw-json pre {
   .card-lite { padding: 13px; }
   .kv-row { align-items: flex-start; flex-direction: column; gap: 4px; }
   .kv-row strong { text-align: left; max-width: 100%; }
+  .seo-empty,
+  .seo-report-head { flex-direction: column; }
+  .seo-row { grid-template-columns: 1fr; }
+  .seo-row span { white-space: normal; }
   .platform-card__head { flex-direction: column; }
   .platform-card__actions .btn { flex: 1 1 180px; }
   .account-row { align-items: flex-start; flex-direction: column; }

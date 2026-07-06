@@ -14,6 +14,7 @@
   const PROVIDER_SLUG = {
     meta_ads: "meta",
     google_ads: "google",
+    google_search_console: "search-console",
     tiktok_ads: "tiktok",
     yandex_direct: "yandex",
   };
@@ -21,6 +22,7 @@
   const PROVIDER_DESC = {
     meta_ads: "Кампании, статусы, бюджеты и базовые метрики из Meta Ads.",
     google_ads: "Кампании, статусы, бюджеты и базовые метрики из Google Ads.",
+    google_search_console: "SEO-данные из Google Search Console: запросы, страницы, CTR, позиции и sitemap.",
     tiktok_ads: "Кабинеты, статусы и базовые данные из TikTok Ads после подключения.",
     yandex_direct: "Кабинеты, кампании и базовые данные из Yandex Direct после подключения.",
   };
@@ -42,6 +44,7 @@
     mcpUrlCopied: localStorage.getItem(MCP_URL_COPIED_KEY) === "1",
     notice: null,
     diagnosticsRun: false,
+    seoReport: null,
     siteAnalysisCopy: {},
     siteAnalysisHistory: [],
   };
@@ -110,6 +113,9 @@
     el.siteAnalysisSubmit = document.getElementById("site-analysis-submit");
     el.siteAnalysisHistory = document.getElementById("site-analysis-history");
     el.siteAnalysisResult = document.getElementById("site-analysis-result");
+    el.seoPanel = document.getElementById("seo-panel");
+    el.seoNotice = document.getElementById("seo-notice");
+    el.seoRefresh = document.getElementById("seo-refresh");
     el.reportLoadingModal = document.getElementById("report-loading-modal");
     el.nextSteps = document.getElementById("next-steps");
     el.mcpUrl = document.getElementById("mcp-url");
@@ -564,6 +570,7 @@
       tab.addEventListener("focus", select);
     });
     el.connectionsRefresh.addEventListener("click", () => loadConnections());
+    if (el.seoRefresh) el.seoRefresh.addEventListener("click", () => loadSeoReport({ force: true }));
     el.diagRun.addEventListener("click", () => runDiagnostics());
     if (el.siteAnalysisForm) {
       el.siteAnalysisForm.addEventListener("submit", runSiteAnalysis);
@@ -749,6 +756,7 @@
     if (state.section === "overview") loadOverview();
     if (state.section === "connections") loadConnections();
     if (state.section === "mcp") renderMcpPanel();
+    if (state.section === "seo") loadSeoReport();
     if (state.section === "site-analysis") loadSiteAnalysisHistory();
     if (state.section === "diagnostics" && !state.diagnosticsRun) {
       el.diagnosticsContent.innerHTML = emptyState("Запустите диагностику, чтобы увидеть состояние сервиса.");
@@ -1645,6 +1653,165 @@
     return "приоритет";
   }
 
+  /* ---------- SEO ---------- */
+
+  async function loadSeoReport(options = {}) {
+    if (!el.seoPanel) return;
+    if (!state.seoReport || options.force) {
+      el.seoPanel.innerHTML = emptyState("Загружаем SEO-отчет...");
+    }
+    if (el.seoRefresh) setLoading(el.seoRefresh, true);
+    try {
+      const report = await api("/api/seo/search-console");
+      state.seoReport = report;
+      renderSeoReport(report);
+    } catch (error) {
+      if (handle401(error)) return;
+      el.seoPanel.innerHTML = errorState(humanizeError(error));
+    } finally {
+      if (el.seoRefresh) setLoading(el.seoRefresh, false);
+    }
+  }
+
+  function renderSeoReport(report) {
+    if (!el.seoPanel) return;
+    if (!report || report.status === "not_connected") {
+      el.seoNotice.innerHTML = "";
+      el.seoPanel.innerHTML = `
+        <div class="seo-empty">
+          <div>
+            <h3 class="card__title">Подключите Google Search Console</h3>
+            <p class="card__hint">${esc(report?.message || "После подключения появятся SEO-отчеты по запросам, страницам, CTR и позициям.")}</p>
+          </div>
+          <button type="button" class="btn btn--primary" data-seo-connect>Подключить Search Console</button>
+        </div>
+      `;
+      el.seoPanel.querySelector("[data-seo-connect]")?.addEventListener("click", (event) => {
+        startOAuth("google_search_console", event.currentTarget);
+      });
+      return;
+    }
+    if (report.status !== "ok") {
+      el.seoNotice.innerHTML = noticeMarkup(report.message || "Не удалось получить SEO-отчет.", "error");
+      el.seoPanel.innerHTML = renderSeoProperties(report.properties || [], report.selected_property);
+      return;
+    }
+    el.seoNotice.innerHTML = "";
+    const metrics = report.metrics || {};
+    const range = report.date_range || {};
+    el.seoPanel.innerHTML = `
+      <div class="seo-report-head">
+        <div>
+          <h3 class="card__title">${esc(report.selected_property?.site_url || report.selected_property?.account_id || "Search Console")}</h3>
+          <p class="card__hint">Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Данные берутся из Search Console в read-only режиме.</p>
+        </div>
+        <button type="button" class="btn btn--secondary btn--small" data-seo-connect>Переподключить</button>
+      </div>
+      <div class="stats-grid seo-stats">
+        ${stat("Клики", esc(formatNumber(metrics.clicks)))}
+        ${stat("Показы", esc(formatNumber(metrics.impressions)))}
+        ${stat("CTR", esc(formatPercent(metrics.ctr)))}
+        ${stat("Средняя позиция", esc(formatNumber(metrics.position)))}
+      </div>
+      ${renderSeoProperties(report.properties || [], report.selected_property)}
+      <div class="seo-grid">
+        ${renderSeoTable("Топ запросов", report.top_queries || [], "query")}
+        ${renderSeoTable("Топ страниц", report.top_pages || [], "page")}
+      </div>
+      ${renderSeoOpportunities(report.opportunities || [])}
+      ${renderSeoSitemaps(report.sitemaps || {})}
+    `;
+    el.seoPanel.querySelector("[data-seo-connect]")?.addEventListener("click", (event) => {
+      startOAuth("google_search_console", event.currentTarget);
+    });
+  }
+
+  function renderSeoProperties(properties, selected) {
+    if (!properties.length) return "";
+    const selectedId = selected?.site_url || selected?.account_id || "";
+    return `
+      <div class="seo-properties">
+        <h3 class="card__title">Подключенные properties</h3>
+        <div class="platform-card__accounts">
+          ${properties.map((property) => `
+            <div class="account-row">
+              <span>${esc(property.site_url || property.name || property.account_id || "Property")}</span>
+              <span class="mono">${esc(property.permission_level || "")}${selectedId && selectedId === (property.site_url || property.account_id) ? " · выбрана" : ""}</span>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderSeoTable(title, rows, key) {
+    if (!rows.length) {
+      return `
+        <section class="seo-table">
+          <h3 class="card__title">${esc(title)}</h3>
+          ${emptyState("Данных пока нет. Проверьте выбранную property и период в Search Console.")}
+        </section>
+      `;
+    }
+    return `
+      <section class="seo-table">
+        <h3 class="card__title">${esc(title)}</h3>
+        <div class="seo-table__rows">
+          ${rows.map((row) => `
+            <div class="seo-row">
+              <strong>${esc(row[key] || "")}</strong>
+              <span>${esc(formatNumber(row.clicks))} кликов</span>
+              <span>${esc(formatNumber(row.impressions))} показов</span>
+              <span>CTR ${esc(formatPercent(row.ctr))}</span>
+              <span>Позиция ${esc(formatNumber(row.position))}</span>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSeoOpportunities(rows) {
+    if (!rows.length) return "";
+    return `
+      <section class="seo-table">
+        <h3 class="card__title">Запросы для роста</h3>
+        <p class="card__hint">Запросы с заметными показами и средней позицией 4-20: обычно их стоит проверить на соответствие страницы, сниппет и внутренние ссылки.</p>
+        <div class="seo-table__rows">
+          ${rows.map((row) => `
+            <div class="seo-row">
+              <strong>${esc(row.query || "")}</strong>
+              <span>${esc(formatNumber(row.impressions))} показов</span>
+              <span>${esc(formatNumber(row.clicks))} кликов</span>
+              <span>Позиция ${esc(formatNumber(row.position))}</span>
+            </div>
+          `).join("")}
+        </div>
+      </section>
+    `;
+  }
+
+  function renderSeoSitemaps(sitemaps) {
+    const items = sitemaps.items || [];
+    return `
+      <section class="seo-table">
+        <h3 class="card__title">Sitemap</h3>
+        ${items.length ? `
+          <div class="seo-table__rows">
+            ${items.map((item) => `
+              <div class="seo-row">
+                <strong>${esc(item.path || "sitemap")}</strong>
+                <span>Ошибки: ${esc(item.errors ?? 0)}</span>
+                <span>Предупреждения: ${esc(item.warnings ?? 0)}</span>
+                <span>${item.last_downloaded ? `Скачан: ${esc(item.last_downloaded)}` : "Еще не скачан"}</span>
+              </div>
+            `).join("")}
+          </div>
+        ` : emptyState("В Search Console не найдено отправленных sitemap для выбранной property.")}
+      </section>
+    `;
+  }
+
   /* ---------- connections ---------- */
 
   async function loadConnections() {
@@ -2456,7 +2623,13 @@
   }
 
   function providerLabel(provider) {
-    return { meta_ads: "Meta Ads", google_ads: "Google Ads", tiktok_ads: "TikTok Ads", yandex_direct: "Yandex Direct" }[provider] || provider;
+    return {
+      meta_ads: "Meta Ads",
+      google_ads: "Google Ads",
+      google_search_console: "Google Search Console",
+      tiktok_ads: "TikTok Ads",
+      yandex_direct: "Yandex Direct",
+    }[provider] || provider;
   }
 
   /* ---------- small renderers ---------- */
@@ -2628,6 +2801,18 @@
     } catch (error) {
       return String(value);
     }
+  }
+
+  function formatNumber(value) {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return "0";
+    return number.toLocaleString("ru-RU", { maximumFractionDigits: 2 });
+  }
+
+  function formatPercent(value) {
+    const number = Number(value || 0);
+    if (!Number.isFinite(number)) return "0%";
+    return `${(number * 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%`;
   }
 
   async function copyText(text) {

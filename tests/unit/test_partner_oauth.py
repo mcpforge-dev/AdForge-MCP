@@ -6,7 +6,13 @@ import httpx
 import pytest
 
 from ad_mcp.settings import Settings
-from ad_mcp.web.partner_oauth import GoogleOAuthService, PartnerOAuthError, TikTokOAuthService, YandexOAuthService
+from ad_mcp.web.partner_oauth import (
+    GoogleOAuthService,
+    GoogleSearchConsoleOAuthService,
+    PartnerOAuthError,
+    TikTokOAuthService,
+    YandexOAuthService,
+)
 
 
 class _FakeResponse:
@@ -112,6 +118,16 @@ class _FakePartnerHTTP:
         if url == "https://business-api.tiktok.com/open_api/v1.3/oauth2/advertiser/get/":
             assert headers and headers["Access-Token"] == "tiktok-access"
             return _FakeResponse({"data": {"list": [{"advertiser_id": "7444458786967928833", "advertiser_name": "TikTok API Advertiser"}]}})
+        if url == "https://www.googleapis.com/webmasters/v3/sites":
+            assert headers and headers["Authorization"] == "Bearer google-access"
+            return _FakeResponse(
+                {
+                    "siteEntry": [
+                        {"siteUrl": "https://holymedia.kz/", "permissionLevel": "siteOwner"},
+                        {"siteUrl": "sc-domain:holymedia.kz", "permissionLevel": "siteFullUser"},
+                    ]
+                }
+            )
         raise AssertionError(f"Unexpected GET: {url} {params}")
 
 
@@ -176,6 +192,28 @@ def test_google_oauth_allows_manual_customer_id_when_discovery_fails(tmp_path) -
     assert selected["accounts"][0]["google_ads_account_type"] == "manual_customer_id"
     assert stored["accounts"][0]["refresh_token"] == "google-refresh"
     assert stored["accounts"][0]["developer_token"] == "google-dev-token"
+
+
+def test_google_search_console_oauth_discovers_sites_without_ads_developer_token(tmp_path) -> None:
+    settings = _settings(tmp_path).model_copy(update={"google_ads_developer_token": ""})
+    http = _FakePartnerHTTP()
+    service = GoogleSearchConsoleOAuthService(settings, http)
+    url = service.authorization_url()
+    query = parse_qs(urlparse(url).query)
+
+    assert query["redirect_uri"] == ["https://mcp.adforge.dev/oauth/google-search-console/callback"]
+    assert query["scope"] == ["https://www.googleapis.com/auth/webmasters.readonly"]
+    pending = service.handle_callback({"code": "google-code", "state": query["state"][0]})
+    selected = service.select_accounts(pending["pending_id"], ["https://holymedia.kz/"])
+    stored = service._store.provider_config("google_search_console")  # noqa: SLF001
+
+    assert pending["account_count"] == 2
+    assert pending["accounts"][0]["site_url"] == "https://holymedia.kz/"
+    assert "google-refresh" not in str(pending)
+    assert selected["status"] == "connected"
+    assert selected["accounts"][0]["account_id"] == "https://holymedia.kz/"
+    assert stored["accounts"][0]["refresh_token"] == "google-refresh"
+    assert stored["accounts"][0]["site_url"] == "https://holymedia.kz/"
 
 
 def test_tiktok_oauth_discovers_advertiser_and_select_saves_credentials(tmp_path) -> None:

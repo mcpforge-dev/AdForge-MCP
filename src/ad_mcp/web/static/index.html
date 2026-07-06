@@ -211,6 +211,7 @@
         <button type="button" class="nav-tab is-active" data-nav="overview">Начало работы</button>
         <button type="button" class="nav-tab" data-nav="connections">Подключения</button>
         <button type="button" class="nav-tab" data-nav="mcp">MCP</button>
+        <button type="button" class="nav-tab" data-nav="seo">SEO</button>
         <button type="button" class="nav-tab" data-nav="site-analysis">Анализ сайта</button>
         <button type="button" class="nav-tab" data-nav="profile">Профиль</button>
       </nav>
@@ -368,6 +369,21 @@
               <code>Какие кампании сейчас активны?</code>
             </div>
           </div>
+        </article>
+      </section>
+
+      <!-- SEO -->
+      <section id="section-seo" class="section" data-section="seo" hidden>
+        <div class="section-head section-head--row">
+          <div>
+            <h2>SEO</h2>
+            <p class="section-head__sub">Отчеты из Google Search Console: поисковые запросы, страницы, CTR, позиции и sitemap.</p>
+          </div>
+          <button id="seo-refresh" type="button" class="btn btn--secondary btn--small">Обновить</button>
+        </div>
+        <div id="seo-notice"></div>
+        <article id="seo-panel" class="card seo-panel">
+          <div class="empty-state"><p>Загружаем SEO-отчет...</p></div>
         </article>
       </section>
 

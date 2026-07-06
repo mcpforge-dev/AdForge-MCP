@@ -130,6 +130,7 @@ class BasePartnerOAuthService(ABC):
     def _signing_secret(self) -> bytes:
         provider_secret_fields = {
             "google_ads": "google_oauth_client_secret",
+            "google_search_console": "google_oauth_client_secret",
             "tiktok_ads": "tiktok_oauth_app_secret",
             "yandex_direct": "yandex_oauth_client_secret",
         }
@@ -439,6 +440,115 @@ class GoogleOAuthService(BasePartnerOAuthService):
                     }
                 )
         return accounts
+
+
+class GoogleSearchConsoleOAuthService(BasePartnerOAuthService):
+    provider = "google_search_console"
+
+    @property
+    def state_ttl_seconds(self) -> int:
+        return self._settings.google_oauth_state_ttl_seconds
+
+    def configured(self) -> bool:
+        return bool(self._settings.google_oauth_client_id.strip() and self._settings.google_oauth_client_secret.strip())
+
+    def redirect_uri(self) -> str:
+        return f"{self._settings.public_base_or_local_web_url}{self._settings.google_search_console_redirect_path}"
+
+    def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
+        self._ensure_configured("AD_MCP_GOOGLE_OAUTH_CLIENT_ID and AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET")
+        redirect_uri = self.redirect_uri()
+        state = self._new_state(redirect_uri, workspace_id=workspace_id, user_id=user_id)
+        query = urlencode(
+            {
+                "client_id": self._settings.google_oauth_client_id.strip(),
+                "redirect_uri": redirect_uri,
+                "response_type": "code",
+                "scope": _split_scopes(self._settings.google_search_console_scopes),
+                "access_type": "offline",
+                "prompt": "consent",
+                "include_granted_scopes": "true",
+                "state": state,
+            }
+        )
+        return f"https://accounts.google.com/o/oauth2/v2/auth?{query}"
+
+    def handle_callback(self, query: dict[str, str]) -> dict[str, Any]:
+        self._ensure_configured("AD_MCP_GOOGLE_OAUTH_CLIENT_ID and AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET")
+        state_payload = self._verify_state(str(query.get("state", "") or "").strip())
+        if query.get("error"):
+            raise PartnerOAuthError(_redact_oauth_error(query.get("error_description") or query["error"]))
+        code = str(query.get("code", "") or "").strip()
+        if not code:
+            raise PartnerOAuthError("Google Search Console OAuth callback is missing code.")
+        redirect_uri = str(state_payload.get("redirect_uri") or self.redirect_uri())
+        token_payload = self._exchange_code_for_token(code, redirect_uri)
+        access_token = str(token_payload.get("access_token", "") or "").strip()
+        refresh_token = str(token_payload.get("refresh_token", "") or "").strip()
+        if not access_token:
+            raise PartnerOAuthError("Google Search Console OAuth token exchange did not return access_token.")
+        if not refresh_token:
+            raise PartnerOAuthError("Google Search Console OAuth token exchange did not return refresh_token. Reconnect with consent prompt.")
+        properties = self._fetch_sites(access_token)
+        if not properties:
+            raise PartnerOAuthError("Google Search Console OAuth succeeded, but no properties were returned for this user.")
+        pending = self._store.save_oauth_pending(
+            self.provider,
+            properties,
+            credentials={
+                "oauth_client_id": self._settings.google_oauth_client_id.strip(),
+                "oauth_client_secret": self._settings.google_oauth_client_secret.strip(),
+                "refresh_token": refresh_token,
+                "access_token": access_token,
+                "scope": self._settings.google_search_console_scopes.strip(),
+            },
+            ttl_seconds=self.state_ttl_seconds,
+            source="google_search_console_oauth",
+            workspace_id=str(state_payload.get("workspace_id") or "") or None,
+            user_id=str(state_payload.get("user_id") or "") or None,
+            metadata={
+                "site_count": len(properties),
+                "scope": self._settings.google_search_console_scopes.strip(),
+            },
+        )
+        return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
+
+    def _exchange_code_for_token(self, code: str, redirect_uri: str) -> dict[str, Any]:
+        return self._post_json(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": self._settings.google_oauth_client_id.strip(),
+                "client_secret": self._settings.google_oauth_client_secret.strip(),
+                "redirect_uri": redirect_uri,
+                "grant_type": "authorization_code",
+            },
+        )
+
+    def _fetch_sites(self, access_token: str) -> list[dict[str, Any]]:
+        payload = self._get_json(
+            "https://www.googleapis.com/webmasters/v3/sites",
+            headers={"Authorization": f"Bearer {access_token}"},
+        )
+        properties: list[dict[str, Any]] = []
+        for item in payload.get("siteEntry", []) or []:
+            if not isinstance(item, dict):
+                continue
+            site_url = str(item.get("siteUrl") or "").strip()
+            if not site_url:
+                continue
+            permission_level = str(item.get("permissionLevel") or "").strip()
+            properties.append(
+                {
+                    "name": site_url,
+                    "account_id": site_url,
+                    "site_url": site_url,
+                    "permission_level": permission_level,
+                    "property_type": "domain" if site_url.startswith("sc-domain:") else "url_prefix",
+                    "status": "connected",
+                }
+            )
+        return properties
 
 
 class TikTokOAuthService(BasePartnerOAuthService):

@@ -231,6 +231,7 @@ class DiagnosticsService:
             "platforms": [
                 self.platform(platform.provider, live=live, provider_configs=provider_configs, provider_sources=provider_sources, registry=registry, oauth=oauth_by_provider.get(platform.provider, {}))
                 for platform in PLATFORMS
+                if platform.provider in PROVIDER_NAMES
             ],
         }
 
