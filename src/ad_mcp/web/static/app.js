@@ -45,6 +45,7 @@
     notice: null,
     diagnosticsRun: false,
     seoReport: null,
+    seoFilters: { siteUrl: "__all", days: "28" },
     siteAnalysisCopy: {},
     siteAnalysisHistory: [],
   };
@@ -116,6 +117,7 @@
     el.seoPanel = document.getElementById("seo-panel");
     el.seoNotice = document.getElementById("seo-notice");
     el.seoRefresh = document.getElementById("seo-refresh");
+    el.seoToolbar = document.getElementById("seo-toolbar");
     el.reportLoadingModal = document.getElementById("report-loading-modal");
     el.nextSteps = document.getElementById("next-steps");
     el.mcpUrl = document.getElementById("mcp-url");
@@ -571,6 +573,8 @@
     });
     el.connectionsRefresh.addEventListener("click", () => loadConnections());
     if (el.seoRefresh) el.seoRefresh.addEventListener("click", () => loadSeoReport({ force: true }));
+    if (el.seoToolbar) el.seoToolbar.addEventListener("change", handleSeoFilterChange);
+    if (el.seoToolbar) el.seoToolbar.addEventListener("click", handleSeoToolbarClick);
     el.diagRun.addEventListener("click", () => runDiagnostics());
     if (el.siteAnalysisForm) {
       el.siteAnalysisForm.addEventListener("submit", runSiteAnalysis);
@@ -1662,7 +1666,11 @@
     }
     if (el.seoRefresh) setLoading(el.seoRefresh, true);
     try {
-      const report = await api("/api/seo/search-console");
+      const params = new URLSearchParams({
+        site_url: state.seoFilters.siteUrl || "__all",
+        days: state.seoFilters.days || "28",
+      });
+      const report = await api(`/api/seo/search-console?${params.toString()}`);
       state.seoReport = report;
       renderSeoReport(report);
     } catch (error) {
@@ -1677,6 +1685,7 @@
     if (!el.seoPanel) return;
     if (!report || report.status === "not_connected") {
       el.seoNotice.innerHTML = "";
+      renderSeoToolbar(report);
       el.seoPanel.innerHTML = `
         <div class="seo-empty">
           <div>
@@ -1691,39 +1700,144 @@
       });
       return;
     }
+    renderSeoToolbar(report);
     if (report.status !== "ok") {
       el.seoNotice.innerHTML = noticeMarkup(report.message || "Не удалось получить SEO-отчет.", "error");
-      el.seoPanel.innerHTML = renderSeoProperties(report.properties || [], report.selected_property);
+      el.seoPanel.innerHTML = renderSeoProperties(report.property_summaries || report.properties || [], report.selected_property);
       return;
     }
     el.seoNotice.innerHTML = "";
     const metrics = report.metrics || {};
     const range = report.date_range || {};
+    const deltas = report.deltas || {};
     el.seoPanel.innerHTML = `
       <div class="seo-report-head">
         <div>
-          <h3 class="card__title">${esc(report.selected_property?.site_url || report.selected_property?.account_id || "Search Console")}</h3>
-          <p class="card__hint">Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Данные берутся из Search Console в read-only режиме.</p>
+          <span class="seo-eyebrow">Google Search Console</span>
+          <h3 class="seo-title">${esc(seoSelectedTitle(report.selected_property))}</h3>
+          <p class="card__hint">Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Данные read-only, без изменений в Search Console.</p>
         </div>
-        <button type="button" class="btn btn--secondary btn--small" data-seo-connect>Переподключить</button>
+        <div class="seo-report-actions">
+          <button type="button" class="btn btn--secondary btn--small" data-seo-export="html">Скачать отчет</button>
+          <button type="button" class="btn btn--secondary btn--small" data-seo-export="csv">CSV</button>
+          <button type="button" class="btn btn--secondary btn--small" data-seo-connect>Переподключить</button>
+        </div>
       </div>
       <div class="stats-grid seo-stats">
-        ${stat("Клики", esc(formatNumber(metrics.clicks)))}
-        ${stat("Показы", esc(formatNumber(metrics.impressions)))}
-        ${stat("CTR", esc(formatPercent(metrics.ctr)))}
-        ${stat("Средняя позиция", esc(formatNumber(metrics.position)))}
+        ${seoMetricCard("Клики", metrics.clicks, deltas.clicks, "number")}
+        ${seoMetricCard("Показы", metrics.impressions, deltas.impressions, "number")}
+        ${seoMetricCard("CTR", metrics.ctr, deltas.ctr, "percent")}
+        ${seoMetricCard("Средняя позиция", metrics.position, deltas.position, "number")}
       </div>
-      ${renderSeoProperties(report.properties || [], report.selected_property)}
+      ${renderSeoInsights(report.insights || [])}
+      ${renderSeoProperties(report.property_summaries || [], report.selected_property)}
       <div class="seo-grid">
         ${renderSeoTable("Топ запросов", report.top_queries || [], "query")}
         ${renderSeoTable("Топ страниц", report.top_pages || [], "page")}
       </div>
       ${renderSeoOpportunities(report.opportunities || [])}
+      ${renderSeoTrend(report.trend || [])}
       ${renderSeoSitemaps(report.sitemaps || {})}
     `;
     el.seoPanel.querySelector("[data-seo-connect]")?.addEventListener("click", (event) => {
       startOAuth("google_search_console", event.currentTarget);
     });
+    el.seoPanel.querySelectorAll("[data-seo-export]").forEach((button) => {
+      button.addEventListener("click", () => exportSeoReport(button.dataset.seoExport));
+    });
+  }
+
+  function renderSeoToolbar(report) {
+    if (!el.seoToolbar) return;
+    const properties = report?.properties || [];
+    if (!properties.length) {
+      el.seoToolbar.hidden = true;
+      el.seoToolbar.innerHTML = "";
+      return;
+    }
+    const current = state.seoFilters.siteUrl || "__all";
+    el.seoToolbar.hidden = false;
+    el.seoToolbar.innerHTML = `
+      <label class="field seo-toolbar__field">
+        <span class="field__label">Ресурс</span>
+        <select id="seo-property">
+          <option value="__all" ${current === "__all" ? "selected" : ""}>Все ресурсы</option>
+          ${properties.map((property) => {
+            const value = property.site_url || property.account_id || "";
+            return `<option value="${escAttr(value)}" ${current === value ? "selected" : ""}>${esc(property.site_url || property.name || value)}</option>`;
+          }).join("")}
+        </select>
+      </label>
+      <label class="field seo-toolbar__field seo-toolbar__field--period">
+        <span class="field__label">Период</span>
+        <select id="seo-days">
+          ${[7, 28, 90].map((days) => `<option value="${days}" ${String(state.seoFilters.days) === String(days) ? "selected" : ""}>${days} дней</option>`).join("")}
+        </select>
+      </label>
+      <div class="seo-toolbar__meta">
+        <span>${properties.length} ${pluralRu(properties.length, "ресурс", "ресурса", "ресурсов")}</span>
+        <span>Источник: Search Console API</span>
+      </div>
+    `;
+  }
+
+  function handleSeoFilterChange(event) {
+    if (event.target?.id === "seo-property") {
+      state.seoFilters.siteUrl = event.target.value || "__all";
+      loadSeoReport({ force: true });
+    }
+    if (event.target?.id === "seo-days") {
+      state.seoFilters.days = event.target.value || "28";
+      loadSeoReport({ force: true });
+    }
+  }
+
+  function handleSeoToolbarClick(event) {
+    const action = event.target?.dataset?.seoExport;
+    if (action) exportSeoReport(action);
+  }
+
+  function seoSelectedTitle(selected) {
+    if (!selected) return "SEO-отчет";
+    if (selected.site_url === "__all") return "Все ресурсы";
+    return selected.site_url || selected.name || selected.account_id || "SEO-отчет";
+  }
+
+  function seoMetricCard(label, value, delta, type) {
+    const valueText = type === "percent" ? formatPercent(value) : formatNumber(value);
+    const deltaText = seoDeltaText(delta, type);
+    return `
+      <div class="stat seo-stat">
+        <span class="stat__label">${esc(label)}</span>
+        <span class="stat__value">${esc(valueText)}</span>
+        ${deltaText}
+      </div>
+    `;
+  }
+
+  function seoDeltaText(delta, type) {
+    if (!delta || delta.percent === null || delta.percent === undefined) {
+      return `<span class="seo-delta seo-delta--muted">нет сравнения</span>`;
+    }
+    const percent = Math.abs(Number(delta.percent || 0));
+    const sign = delta.direction === "up" ? "+" : delta.direction === "down" ? "-" : "";
+    const tone = delta.improved === true ? "ok" : delta.improved === false ? "warn" : "muted";
+    const suffix = type === "percent" ? ` (${sign}${formatPercent(Math.abs(Number(delta.absolute || 0)))})` : "";
+    return `<span class="seo-delta seo-delta--${tone}">${sign}${formatPercent(percent)} к прошлому периоду${suffix}</span>`;
+  }
+
+  function renderSeoInsights(insights) {
+    if (!insights.length) return "";
+    return `
+      <section class="seo-insights">
+        ${insights.map((insight) => `
+          <article class="seo-insight seo-insight--${escAttr(insight.tone || "info")}">
+            <strong>${esc(insight.title || "Инсайт")}</strong>
+            <span>${esc(insight.text || "")}</span>
+          </article>
+        `).join("")}
+      </section>
+    `;
   }
 
   function renderSeoProperties(properties, selected) {
@@ -1731,13 +1845,21 @@
     const selectedId = selected?.site_url || selected?.account_id || "";
     return `
       <div class="seo-properties">
-        <h3 class="card__title">Подключенные properties</h3>
-        <div class="platform-card__accounts">
+        <div class="seo-subhead">
+          <h3 class="card__title">Ресурсы Search Console</h3>
+          <span>${properties.length} подключено</span>
+        </div>
+        <div class="seo-property-grid">
           ${properties.map((property) => `
-            <div class="account-row">
-              <span>${esc(property.site_url || property.name || property.account_id || "Property")}</span>
-              <span class="mono">${esc(property.permission_level || "")}${selectedId && selectedId === (property.site_url || property.account_id) ? " · выбрана" : ""}</span>
-            </div>
+            <article class="seo-property ${selectedId && selectedId === (property.site_url || property.account_id) ? "is-selected" : ""}">
+              <strong>${esc(property.site_url || property.name || property.account_id || "Property")}</strong>
+              <span>${esc(property.permission_level || "")}${property.property_type ? ` · ${esc(property.property_type)}` : ""}</span>
+              ${property.metrics ? `<div class="seo-property__metrics">
+                <span>${esc(formatNumber(property.metrics.clicks))} кликов</span>
+                <span>${esc(formatNumber(property.metrics.impressions))} показов</span>
+                <span>CTR ${esc(formatPercent(property.metrics.ctr))}</span>
+              </div>` : property.message ? `<small>${esc(property.message)}</small>` : ""}
+            </article>
           `).join("")}
         </div>
       </div>
@@ -1791,6 +1913,22 @@
     `;
   }
 
+  function renderSeoTrend(rows) {
+    if (!rows.length) return "";
+    const max = Math.max(...rows.map((row) => Number(row.clicks || 0)), 1);
+    return `
+      <section class="seo-table">
+        <h3 class="card__title">Динамика кликов</h3>
+        <div class="seo-trend">
+          ${rows.map((row) => {
+            const height = Math.max(4, Math.round((Number(row.clicks || 0) / max) * 100));
+            return `<div class="seo-trend__bar" title="${escAttr(row.date || "")}: ${escAttr(formatNumber(row.clicks))} кликов"><span style="height:${height}%"></span><small>${esc(String(row.date || "").slice(5))}</small></div>`;
+          }).join("")}
+        </div>
+      </section>
+    `;
+  }
+
   function renderSeoSitemaps(sitemaps) {
     const items = sitemaps.items || [];
     return `
@@ -1801,6 +1939,7 @@
             ${items.map((item) => `
               <div class="seo-row">
                 <strong>${esc(item.path || "sitemap")}</strong>
+                ${item.site_url ? `<span>${esc(item.site_url)}</span>` : ""}
                 <span>Ошибки: ${esc(item.errors ?? 0)}</span>
                 <span>Предупреждения: ${esc(item.warnings ?? 0)}</span>
                 <span>${item.last_downloaded ? `Скачан: ${esc(item.last_downloaded)}` : "Еще не скачан"}</span>
@@ -1810,6 +1949,64 @@
         ` : emptyState("В Search Console не найдено отправленных sitemap для выбранной property.")}
       </section>
     `;
+  }
+
+  function exportSeoReport(kind) {
+    const report = state.seoReport;
+    if (!report || report.status !== "ok") {
+      showClientMessage("Отчет пока не готов", "Сначала загрузите SEO-отчет по подключенному ресурсу.", "warn");
+      return;
+    }
+    if (kind === "csv") {
+      downloadText(`seo-report-${safeFileDate()}.csv`, seoCsv(report), "text/csv;charset=utf-8");
+      return;
+    }
+    downloadText(`seo-report-${safeFileDate()}.html`, seoHtml(report), "text/html;charset=utf-8");
+  }
+
+  function seoCsv(report) {
+    const rows = [["type", "name", "clicks", "impressions", "ctr", "position"]];
+    (report.top_queries || []).forEach((row) => rows.push(["query", row.query, row.clicks, row.impressions, row.ctr, row.position]));
+    (report.top_pages || []).forEach((row) => rows.push(["page", row.page, row.clicks, row.impressions, row.ctr, row.position]));
+    return rows.map((row) => row.map((cell) => `"${String(cell ?? "").replace(/"/g, '""')}"`).join(",")).join("\n");
+  }
+
+  function seoHtml(report) {
+    const metrics = report.metrics || {};
+    const range = report.date_range || {};
+    return `<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>SEO отчет ${esc(seoSelectedTitle(report.selected_property))}</title>
+      <style>body{font-family:Arial,sans-serif;max-width:980px;margin:32px auto;color:#1f2937;line-height:1.5}h1,h2{margin:0 0 12px}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{border:1px solid #d1d5db;border-radius:8px;padding:14px;margin:12px 0}.metric strong{display:block;font-size:24px}table{width:100%;border-collapse:collapse;margin:12px 0}td,th{border-bottom:1px solid #e5e7eb;padding:8px;text-align:left}small{color:#6b7280}</style>
+    </head><body>
+      <h1>SEO отчет: ${esc(seoSelectedTitle(report.selected_property))}</h1>
+      <p><small>Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Источник: Google Search Console.</small></p>
+      <section class="grid">
+        <div class="card metric"><span>Клики</span><strong>${esc(formatNumber(metrics.clicks))}</strong></div>
+        <div class="card metric"><span>Показы</span><strong>${esc(formatNumber(metrics.impressions))}</strong></div>
+        <div class="card metric"><span>CTR</span><strong>${esc(formatPercent(metrics.ctr))}</strong></div>
+        <div class="card metric"><span>Позиция</span><strong>${esc(formatNumber(metrics.position))}</strong></div>
+      </section>
+      <h2>Инсайты</h2><ul>${(report.insights || []).map((item) => `<li><strong>${esc(item.title || "")}</strong>: ${esc(item.text || "")}</li>`).join("")}</ul>
+      <h2>Топ запросов</h2>${seoHtmlTable(report.top_queries || [], "query")}
+      <h2>Топ страниц</h2>${seoHtmlTable(report.top_pages || [], "page")}
+      <h2>Запросы для роста</h2>${seoHtmlTable(report.opportunities || [], "query")}
+    </body></html>`;
+  }
+
+  function seoHtmlTable(rows, key) {
+    if (!rows.length) return "<p>Данных нет.</p>";
+    return `<table><thead><tr><th>Название</th><th>Клики</th><th>Показы</th><th>CTR</th><th>Позиция</th></tr></thead><tbody>${rows.map((row) => `<tr><td>${esc(row[key] || "")}</td><td>${esc(formatNumber(row.clicks))}</td><td>${esc(formatNumber(row.impressions))}</td><td>${esc(formatPercent(row.ctr))}</td><td>${esc(formatNumber(row.position))}</td></tr>`).join("")}</tbody></table>`;
+  }
+
+  function downloadText(filename, text, type) {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
   }
 
   /* ---------- connections ---------- */
@@ -2813,6 +3010,15 @@
     const number = Number(value || 0);
     if (!Number.isFinite(number)) return "0%";
     return `${(number * 100).toLocaleString("ru-RU", { maximumFractionDigits: 2 })}%`;
+  }
+
+  function pluralRu(count, one, few, many) {
+    const number = Math.abs(Number(count || 0));
+    const mod10 = number % 10;
+    const mod100 = number % 100;
+    if (mod10 === 1 && mod100 !== 11) return one;
+    if (mod10 >= 2 && mod10 <= 4 && (mod100 < 12 || mod100 > 14)) return few;
+    return many;
   }
 
   async function copyText(text) {

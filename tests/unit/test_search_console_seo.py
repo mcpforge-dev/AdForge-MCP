@@ -96,6 +96,55 @@ def test_search_console_report_uses_workspace_connection_and_hides_secrets(tmp_p
     assert "refresh-token" not in str(report)
 
 
+def test_search_console_report_aggregates_and_filters_multiple_properties(tmp_path: Path) -> None:
+    settings = _settings(tmp_path)
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "google_search_console",
+        {
+            "provider": "google_search_console",
+            "accounts": [
+                {
+                    "name": "https://holymedia.kz/",
+                    "account_id": "https://holymedia.kz/",
+                    "site_url": "https://holymedia.kz/",
+                    "permission_level": "siteOwner",
+                    "oauth_client_id": "client-id",
+                    "oauth_client_secret": "client-secret",
+                    "refresh_token": "refresh-token",
+                },
+                {
+                    "name": "https://example.kz/",
+                    "account_id": "https://example.kz/",
+                    "site_url": "https://example.kz/",
+                    "permission_level": "siteFullUser",
+                    "oauth_client_id": "client-id",
+                    "oauth_client_secret": "client-secret",
+                    "refresh_token": "refresh-token",
+                },
+            ],
+        },
+        workspace_id="workspace-1",
+    )
+    user = type("User", (), {"workspace_id": "workspace-1"})()
+    service = SearchConsoleReportService(settings, _FakeSearchConsoleHTTP())
+
+    report = service.report(user)
+
+    assert report["status"] == "ok"
+    assert report["selected_property"]["site_url"] == "__all"
+    assert report["metrics"]["clicks"] == 24
+    assert len(report["property_summaries"]) == 2
+    assert report["top_queries"][0]["clicks"] == 10
+    assert report["sitemaps"]["count"] == 2
+
+    selected = service.report(user, site_url="https://example.kz/")
+
+    assert selected["status"] == "ok"
+    assert selected["selected_property"]["site_url"] == "https://example.kz/"
+    assert selected["metrics"]["clicks"] == 12
+
+
 def test_search_console_report_returns_not_connected_for_empty_workspace(tmp_path: Path) -> None:
     report = SearchConsoleReportService(_settings(tmp_path), _FakeSearchConsoleHTTP()).report(
         type("User", (), {"workspace_id": "workspace-1"})()
