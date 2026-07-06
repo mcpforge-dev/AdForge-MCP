@@ -58,7 +58,7 @@ echo "Checking out staging commit: ${target_commit:0:12}"
 run_as_service_user git checkout --detach "$target_commit"
 
 echo "Installing Python package in staging virtualenv..."
-run_as_service_user ./.venv/bin/python -m pip install -e ".[google,meta]"
+run_as_service_user ./.venv/bin/python -m pip install -e ".[google,meta,postgres,site-audit]"
 
 echo "Restarting staging services..."
 for service in "$WEB_SERVICE" "$MCP_SERVICE"; do

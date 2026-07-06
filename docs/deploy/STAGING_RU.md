@@ -66,8 +66,10 @@ sudo -u adforge git clone git@github.com:mcpforge-dev/adforge-mcp.git /opt/adfor
 cd /opt/adforge-mcp-staging
 sudo -u adforge python3.11 -m venv .venv
 sudo -u adforge ./.venv/bin/python -m pip install --upgrade pip
-sudo -u adforge ./.venv/bin/python -m pip install -e ".[google,meta]"
+sudo -u adforge ./.venv/bin/python -m pip install -e ".[google,meta,postgres,site-audit]"
 ```
+
+`postgres` нужен для `AD_MCP_DATABASE_URL=postgresql://...`; без него регистрация и вход падают на отсутствии `psycopg`. `site-audit` нужен для AI-анализа сайта, Playwright-render и screenshot evidence.
 
 Создайте пустой staging storage:
 
@@ -88,6 +90,22 @@ sudo -u postgres psql -c "ALTER USER adforge_staging_user WITH PASSWORD 'CHANGE_
 
 Пароль не храните в repo и не выводите в отчеты. В staging env используйте отдельный `AD_MCP_DATABASE_URL`.
 
+После заполнения staging env примените auth schema именно к staging DB:
+
+```bash
+cd /opt/adforge-mcp-staging
+sudo -u adforge bash -lc 'set -a; . /etc/adforge-mcp/adforge-mcp-staging.env; set +a; ./.venv/bin/python - <<PY
+from ad_mcp.settings import Settings
+from ad_mcp.web.auth_store import AuthStore
+s = Settings(project_root="/opt/adforge-mcp-staging")
+store = AuthStore(s)
+store.ensure_schema()
+print(store.diagnostics()["status"])
+PY'
+```
+
+Ожидаемо: `ok`. Если schema не создана, email/password регистрация и вход не будут работать.
+
 ## Staging env
 
 ```bash
@@ -105,6 +123,9 @@ sudo chmod 640 /etc/adforge-mcp/adforge-mcp-staging.env
 - `AD_MCP_MCP_PUBLIC_URL=https://staging-mcp.holymedia.kz/mcp`;
 - `AD_MCP_WEB_API_TOKEN` с отдельным staging token;
 - `AD_MCP_DATABASE_URL` указывает на `adforge_mcp_staging`;
+- `AD_MCP_AUTH_ENABLED=true`;
+- `AD_MCP_AUTH_ALLOW_PUBLIC_REGISTRATION` совпадает с live-политикой;
+- `AD_MCP_AUTH_REGISTRATION_CODE` задан отдельным staging-кодом, если live требует код регистрации;
 - `AD_MCP_AUTH_SESSION_COOKIE_NAME=adforge_staging_session`;
 - `AD_MCP_PROFILE_UPLOAD_DIR=/var/lib/adforge-mcp-staging/uploads`;
 - `AD_MCP_PREVIEW_ONLY=true`;
@@ -181,13 +202,29 @@ unset ADFORGE_MCP_CLIENT_TOKEN
 
 - главная страница открывается;
 - login/logout работают;
-- register работает только если разрешен staging env;
+- register работает согласно staging auth policy: без кода должен возвращать `registration_code_required`, если задан `AD_MCP_AUTH_REGISTRATION_CODE`; с правильным staging-кодом должен создать session cookie;
+- logout через браузерный same-origin запрос возвращает `200`;
 - dashboard открывается;
 - AI-анализ сайта работает;
 - экспорт отчета работает;
 - mobile layout не ломается;
 - OAuth отключен или явно работает на staging callbacks;
 - live `https://mcp.holymedia.kz` продолжает проходить `/health`, `/ready`, `/mcp` без token = `401`.
+
+Минимальная API-проверка auth без вывода registration code:
+
+```bash
+cd /opt/adforge-mcp-staging
+sudo -u adforge bash -lc 'set -a; . /etc/adforge-mcp/adforge-mcp-staging.env; set +a; ./.venv/bin/python - <<PY
+from ad_mcp.settings import Settings
+from ad_mcp.web.auth_store import AuthStore
+s = Settings(project_root="/opt/adforge-mcp-staging")
+d = AuthStore(s).diagnostics()
+print(d["status"], d["driver"], d["users"], d["active_sessions"])
+PY'
+```
+
+Ожидаемо: `ok postgres ...`. Это подтверждает, что staging использует отдельную PostgreSQL DB, а не live user database.
 
 ## Деплой на staging
 
