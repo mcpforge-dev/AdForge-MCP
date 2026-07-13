@@ -998,11 +998,15 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
                 return self._send_json({"ok": True, "email": user.email})
             if route == "/oauth/register":
+                if not self._ensure_rate_limit("oauth_register", limit=self.settings.auth_registration_rate_limit):
+                    return
                 self.auth.ensure_schema()
                 payload = self._json_body()
                 result = self.auth.register_mcp_oauth_client(payload)
                 return self._send_json(result, HTTPStatus.CREATED)
             if route == "/oauth/token":
+                if not self._ensure_rate_limit("oauth_token", limit=self.settings.auth_login_rate_limit):
+                    return
                 self.auth.ensure_schema()
                 payload = self._form_body()
                 if payload.get("grant_type") != "authorization_code":

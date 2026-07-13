@@ -1269,7 +1269,7 @@
           ${renderScorecards(analysis.scores || [])}
           ${renderTopIssues(analysis.top_issues || [])}
         </div>
-        <div class="site-result-panel" data-site-panel="hero" hidden>${renderReadyHero(analysis.ready_hero || {})}</div>
+        <div class="site-result-panel" data-site-panel="hero" hidden>${renderFirstScreenReview(analysis.first_screen_review || {})}${renderReadyHero(analysis.ready_hero || {})}</div>
         <div class="site-result-panel" data-site-panel="day" hidden>${renderOneDayPlan(analysis.one_day_plan || [])}</div>
         <div class="site-result-panel" data-site-panel="wins" hidden>${renderQuickWins(analysis.quick_wins || [])}</div>
         <div class="site-result-panel" data-site-panel="copy" hidden>${renderRewrittenCopy(analysis.rewritten_copy || {})}</div>
@@ -1445,12 +1445,54 @@
     `).join("")}</div></div>`;
   }
 
+  function renderFirstScreenReview(review) {
+    if (!review || !Object.keys(review).length) return "";
+    const found = review.found || {};
+    const screenshot = review.screenshot || {};
+    const visual = screenshot.visual_analysis || {};
+    const example = review.example_hero || {};
+    return `<div class="site-analysis-block">
+      <h3>${esc(review.title || "Разбор первого экрана")}</h3>
+      <div class="site-copy-grid">
+        <div>
+          <h4>Что понятно за 5 секунд</h4>
+          <p>${esc(review.five_second_takeaway || "")}</p>
+          <small>${esc(review.evidence_note || "")}</small>
+        </div>
+        <div>
+          <h4>Что найдено</h4>
+          <p><strong>H1:</strong> ${esc(found.h1 || "не найден")}</p>
+          <p><strong>CTA:</strong> ${esc((found.ctas || []).join(", ") || "не найден")}</p>
+          <p><strong>Доверие:</strong> ${esc((found.trust_near_cta || []).join(", ") || "нужно усилить")}</p>
+        </div>
+        <div>
+          <h4>Визуальные сигналы</h4>
+          <p>${screenshot.captured ? `Скриншот: ${esc(String(screenshot.viewport?.width || ""))}x${esc(String(screenshot.viewport?.height || ""))}` : "Скриншот не получен"}</p>
+          <p>${visual.available ? `Тема: ${esc(visual.theme_guess || "mixed")}, яркость: ${esc(String(visual.average_luma || ""))}` : "Pillow-анализ недоступен"}</p>
+          <ul>${(found.visual_notes || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul>
+        </div>
+        <div>
+          <h4>Что мешает заявке</h4>
+          <ul>${(review.friction || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul>
+        </div>
+      </div>
+      <div class="site-analysis-cardlet">
+        <h4>${esc(example.label || "Пример первого экрана, не финальный дизайн")}</h4>
+        <p><strong>H1:</strong> ${esc(example.h1 || "")}</p>
+        <p><strong>Subtitle:</strong> ${esc(example.subtitle || "")}</p>
+        <p><strong>CTA:</strong> ${esc(example.primary_cta || "")}${example.secondary_cta ? ` / ${esc(example.secondary_cta)}` : ""}</p>
+        <p><strong>Визуальное направление:</strong> ${esc(example.visual_direction || "")}</p>
+        <div class="site-trust-chips">${(example.trust_elements || []).map((item) => `<span>${esc(item)}</span>`).join("")}</div>
+      </div>
+    </div>`;
+  }
+
   function renderReadyHero(hero) {
     if (!hero || !Object.keys(hero).length) return "";
-    return `<div class="site-analysis-block"><h3>${esc(hero.title || "Готовый первый экран")}</h3>
+    return `<div class="site-analysis-block"><h3>${esc(hero.title || "Пример первого экрана")}</h3>
       <div class="site-hero-preview">
         <div class="site-hero-preview__copy">
-          <span>готово для дизайнера</span>
+          <span>пример для дизайнера</span>
           <h4>${esc(hero.h1 || "")}</h4>
           <p>${esc(hero.subheadline || "")}</p>
           <div class="site-hero-buttons">
@@ -1519,6 +1561,10 @@
       `Главный риск: ${analysis.verdict?.main_risk || ""}`,
       `Быстрый выигрыш: ${analysis.verdict?.fastest_win || ""}`,
       "",
+      "## Разбор первого экрана",
+      analysis.first_screen_review?.five_second_takeaway || "",
+      ...((analysis.first_screen_review?.friction || []).map((x) => `- ${x}`)),
+      "",
       "## Топ улучшений",
       ...(analysis.top_issues || []).map((x) => `- ${x.priority}: ${x.title}. ${x.what_to_do}`),
       "",
@@ -1535,7 +1581,7 @@
     const copy = analysis.rewritten_copy || {};
     if (hero && Object.keys(hero).length) {
       return [
-        "## Готовый первый экран",
+        "## Пример первого экрана",
         `H1: ${hero.h1 || ""}`,
         `Подзаголовок: ${hero.subheadline || ""}`,
         `Основная кнопка: ${hero.primary_button || ""}`,
@@ -1581,6 +1627,9 @@
     const oneDayRows = (analysis.one_day_plan || []).map((x) => `<tr><td>${esc(x.task)}</td><td>${esc(x.owner)}</td><td>${esc(x.time)}</td><td>${esc(x.expected_effect)}</td><td>${esc(x.placement)}</td></tr>`).join("");
     const copy = analysis.rewritten_copy || {};
     const hero = analysis.ready_hero || {};
+    const firstScreen = analysis.first_screen_review || {};
+    const firstFound = firstScreen.found || {};
+    const firstExample = firstScreen.example_hero || {};
     return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
       <style>
         @page{margin:22mm 18mm}
@@ -1623,7 +1672,16 @@
       </div>
       <h2>Оценка по направлениям</h2><table><tr><th>Направление</th><th>Оценка</th><th>Комментарий</th></tr>${scoreRows}</table>
       <h2>Топ улучшений</h2><table><tr><th>Приоритет</th><th>Проблема</th><th>Что сделать</th><th>Что найдено</th></tr>${issueRows}</table>
-      <h2>Готовый первый экран</h2>
+      <h2>Разбор первого экрана</h2>
+      <div class="section-note">
+        <p>${esc(firstScreen.five_second_takeaway || "")}</p>
+        <p><strong>H1:</strong> ${esc(firstFound.h1 || "не найден")}</p>
+        <p><strong>CTA:</strong> ${esc((firstFound.ctas || []).join(", ") || "не найден")}</p>
+        <p><strong>Что мешает заявке:</strong></p>
+        <ul>${(firstScreen.friction || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>
+        <p><strong>${esc(firstExample.label || "Пример первого экрана, не финальный дизайн")}</strong></p>
+      </div>
+      <h2>Пример первого экрана</h2>
       <div class="hero-box">
         <h3>${esc(hero.h1 || "")}</h3>
         <p>${esc(hero.subheadline || "")}</p>

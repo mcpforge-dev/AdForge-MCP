@@ -35,7 +35,10 @@ postgres = [
 site-audit = [
   "beautifulsoup4>=4.12.3",
   "lxml>=5.2.0",
+  "Pillow>=10.4.0",
   "playwright>=1.45.0",
+  "python-docx>=1.1.2",
+  "trafilatura>=1.12.2",
 ]
 dev = [
   "pytest>=8.2.0",

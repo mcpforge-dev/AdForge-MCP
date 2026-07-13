@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from ad_mcp.core.config_loader import load_provider_from_connections
+from ad_mcp.core.secure_files import write_private_json
 from ad_mcp.runtime_context import current_workspace_id
 
 if TYPE_CHECKING:
@@ -522,10 +523,7 @@ class HostedConnectionStore:
         self._write(data)
 
     def _write(self, data: dict[str, Any]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self.path.with_suffix(f"{self.path.suffix}.tmp")
-        tmp_path.write_text(json.dumps(data, ensure_ascii=False, indent=2, sort_keys=True), encoding="utf-8")
-        tmp_path.replace(self.path)
+        write_private_json(self.path, data, sort_keys=True)
 
 
 def load_runtime_provider_configs(

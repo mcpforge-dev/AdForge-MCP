@@ -67,6 +67,7 @@ cd /opt/adforge-mcp-staging
 sudo -u adforge python3.11 -m venv .venv
 sudo -u adforge ./.venv/bin/python -m pip install --upgrade pip
 sudo -u adforge ./.venv/bin/python -m pip install -e ".[google,meta,postgres,site-audit]"
+sudo -u adforge ./.venv/bin/python -m playwright install chromium
 ```
 
 `postgres` нужен для `AD_MCP_DATABASE_URL=postgresql://...`; без него регистрация и вход падают на отсутствии `psycopg`. `site-audit` нужен для AI-анализа сайта, Playwright-render и screenshot evidence.

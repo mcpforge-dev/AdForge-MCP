@@ -249,6 +249,37 @@ def test_mcp_oauth_discovery_registration_authorize_and_token_flow(tmp_path) -> 
     assert reuse_payload["error"] == "invalid_grant"
 
 
+def test_mcp_oauth_registration_rejects_bloated_redirects(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    AuthStore(settings).ensure_schema()
+    base_url, close = _serve(settings)
+    try:
+        too_many_status, too_many, _ = _post_json(
+            base_url,
+            "/oauth/register",
+            {"client_name": "Client", "redirect_uris": [f"https://example.com/callback/{index}" for index in range(11)]},
+        )
+        fragment_status, fragment, _ = _post_json(
+            base_url,
+            "/oauth/register",
+            {"client_name": "Client", "redirect_uris": ["https://example.com/callback#token"]},
+        )
+    finally:
+        close()
+
+    assert too_many_status == 400
+    assert too_many["code"] == "validation_error"
+    assert fragment_status == 400
+    assert fragment["code"] == "validation_error"
+
+
 def test_mcp_oauth_chatgpt_cimd_authorize_and_token_flow(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,

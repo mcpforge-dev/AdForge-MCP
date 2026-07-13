@@ -755,15 +755,22 @@ class AuthStore:
         redirect_uris = payload.get("redirect_uris")
         if not isinstance(redirect_uris, list) or not redirect_uris:
             raise AuthValidationError("OAuth client должен передать redirect_uris.")
+        if len(redirect_uris) > 10:
+            raise AuthValidationError("OAuth client can register at most 10 redirect_uris.")
         normalized_redirects = []
         for value in redirect_uris:
             uri = str(value or "").strip()
+            if len(uri) > 2048:
+                raise AuthValidationError("OAuth redirect_uri is too long.")
             parsed = urlparse(uri)
             if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
                 raise AuthValidationError("OAuth redirect_uri должен быть https или localhost.")
             if not parsed.scheme or not parsed.netloc:
                 raise AuthValidationError("Некорректный OAuth redirect_uri.")
-            normalized_redirects.append(uri)
+            if parsed.fragment:
+                raise AuthValidationError("OAuth redirect_uri must not contain a fragment.")
+            if uri not in normalized_redirects:
+                normalized_redirects.append(uri)
         client_id = f"holymedia_oauth_{uuid.uuid4().hex}"
         timestamp = _now()
         client_name = str(payload.get("client_name") or payload.get("software_id") or "Claude MCP Connector").strip()[:160]

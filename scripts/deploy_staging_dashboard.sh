@@ -59,6 +59,7 @@ run_as_service_user git checkout --detach "$target_commit"
 
 echo "Installing Python package in staging virtualenv..."
 run_as_service_user ./.venv/bin/python -m pip install -e ".[google,meta,postgres,site-audit]"
+run_as_service_user ./.venv/bin/python -m playwright install chromium
 
 echo "Restarting staging services..."
 for service in "$WEB_SERVICE" "$MCP_SERVICE"; do

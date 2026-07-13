@@ -123,7 +123,15 @@ def test_analyze_html_includes_evidence_based_audit_facts() -> None:
     """
     audit_facts = {
         "engine": {"rendered_dom_used": True, "render_reason": "", "static_html_used": True},
-        "screenshot": {"captured": True, "mime": "image/png", "bytes": 1200, "sha256": "abc"},
+        "screenshot": {
+            "captured": True,
+            "mime": "image/png",
+            "bytes": 1200,
+            "sha256": "abc",
+            "viewport": {"width": 1365, "height": 768},
+            "hero_crop": {"x": 0, "y": 0, "width": 1365, "height": 476},
+            "visual_analysis": {"available": True, "theme_guess": "light", "average_luma": 230},
+        },
         "first_screen_blocks": [
             {"tag": "h1", "text": "Hotel in Almaty"},
             {"tag": "button", "text": "Book now"},
@@ -149,6 +157,11 @@ def test_analyze_html_includes_evidence_based_audit_facts() -> None:
     assert evidence["first_screen_blocks"][0]["text"] == "Hotel in Almaty"
     assert evidence["structured_data"]["types"] == ["Hotel"]
     assert evidence["images"]["without_alt"] == 1
+    first_screen = result["first_screen_review"]
+    assert first_screen["title"] == "Разбор первого экрана"
+    assert first_screen["screenshot"]["captured"] is True
+    assert first_screen["example_hero"]["label"] == "Пример первого экрана, не финальный дизайн"
+    assert "Book now" in first_screen["five_second_takeaway"]
 
 
 def test_extract_audit_facts_collects_page_evidence_without_playwright() -> None:

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -36,6 +37,19 @@ def test_connection_store_saves_secrets_but_returns_safe_status(tmp_path: Path) 
     assert "access-token" not in serialized_status
     assert "app-secret" not in serialized_status
     assert status["accounts"][0]["credentials_present"] is True
+
+
+def test_connection_store_file_is_private_on_posix(tmp_path: Path) -> None:
+    store = HostedConnectionStore(tmp_path / "tokens" / "connections.json")
+
+    store.save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": [{"account_id": "act_123", "access_token": "access-token"}]},
+    )
+
+    if os.name == "nt":
+        return
+    assert store.path.stat().st_mode & 0o777 == 0o600
 
 
 def test_runtime_provider_configs_prefer_hosted_store_over_local_config(tmp_path: Path) -> None:

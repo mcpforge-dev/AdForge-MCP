@@ -7,6 +7,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ad_mcp.core.secure_files import write_private_json
 from ad_mcp.settings import Settings
 
 
@@ -48,7 +49,4 @@ class SiteAnalysisHistoryStore:
         return payload if isinstance(payload, dict) else {}
 
     def _write(self, payload: dict[str, list[dict[str, Any]]]) -> None:
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = self.path.with_suffix(".tmp")
-        tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-        tmp.replace(self.path)
+        write_private_json(self.path, payload)

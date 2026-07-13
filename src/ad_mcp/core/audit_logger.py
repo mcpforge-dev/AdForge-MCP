@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Any
 
 from ad_mcp.core.redaction import redact_secrets
+from ad_mcp.core.secure_files import restrict_file_to_owner
 
 
 class AuditLogger:
@@ -21,3 +22,4 @@ class AuditLogger:
         }
         with self.path.open("a", encoding="utf-8") as handle:
             handle.write(json.dumps(event, ensure_ascii=True) + "\n")
+        restrict_file_to_owner(self.path)

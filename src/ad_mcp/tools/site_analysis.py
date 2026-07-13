@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import ipaddress
+import io
 import json
 import os
 import re
@@ -279,7 +280,8 @@ def analyze_html(
     parser.feed(html)
     soup_facts = _extract_with_beautifulsoup(html)
     _normalize_parser(parser, audit_facts)
-    text = _clean_text(" ".join(parser.text_parts))
+    extracted_text = _extract_main_text(html)
+    text = _clean_text(" ".join(part for part in [extracted_text, " ".join(parser.text_parts)] if part))
     words = re.findall(r"[A-Za-zА-Яа-яЁё0-9]{3,}", text)
     signals = _signals(parser, text, audit_facts)
     context = _context(site_type, goal, audience, region, mode, competitor, concern)
@@ -291,6 +293,7 @@ def analyze_html(
     rewritten_copy = _rewritten_copy(parser, context)
     implementation_plan = _implementation_plan(top_issues, quick_wins)
     ready_hero = _ready_hero(context)
+    first_screen_review = _first_screen_review(parser, audit_facts or {}, signals, context, ready_hero)
     one_day_plan = _one_day_plan(context, signals)
     result = {
         "status": "ok",
@@ -307,6 +310,7 @@ def analyze_html(
         "quick_wins": quick_wins,
         "rewritten_copy": rewritten_copy,
         "ready_hero": ready_hero,
+        "first_screen_review": first_screen_review,
         "one_day_plan": one_day_plan,
         "recommended_structure": _recommended_structure(context),
         "implementation_plan": implementation_plan,
@@ -498,12 +502,13 @@ def _rendered_page_evidence(url: str) -> dict[str, Any]:
             screenshot = page.screenshot(full_page=False, type="png", timeout=5000)
             html = page.content()[:MAX_HTML_BYTES]
             browser.close()
+        screenshot_meta = _screenshot_metadata(screenshot)
         return {
             "html": html,
             "final_url": final_url,
             "status": int(response.status if response else 200),
             "truncated": len(html) >= MAX_HTML_BYTES,
-            "screenshot": {
+            "screenshot": screenshot_meta | {
                 "captured": True,
                 "mime": "image/png",
                 "bytes": len(screenshot),
@@ -526,7 +531,8 @@ def _extract_audit_facts(
     parser = _PageParser()
     parser.feed(html)
     soup_facts = _extract_with_beautifulsoup(html)
-    text = _clean_text(" ".join(parser.text_parts))
+    extracted_text = _extract_main_text(html)
+    text = _clean_text(" ".join(part for part in [extracted_text, " ".join(parser.text_parts)] if part))
     links = _extract_links(html, url)
     structured = _extract_structured_data(html)
     first_screen_blocks = _dedupe_blocks((rendered_facts or {}).get("first_screen_blocks") or _fallback_first_screen_blocks(parser))
@@ -561,6 +567,7 @@ def _extract_audit_facts(
         "links": links,
         "images": images,
         "structured_data": structured,
+        "main_text": {"available": bool(extracted_text), "chars": len(extracted_text)},
         "word_count": len(re.findall(r"[A-Za-zА-Яа-яЁё0-9]{3,}", text)),
         "first_screen_blocks": first_screen_blocks[:FIRST_SCREEN_LIMIT],
         "first_screen_text": _clean_text(" ".join(item.get("text", "") for item in first_screen_blocks))[:1500],
@@ -569,6 +576,45 @@ def _extract_audit_facts(
         "pagespeed": _pagespeed_signals(url),
     }
     return facts
+
+
+def _screenshot_metadata(content: bytes) -> dict[str, Any]:
+    if not content:
+        return {"visual_analysis": {"available": False, "reason": "empty_screenshot"}}
+    try:
+        from PIL import Image, ImageStat
+    except Exception:
+        return {"visual_analysis": {"available": False, "reason": "pillow_not_installed"}}
+    try:
+        with Image.open(io.BytesIO(content)) as image:
+            image = image.convert("RGB")
+            width, height = image.size
+            sample = image.resize((max(1, min(180, width)), max(1, min(120, height))))
+            stat = ImageStat.Stat(sample)
+            r, g, b = [float(value) for value in stat.mean[:3]]
+            luma = (0.2126 * r + 0.7152 * g + 0.0722 * b)
+            pixels = list(sample.getdata())
+            total = max(1, len(pixels))
+            dark_share = sum(1 for pr, pg, pb in pixels if (0.2126 * pr + 0.7152 * pg + 0.0722 * pb) < 55) / total
+            light_share = sum(1 for pr, pg, pb in pixels if (0.2126 * pr + 0.7152 * pg + 0.0722 * pb) > 220) / total
+            colorfulness = round((abs(r - g) + abs(g - b) + abs(b - r)) / 3, 1)
+            hero_height = max(1, round(height * 0.62))
+            return {
+                "width": width,
+                "height": height,
+                "viewport": {"width": width, "height": height},
+                "hero_crop": {"x": 0, "y": 0, "width": width, "height": hero_height},
+                "visual_analysis": {
+                    "available": True,
+                    "average_luma": round(luma, 1),
+                    "dark_share": round(dark_share, 3),
+                    "light_share": round(light_share, 3),
+                    "colorfulness": colorfulness,
+                    "theme_guess": "dark" if dark_share > 0.45 else "light" if light_share > 0.45 else "mixed",
+                },
+            }
+    except Exception as exc:
+        return {"visual_analysis": {"available": False, "reason": f"pillow_failed:{type(exc).__name__}"}}
 
 
 def _group_cta_candidates(candidates: list[dict[str, Any]]) -> dict[str, list[str]]:
@@ -608,6 +654,17 @@ def _extract_with_beautifulsoup(html: str) -> dict[str, Any]:
         "h2": [_clean_text(node.get_text(" ")) for node in soup.find_all("h2") if _clean_text(node.get_text(" "))],
         "h3": [_clean_text(node.get_text(" ")) for node in soup.find_all("h3") if _clean_text(node.get_text(" "))],
     }
+
+
+def _extract_main_text(html: str) -> str:
+    try:
+        import trafilatura
+    except Exception:
+        return ""
+    try:
+        return _clean_text(trafilatura.extract(html, include_comments=False, include_tables=False) or "")[:12_000]
+    except Exception:
+        return ""
 
 
 def _extract_cta_candidates(html: str, first_screen_blocks: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -1606,7 +1663,7 @@ def _ready_hero(context: dict[str, Any]) -> dict[str, Any]:
     if _is_hotel_context(context):
         region = f" в {context['region']}" if context.get("region") else ""
         return {
-            "title": "Готовый первый экран",
+            "title": "Пример первого экрана",
             "h1": f"Отель{region} для деловых поездок, отдыха и мероприятий",
             "subheadline": "Проверьте свободные номера на нужные даты, сравните категории и забронируйте напрямую на официальном сайте.",
             "primary_button": "Проверить свободные номера",
@@ -1625,7 +1682,7 @@ def _ready_hero(context: dict[str, Any]) -> dict[str, Any]:
             ],
         }
     return {
-        "title": "Готовый первый экран",
+        "title": "Пример первого экрана",
         "h1": f"{_capitalize(context['site_type'])}: понятное предложение для цели “{context['goal']}”",
         "subheadline": "Покажите результат, для кого услуга, почему вам можно доверять и какой следующий шаг сделать.",
         "primary_button": _cta_variants(context)[0],
@@ -1634,6 +1691,91 @@ def _ready_hero(context: dict[str, Any]) -> dict[str, Any]:
         "microcopy": "Ответим и подскажем лучший следующий шаг без лишней сложности.",
         "visual": "Фото продукта, команды или результата, которое подтверждает оффер.",
         "trust_elements": ["отзывы", "кейсы", "контакты"],
+    }
+
+
+def _first_screen_review(
+    parser: _PageParser,
+    audit_facts: dict[str, Any],
+    signals: dict[str, Any],
+    context: dict[str, Any],
+    ready_hero: dict[str, Any],
+) -> dict[str, Any]:
+    blocks = [item for item in audit_facts.get("first_screen_blocks", []) if isinstance(item, dict)]
+    h1_values = audit_facts.get("h1") or parser.h1 or []
+    h1 = _clean_text(str(h1_values[0] if h1_values else ""))
+    ctas = _display_cta_texts(list(signals.get("first_screen_booking_ctas") or signals.get("first_screen_ctas") or audit_facts.get("cta_texts") or []))
+    trust_items = _clean_cta_list(list(signals.get("trust_matches", [])) + list(signals.get("hotel_review_matches", [])) + list(signals.get("hotel_location_matches", [])))
+    forms = audit_facts.get("forms", {}) if isinstance(audit_facts.get("forms"), dict) else {}
+    screenshot = audit_facts.get("screenshot", {}) if isinstance(audit_facts.get("screenshot"), dict) else {}
+    visual = screenshot.get("visual_analysis", {}) if isinstance(screenshot.get("visual_analysis"), dict) else {}
+    visual_notes: list[str] = []
+    if visual.get("available"):
+        visual_notes.append(f"Скриншот первого экрана: тема {visual.get('theme_guess')}, средняя яркость {visual.get('average_luma')}.")
+        if float(visual.get("dark_share") or 0) > 0.65 or float(visual.get("light_share") or 0) > 0.72:
+            visual_notes.append("Экран может выглядеть монотонно: стоит проверить контраст CTA, текста и фона.")
+        if float(visual.get("colorfulness") or 0) > 52:
+            visual_notes.append("Цветов много: стоит проверить, не спорят ли акценты между собой.")
+    else:
+        visual_notes.append("Визуальный анализ скриншота недоступен; вывод сделан по DOM и HTML evidence.")
+
+    understood = []
+    understood.append(f"Главный заголовок найден: {h1}" if h1 else "Явный H1 на первом экране не найден.")
+    understood.append(f"CTA на первом экране: {', '.join(ctas[:4])}" if ctas else "Заметный CTA на первом экране не найден в собранных данных.")
+    understood.append(
+        f"Сигналы доверия рядом с первым экраном: {', '.join(trust_items[:4])}"
+        if trust_items
+        else "Сигналы доверия рядом с CTA выражены слабо или не найдены."
+    )
+
+    friction: list[str] = []
+    if not h1:
+        friction.append("Пользователь не получает ясный ответ, куда попал и почему это ему нужно.")
+    if not ctas:
+        friction.append("После 5 секунд непонятно, какой следующий шаг сделать.")
+    if not trust_items:
+        friction.append("Недостаточно доказательств рядом с решением: отзывы, цифры, лицензии, локация, кейсы или гарантии.")
+    if int(forms.get("count") or 0) > 1 and not ctas:
+        friction.append("Формы есть, но вход в сценарий заявки/бронирования не выглядит главным действием.")
+    if not friction:
+        friction.append("Первый экран имеет базовую структуру; основной рост даст усиление оффера, доверия и визуального фокуса.")
+
+    return {
+        "title": "Разбор первого экрана",
+        "method": "rendered_dom_and_screenshot" if screenshot.get("captured") else "html_dom",
+        "screenshot": {
+            "captured": bool(screenshot.get("captured")),
+            "sha256": screenshot.get("sha256", ""),
+            "bytes": screenshot.get("bytes", 0),
+            "viewport": screenshot.get("viewport", {}),
+            "hero_crop": screenshot.get("hero_crop", {}),
+            "visual_analysis": visual,
+        },
+        "five_second_takeaway": " ".join(understood),
+        "found": {
+            "h1": h1,
+            "ctas": ctas,
+            "trust_near_cta": trust_items[:6],
+            "visible_blocks": blocks[:12],
+            "visual_notes": visual_notes,
+        },
+        "friction": friction[:6],
+        "recommendations": [
+            "Сформулировать H1 как конкретный результат для клиента, а не как общее название компании.",
+            "Оставить один главный CTA и один вторичный, чтобы первый экран не спорил сам с собой.",
+            "Поставить рядом с CTA 2-3 доказательства: цифра, отзыв, лицензия, география, кейс или гарантия.",
+            "Использовать реальный визуал продукта, места, результата или команды, а не декоративный фон.",
+        ],
+        "example_hero": {
+            "label": "Пример первого экрана, не финальный дизайн",
+            "h1": ready_hero.get("h1", ""),
+            "subtitle": ready_hero.get("subheadline", ""),
+            "primary_cta": ready_hero.get("primary_button", ""),
+            "secondary_cta": ready_hero.get("secondary_button", ""),
+            "trust_elements": ready_hero.get("trust_elements", []),
+            "visual_direction": ready_hero.get("visual", ""),
+        },
+        "evidence_note": "Выводы основаны на найденных H1/CTA/формах/тексте, rendered DOM и screenshot metadata; это CRO/UX-аудит, не отчёт Search Console.",
     }
 
 
@@ -1847,7 +1989,9 @@ def _evidence(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None
             "links": facts.get("links", {}),
             "images": facts.get("images", {}),
             "structured_data": facts.get("structured_data", {}),
+            "main_text": facts.get("main_text", {}),
             "accessibility": facts.get("accessibility", {}),
+            "visual_analysis": (facts.get("screenshot", {}) if isinstance(facts.get("screenshot"), dict) else {}).get("visual_analysis", {}),
             "pagespeed": facts.get("pagespeed", {"enabled": False}),
         },
     }
