@@ -9,15 +9,18 @@
 - `beautifulsoup4` и `lxml` в optional dependency `site-audit` для HTML parsing.
 - `src/ad_mcp/tools/site_analysis.py` с SSRF-safe URL validation, static HTML fetch, Playwright render, CTA extraction, niche rule packs, scoring, quick wins, hero copy и evidence.
 - SEO dashboard с Search Console данными, inline SVG trend chart, CSV/RTF export.
-- Site analysis export в HTML-as-Word `.doc`, который открывается в Word/Google Docs.
+- Исторический Site analysis export в HTML-as-Word `.doc`, который открывался в Word/Google Docs.
 
 ## Что добавлено
 
 - `Pillow` в `site-audit`: анализ screenshot первого экрана, размеры viewport, hero crop metadata, brightness/theme/colorfulness signals.
 - `trafilatura` в `site-audit`: дополнительное извлечение основного текста страницы без замены BeautifulSoup/lxml.
-- `python-docx` в `site-audit`: подготовка к настоящим `.docx` отчётам без HTML-wrapper. Текущий `.doc` export не ломаем.
+- `python-docx` в `site-audit`: серверная генерация настоящего `.docx` отчёта с диагностикой, screenshots, первым экраном, приоритетами и планом внедрения.
 - `scripts/design_audit_playwright.py`: dev-команда для desktop/mobile screenshots, overflow checks и базовых accessibility signals. Результаты сохраняются в `.local/design-audit`, эта папка ignored.
 - `first_screen_review` в AI-анализе сайта: отдельный блок “Разбор первого экрана” с 5-second takeaway, найденными H1/CTA/trust, friction, visual signals и “Примером первого экрана”.
+- `audit_overview` в AI-анализе сайта: confidence и sources, desktop/mobile screenshot preview, accessibility/mobile UX, HTML/SEO, browser performance и пассивная проверка security headers.
+- Rendered DOM audit: доступные имена кнопок/ссылок, label полей, duplicate IDs, heading order, mobile overflow, touch targets, мелкий текст и landmarks.
+- Response headers audit: HTTPS, CSP, HSTS, clickjacking protection, `nosniff`, Referrer Policy, Permissions Policy и cross-origin policies без активной эксплуатации.
 - Staging deploy устанавливает `.[google,meta,postgres,site-audit]` и Chromium для Playwright.
 
 ## Что не добавлено

@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import logging
 import mimetypes
+import re
 import secrets
 import threading
 import time
@@ -32,6 +33,7 @@ from ad_mcp.web.hosted import HostedConnectionService
 from ad_mcp.web.seo import SearchConsoleReportService
 from ad_mcp.web.service import MetaDashboardService
 from ad_mcp.web.site_analysis_history import SiteAnalysisHistoryStore
+from ad_mcp.web.site_analysis_report import build_site_analysis_docx
 
 
 WEB_ROOT = Path(__file__).resolve().parent
@@ -128,6 +130,17 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         self.send_response(HTTPStatus.OK)
         self._set_default_headers()
         self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if not self._omit_response_body:
+            self.wfile.write(body)
+
+    def _send_download(self, body: bytes, content_type: str, filename: str) -> None:
+        safe_filename = re.sub(r"[^A-Za-z0-9._-]", "-", filename)[:120] or "download.bin"
+        self.send_response(HTTPStatus.OK)
+        self._set_default_headers()
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Disposition", f'attachment; filename="{safe_filename}"')
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         if not self._omit_response_body:
@@ -943,7 +956,32 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     concern=str(payload.get("concern", "")),
                 )
                 history_record = self.site_analysis_history.save(user.id, analysis)
-                return self._send_json({"analysis": analysis, "history_record": history_record})
+                history_summary = {key: value for key, value in history_record.items() if key != "analysis"}
+                return self._send_json({"analysis": analysis, "history_record": history_summary})
+            if route == "/api/site/report.docx":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                payload = self._json_body()
+                history_id = str(payload.get("history_id", "")).strip()
+                history_record = next(
+                    (item for item in self.site_analysis_history.list_for_user(user.id, limit=10) if str(item.get("id", "")) == history_id),
+                    None,
+                )
+                analysis = history_record.get("analysis") if isinstance(history_record, dict) else None
+                if not isinstance(analysis, dict) or analysis.get("status") != "ok":
+                    return self._error("Нет данных для отчёта.", HTTPStatus.BAD_REQUEST, "invalid_site_analysis")
+                try:
+                    report = build_site_analysis_docx(analysis)
+                except RuntimeError:
+                    return self._error("Генератор DOCX временно недоступен.", HTTPStatus.SERVICE_UNAVAILABLE, "docx_unavailable")
+                return self._send_download(
+                    report,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "HolyMedia-MCP-site-audit.docx",
+                )
             if route == "/api/auth/forgot-password":
                 payload = self._json_body()
                 if not self.settings.auth_enabled:

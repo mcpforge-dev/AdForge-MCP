@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import ipaddress
 import io
 import json
@@ -19,6 +20,18 @@ TIMEOUT_SECONDS = 10
 MAX_REDIRECTS = 4
 FIRST_SCREEN_LIMIT = 40
 MAX_FACT_ITEMS = 24
+MAX_SCREENSHOT_PREVIEW_BYTES = 140_000
+PUBLIC_RESPONSE_HEADERS = {
+    "cache-control",
+    "content-security-policy",
+    "cross-origin-opener-policy",
+    "cross-origin-resource-policy",
+    "permissions-policy",
+    "referrer-policy",
+    "strict-transport-security",
+    "x-content-type-options",
+    "x-frame-options",
+}
 BOOKING_CTA_KEYWORDS = [
     "book",
     "booking",
@@ -294,6 +307,7 @@ def analyze_html(
     implementation_plan = _implementation_plan(top_issues, quick_wins)
     ready_hero = _ready_hero(context)
     first_screen_review = _first_screen_review(parser, audit_facts or {}, signals, context, ready_hero)
+    audit_overview = _audit_overview(parser, audit_facts or {}, context)
     one_day_plan = _one_day_plan(context, signals)
     result = {
         "status": "ok",
@@ -311,6 +325,7 @@ def analyze_html(
         "rewritten_copy": rewritten_copy,
         "ready_hero": ready_hero,
         "first_screen_review": first_screen_review,
+        "audit_overview": audit_overview,
         "one_day_plan": one_day_plan,
         "recommended_structure": _recommended_structure(context),
         "implementation_plan": implementation_plan,
@@ -358,10 +373,13 @@ def analyze_html(
                 "rendered_dom_used": bool((audit_facts or {}).get("engine", {}).get("rendered_dom_used")),
                 "render_reason": (audit_facts or {}).get("engine", {}).get("render_reason", ""),
                 "screenshot_captured": bool((audit_facts or {}).get("screenshot", {}).get("captured")),
+                "mobile_screenshot_captured": bool((audit_facts or {}).get("screenshot", {}).get("mobile", {}).get("captured")),
                 "first_screen_blocks": len((audit_facts or {}).get("first_screen_blocks", [])),
                 "extraction_method": (audit_facts or {}).get("extraction_method", "html_parser"),
                 "pagespeed": (audit_facts or {}).get("pagespeed", {"enabled": False}),
             },
+            "accessibility_score": (audit_facts or {}).get("accessibility", {}).get("score"),
+            "passive_security_score": (audit_facts or {}).get("security", {}).get("score"),
             "word_count": len(words),
             "truncated": truncated,
             "technical_check_limited": True,
@@ -415,6 +433,7 @@ def _collect_page_evidence(url: str) -> dict[str, Any]:
         str(rendered.get("final_url") or static_page["final_url"]),
         rendered_facts=rendered.get("facts") if rendered.get("html") else None,
         screenshot=rendered.get("screenshot"),
+        response_headers=static_page.get("headers"),
         engine_status={
             "static_html_used": True,
             "rendered_dom_used": bool(rendered.get("html")),
@@ -444,6 +463,11 @@ def _fetch_static_html(url: str) -> dict[str, Any]:
         final_url = _validate_public_url(str(response.geturl() or url))
         content_type = str(response.headers.get("content-type", ""))
         status = int(getattr(response, "status", 200) or 200)
+        headers = {
+            str(key).lower(): _clean_text(str(value))[:500]
+            for key, value in response.headers.items()
+            if str(key).lower() in PUBLIC_RESPONSE_HEADERS
+        }
         raw = response.read(MAX_HTML_BYTES + 1)
     if "html" not in content_type.lower():
         raise SiteAnalysisError("Ссылка открылась, но это не HTML-страница.")
@@ -452,6 +476,7 @@ def _fetch_static_html(url: str) -> dict[str, Any]:
         "final_url": final_url,
         "status": status,
         "content_type": content_type,
+        "headers": headers,
         "truncated": len(raw) > MAX_HTML_BYTES,
     }
 
@@ -499,10 +524,37 @@ def _rendered_page_evidence(url: str) -> dict[str, Any]:
                   .slice(0, 40)
                 """
             )
+            dom_audit = _rendered_dom_facts(page)
+            performance = _rendered_performance_facts(page)
             screenshot = page.screenshot(full_page=False, type="png", timeout=5000)
             html = page.content()[:MAX_HTML_BYTES]
+            mobile_screenshot = b""
+            mobile_dom: dict[str, Any] = {}
+            mobile_page = None
+            try:
+                mobile_page = browser.new_page(
+                    viewport={"width": 390, "height": 844},
+                    device_scale_factor=1,
+                    is_mobile=True,
+                    has_touch=True,
+                    java_script_enabled=True,
+                )
+                mobile_page.route("**/*", _route_guard)
+                mobile_page.goto(url, wait_until="domcontentloaded", timeout=TIMEOUT_SECONDS * 1000)
+                try:
+                    mobile_page.wait_for_load_state("networkidle", timeout=2000)
+                except PlaywrightError:
+                    pass
+                mobile_dom = _rendered_dom_facts(mobile_page)
+                mobile_screenshot = mobile_page.screenshot(full_page=False, type="png", timeout=5000)
+            except Exception as exc:
+                mobile_dom = {"available": False, "reason": f"mobile_render_failed:{type(exc).__name__}"}
+            finally:
+                if mobile_page is not None:
+                    mobile_page.close()
             browser.close()
         screenshot_meta = _screenshot_metadata(screenshot)
+        mobile_meta = _screenshot_metadata(mobile_screenshot)
         return {
             "html": html,
             "final_url": final_url,
@@ -513,11 +565,121 @@ def _rendered_page_evidence(url: str) -> dict[str, Any]:
                 "mime": "image/png",
                 "bytes": len(screenshot),
                 "sha256": hashlib.sha256(screenshot).hexdigest(),
+                "mobile": mobile_meta
+                | {
+                    "captured": bool(mobile_screenshot),
+                    "mime": "image/png" if mobile_screenshot else "",
+                    "bytes": len(mobile_screenshot),
+                    "sha256": hashlib.sha256(mobile_screenshot).hexdigest() if mobile_screenshot else "",
+                },
             },
-            "facts": {"first_screen_blocks": first_screen},
+            "facts": {
+                "first_screen_blocks": first_screen,
+                "dom_audit": dom_audit,
+                "mobile_dom_audit": mobile_dom,
+                "performance": performance,
+            },
         }
     except Exception as exc:
         return {"reason": f"render_failed:{type(exc).__name__}"}
+
+
+def _rendered_dom_facts(page: Any) -> dict[str, Any]:
+    return page.evaluate(
+        r"""
+        () => {
+          const visible = (el) => {
+            const style = getComputedStyle(el);
+            const rect = el.getBoundingClientRect();
+            return style.display !== 'none' && style.visibility !== 'hidden' && Number(style.opacity || 1) > 0 && rect.width > 0 && rect.height > 0;
+          };
+          const nameOf = (el) => (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || '').replace(/\s+/g, ' ').trim().slice(0, 100);
+          const sample = (items) => items.slice(0, 6).map((el) => nameOf(el) || `${el.tagName.toLowerCase()}${el.id ? '#' + el.id : ''}`);
+          const interactive = Array.from(document.querySelectorAll('a[href],button,input:not([type="hidden"]),select,textarea,[role="button"]')).filter(visible);
+          const buttons = Array.from(document.querySelectorAll('button,[role="button"],input[type="button"],input[type="submit"]')).filter(visible);
+          const links = Array.from(document.querySelectorAll('a[href]')).filter(visible);
+          const fields = Array.from(document.querySelectorAll('input:not([type="hidden"]):not([type="submit"]):not([type="button"]),textarea,select')).filter(visible);
+          const labelled = (el) => {
+            if (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby') || el.getAttribute('title')) return true;
+            if (el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`)) return true;
+            return Boolean(el.closest('label'));
+          };
+          const buttonsWithoutName = buttons.filter((el) => !nameOf(el));
+          const linksWithoutName = links.filter((el) => !nameOf(el) && !el.querySelector('img[alt]:not([alt=""])'));
+          const fieldsWithoutLabel = fields.filter((el) => !labelled(el));
+          const ids = Array.from(document.querySelectorAll('[id]')).map((el) => el.id).filter(Boolean);
+          const duplicateIds = [...new Set(ids.filter((id, index) => ids.indexOf(id) !== index))];
+          const headings = Array.from(document.querySelectorAll('h1,h2,h3,h4,h5,h6')).filter(visible);
+          const headingJumps = [];
+          let previous = 0;
+          headings.forEach((el) => {
+            const level = Number(el.tagName.slice(1));
+            if (previous && level > previous + 1) headingJumps.push(`${el.tagName}: ${nameOf(el)}`);
+            previous = level;
+          });
+          const overflow = Array.from(document.body.querySelectorAll('*')).filter((el) => {
+            if (!visible(el)) return false;
+            const rect = el.getBoundingClientRect();
+            return rect.right > window.innerWidth + 2 || rect.left < -2;
+          });
+          const smallTargets = interactive.filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return rect.width < 44 || rect.height < 44;
+          });
+          const smallText = Array.from(document.querySelectorAll('p,li,a,button,label,span')).filter((el) => visible(el) && parseFloat(getComputedStyle(el).fontSize || '16') < 12);
+          const aboveFold = interactive.filter((el) => {
+            const rect = el.getBoundingClientRect();
+            return rect.top >= -4 && rect.top < window.innerHeight && nameOf(el);
+          });
+          return {
+            available: true,
+            viewport: {width: window.innerWidth, height: window.innerHeight},
+            html_lang: document.documentElement.lang || '',
+            dom_nodes: document.querySelectorAll('*').length,
+            forms_count: document.forms.length,
+            buttons_without_name: buttonsWithoutName.length,
+            buttons_without_name_samples: sample(buttonsWithoutName),
+            links_without_name: linksWithoutName.length,
+            links_without_name_samples: sample(linksWithoutName),
+            fields_without_label: fieldsWithoutLabel.length,
+            fields_without_label_samples: sample(fieldsWithoutLabel),
+            duplicate_ids: duplicateIds.length,
+            duplicate_id_samples: duplicateIds.slice(0, 6),
+            heading_order_issues: headingJumps.length,
+            heading_order_samples: headingJumps.slice(0, 6),
+            horizontal_overflow_count: overflow.length,
+            horizontal_overflow_samples: sample(overflow),
+            small_tap_targets: smallTargets.length,
+            small_tap_target_samples: sample(smallTargets),
+            small_text_elements: smallText.length,
+            main_landmark_present: Boolean(document.querySelector('main,[role="main"]')),
+            navigation_landmark_present: Boolean(document.querySelector('nav,[role="navigation"]')),
+            cta_above_fold: sample(aboveFold),
+          };
+        }
+        """
+    )
+
+
+def _rendered_performance_facts(page: Any) -> dict[str, Any]:
+    return page.evaluate(
+        """
+        () => {
+          const navigation = performance.getEntriesByType('navigation')[0];
+          const resources = performance.getEntriesByType('resource');
+          const transfer = resources.reduce((sum, item) => sum + Number(item.transferSize || 0), 0);
+          return {
+            available: true,
+            resource_count: resources.length,
+            transfer_kb: Math.round(transfer / 1024),
+            dom_nodes: document.querySelectorAll('*').length,
+            dom_content_loaded_ms: navigation ? Math.round(navigation.domContentLoadedEventEnd) : 0,
+            load_event_ms: navigation ? Math.round(navigation.loadEventEnd) : 0,
+            response_ms: navigation ? Math.round(navigation.responseEnd) : 0,
+          };
+        }
+        """
+    )
 
 
 def _extract_audit_facts(
@@ -526,8 +688,10 @@ def _extract_audit_facts(
     *,
     rendered_facts: dict[str, Any] | None = None,
     screenshot: dict[str, Any] | None = None,
+    response_headers: dict[str, Any] | None = None,
     engine_status: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
+    rendered_facts = rendered_facts or {}
     parser = _PageParser()
     parser.feed(html)
     soup_facts = _extract_with_beautifulsoup(html)
@@ -535,7 +699,7 @@ def _extract_audit_facts(
     text = _clean_text(" ".join(part for part in [extracted_text, " ".join(parser.text_parts)] if part))
     links = _extract_links(html, url)
     structured = _extract_structured_data(html)
-    first_screen_blocks = _dedupe_blocks((rendered_facts or {}).get("first_screen_blocks") or _fallback_first_screen_blocks(parser))
+    first_screen_blocks = _dedupe_blocks(rendered_facts.get("first_screen_blocks") or _fallback_first_screen_blocks(parser))
     cta_candidates = _extract_cta_candidates(html, first_screen_blocks)
     cta_groups = _group_cta_candidates(cta_candidates)
     ctas = (
@@ -544,6 +708,7 @@ def _extract_audit_facts(
         + cta_groups.get("secondary_cta", [])
     )[:MAX_FACT_ITEMS]
     images = _extract_images(html)
+    document = _document_signals(html)
     facts = {
         "engine": engine_status or {"static_html_used": True, "rendered_dom_used": False},
         "extraction_method": "beautifulsoup" if soup_facts else "html_parser",
@@ -567,12 +732,22 @@ def _extract_audit_facts(
         "links": links,
         "images": images,
         "structured_data": structured,
+        "document": document,
         "main_text": {"available": bool(extracted_text), "chars": len(extracted_text)},
         "word_count": len(re.findall(r"[A-Za-zА-Яа-яЁё0-9]{3,}", text)),
         "first_screen_blocks": first_screen_blocks[:FIRST_SCREEN_LIMIT],
         "first_screen_text": _clean_text(" ".join(item.get("text", "") for item in first_screen_blocks))[:1500],
         "screenshot": screenshot or {"captured": False},
-        "accessibility": _accessibility_signals(parser, images),
+        "accessibility": _accessibility_signals(
+            parser,
+            images,
+            static=document.get("accessibility", {}),
+            desktop=rendered_facts.get("dom_audit", {}),
+            mobile=rendered_facts.get("mobile_dom_audit", {}),
+        ),
+        "security": _security_header_signals(response_headers or {}, url),
+        "performance": rendered_facts.get("performance", {"available": False, "reason": "rendered_metrics_unavailable"}),
+        "mobile_layout": rendered_facts.get("mobile_dom_audit", {"available": False, "reason": "mobile_render_unavailable"}),
         "pagespeed": _pagespeed_signals(url),
     }
     return facts
@@ -599,11 +774,24 @@ def _screenshot_metadata(content: bytes) -> dict[str, Any]:
             light_share = sum(1 for pr, pg, pb in pixels if (0.2126 * pr + 0.7152 * pg + 0.0722 * pb) > 220) / total
             colorfulness = round((abs(r - g) + abs(g - b) + abs(b - r)) / 3, 1)
             hero_height = max(1, round(height * 0.62))
+            preview = image.copy()
+            preview.thumbnail((960, 960))
+            preview_buffer = io.BytesIO()
+            preview.save(preview_buffer, format="JPEG", quality=68, optimize=True)
+            preview_bytes = preview_buffer.getvalue()
+            if len(preview_bytes) > MAX_SCREENSHOT_PREVIEW_BYTES:
+                preview_buffer = io.BytesIO()
+                preview.save(preview_buffer, format="JPEG", quality=45, optimize=True)
+                preview_bytes = preview_buffer.getvalue()
+            preview_data_url = ""
+            if len(preview_bytes) <= MAX_SCREENSHOT_PREVIEW_BYTES:
+                preview_data_url = "data:image/jpeg;base64," + base64.b64encode(preview_bytes).decode("ascii")
             return {
                 "width": width,
                 "height": height,
                 "viewport": {"width": width, "height": height},
                 "hero_crop": {"x": 0, "y": 0, "width": width, "height": hero_height},
+                "preview_data_url": preview_data_url,
                 "visual_analysis": {
                     "available": True,
                     "average_luma": round(luma, 1),
@@ -895,12 +1083,224 @@ def _fallback_first_screen_blocks(parser: _PageParser) -> list[dict[str, Any]]:
     return blocks[:FIRST_SCREEN_LIMIT]
 
 
-def _accessibility_signals(parser: _PageParser, images: dict[str, Any]) -> dict[str, Any]:
+def _document_signals(html: str) -> dict[str, Any]:
+    try:
+        from bs4 import BeautifulSoup
+    except Exception:
+        return _document_signals_fallback(html)
+    try:
+        soup = BeautifulSoup(html, "lxml")
+    except Exception:
+        soup = BeautifulSoup(html, "html.parser")
+
+    def _meta(*, name: str = "", prop: str = "") -> str:
+        attrs: dict[str, Any] = {}
+        if name:
+            attrs["name"] = re.compile(rf"^{re.escape(name)}$", re.I)
+        if prop:
+            attrs["property"] = re.compile(rf"^{re.escape(prop)}$", re.I)
+        node = soup.find("meta", attrs=attrs)
+        return _clean_text(str(node.get("content", ""))) if node else ""
+
+    fields = [node for node in soup.select("input:not([type='hidden']):not([type='submit']):not([type='button']), textarea, select")]
+    field_labels = {str(node.get("for", "")) for node in soup.find_all("label") if node.get("for")}
+    fields_without_label = 0
+    for field in fields:
+        labelled = bool(field.get("aria-label") or field.get("aria-labelledby") or field.get("title"))
+        labelled = labelled or bool(field.get("id") and str(field.get("id")) in field_labels)
+        labelled = labelled or field.find_parent("label") is not None
+        if not labelled:
+            fields_without_label += 1
+    buttons = soup.select("button, [role='button'], input[type='button'], input[type='submit']")
+    buttons_without_name = sum(
+        1
+        for node in buttons
+        if not _clean_text(node.get_text(" ") or str(node.get("value", "")) or str(node.get("aria-label", "")) or str(node.get("title", "")))
+    )
+    links_without_name = sum(
+        1
+        for node in soup.select("a[href]")
+        if not _clean_text(node.get_text(" ") or str(node.get("aria-label", "")) or str(node.get("title", "")))
+        and not node.select_one("img[alt]:not([alt=''])")
+    )
+    ids = [str(node.get("id")) for node in soup.select("[id]") if node.get("id")]
+    duplicate_ids = len({value for value in ids if ids.count(value) > 1})
+    heading_order_issues = 0
+    previous_level = 0
+    for heading in soup.select("h1,h2,h3,h4,h5,h6"):
+        level = int(heading.name[1])
+        if previous_level and level > previous_level + 1:
+            heading_order_issues += 1
+        previous_level = level
+    paragraphs = [_clean_text(node.get_text(" ")) for node in soup.find_all("p")]
+    canonical_node = soup.find("link", attrs={"rel": re.compile("canonical", re.I)})
     return {
-        "images_without_alt": images.get("without_alt", parser.images_without_alt),
-        "empty_buttons": max(0, parser.buttons - len(parser.button_texts)),
+        "available": True,
+        "accessibility": {
+            "html_lang": _clean_text(str(soup.html.get("lang", ""))) if soup.html else "",
+            "fields_without_label": fields_without_label,
+            "buttons_without_name": buttons_without_name,
+            "links_without_name": links_without_name,
+            "duplicate_ids": duplicate_ids,
+            "heading_order_issues": heading_order_issues,
+            "main_landmark_present": bool(soup.select_one("main, [role='main']")),
+            "navigation_landmark_present": bool(soup.select_one("nav, [role='navigation']")),
+        },
+        "seo": {
+            "canonical_url": _clean_text(str(canonical_node.get("href", ""))) if canonical_node else "",
+            "robots": _meta(name="robots"),
+            "og_title": bool(_meta(prop="og:title")),
+            "og_description": bool(_meta(prop="og:description")),
+            "og_image": bool(_meta(prop="og:image")),
+            "twitter_card": bool(_meta(name="twitter:card")),
+            "hreflang_count": len(soup.select("link[hreflang]")),
+        },
+        "content": {
+            "paragraphs": len(paragraphs),
+            "long_paragraphs": sum(1 for value in paragraphs if len(value) > 320),
+            "lists": len(soup.find_all(["ul", "ol"])),
+            "tables": len(soup.find_all("table")),
+        },
+    }
+
+
+def _document_signals_fallback(html: str) -> dict[str, Any]:
+    lang_match = re.search(r"<html\b[^>]*\blang=[\"']([^\"']+)[\"']", html, flags=re.I)
+    field_tags = re.findall(r"<(?:input|textarea|select)\b([^>]*)>", html, flags=re.I)
+    label_targets = set(re.findall(r"<label\b[^>]*\bfor=[\"']([^\"']+)[\"']", html, flags=re.I))
+    fields_without_label = 0
+    for attrs in field_tags:
+        if re.search(r"\btype=[\"'](?:hidden|submit|button)[\"']", attrs, flags=re.I):
+            continue
+        field_id = re.search(r"\bid=[\"']([^\"']+)[\"']", attrs, flags=re.I)
+        has_name = re.search(r"\b(?:aria-label|aria-labelledby|title)=[\"'][^\"']+[\"']", attrs, flags=re.I)
+        if not has_name and not (field_id and field_id.group(1) in label_targets):
+            fields_without_label += 1
+    ids = re.findall(r"\bid=[\"']([^\"']+)[\"']", html, flags=re.I)
+    headings = [int(level) for level in re.findall(r"<h([1-6])\b", html, flags=re.I)]
+    heading_order_issues = sum(1 for previous, current in zip(headings, headings[1:]) if current > previous + 1)
+    paragraphs = [_clean_text(re.sub(r"<[^>]+>", " ", value)) for value in re.findall(r"<p\b[^>]*>(.*?)</p>", html, flags=re.I | re.S)]
+    canonical = re.search(r"<link\b[^>]*\brel=[\"'][^\"']*canonical[^\"']*[\"'][^>]*\bhref=[\"']([^\"']+)[\"']", html, flags=re.I)
+    return {
+        "available": True,
+        "source": "html_parser_fallback",
+        "accessibility": {
+            "html_lang": _clean_text(lang_match.group(1)) if lang_match else "",
+            "fields_without_label": fields_without_label,
+            "buttons_without_name": 0,
+            "links_without_name": 0,
+            "duplicate_ids": len({value for value in ids if ids.count(value) > 1}),
+            "heading_order_issues": heading_order_issues,
+            "main_landmark_present": bool(re.search(r"<(?:main\b|[^>]+\brole=[\"']main[\"'])", html, flags=re.I)),
+            "navigation_landmark_present": bool(re.search(r"<(?:nav\b|[^>]+\brole=[\"']navigation[\"'])", html, flags=re.I)),
+        },
+        "seo": {
+            "canonical_url": _clean_text(canonical.group(1)) if canonical else "",
+            "robots": "",
+            "og_title": bool(re.search(r"property=[\"']og:title[\"']", html, flags=re.I)),
+            "og_description": bool(re.search(r"property=[\"']og:description[\"']", html, flags=re.I)),
+            "og_image": bool(re.search(r"property=[\"']og:image[\"']", html, flags=re.I)),
+            "twitter_card": bool(re.search(r"name=[\"']twitter:card[\"']", html, flags=re.I)),
+            "hreflang_count": len(re.findall(r"\bhreflang=", html, flags=re.I)),
+        },
+        "content": {
+            "paragraphs": len(paragraphs),
+            "long_paragraphs": sum(1 for value in paragraphs if len(value) > 320),
+            "lists": len(re.findall(r"<(?:ul|ol)\b", html, flags=re.I)),
+            "tables": len(re.findall(r"<table\b", html, flags=re.I)),
+        },
+    }
+
+
+def _accessibility_signals(
+    parser: _PageParser,
+    images: dict[str, Any],
+    *,
+    static: dict[str, Any] | None = None,
+    desktop: dict[str, Any] | None = None,
+    mobile: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    static = static or {}
+    desktop = desktop or {}
+    mobile = mobile or {}
+
+    def _metric(name: str, fallback: Any = 0) -> Any:
+        value = desktop.get(name)
+        if value not in {None, ""}:
+            return value
+        return static.get(name, fallback)
+
+    result = {
+        "images_without_alt": int(images.get("without_alt", parser.images_without_alt) or 0),
+        "empty_buttons": int(_metric("buttons_without_name", max(0, parser.buttons - len(parser.button_texts))) or 0),
+        "links_without_name": int(_metric("links_without_name", 0) or 0),
+        "fields_without_label": int(_metric("fields_without_label", 0) or 0),
+        "duplicate_ids": int(_metric("duplicate_ids", 0) or 0),
+        "heading_order_issues": int(_metric("heading_order_issues", 0) or 0),
+        "html_lang": _clean_text(str(_metric("html_lang", ""))),
+        "main_landmark_present": bool(_metric("main_landmark_present", False)),
+        "navigation_landmark_present": bool(_metric("navigation_landmark_present", False)),
+        "horizontal_overflow_desktop": int(desktop.get("horizontal_overflow_count", 0) or 0),
+        "horizontal_overflow_mobile": int(mobile.get("horizontal_overflow_count", 0) or 0),
+        "small_tap_targets_mobile": int(mobile.get("small_tap_targets", 0) or 0),
+        "small_text_elements_mobile": int(mobile.get("small_text_elements", 0) or 0),
         "forms_without_visible_fields": parser.forms > 0 and parser.inputs == 0,
-        "note": "Быстрая проверка доступности: alt, пустые кнопки и базовая структура форм.",
+        "source": "rendered_dom" if desktop.get("available") else "static_html",
+    }
+    penalty = min(24, result["images_without_alt"] * 4)
+    penalty += min(20, result["fields_without_label"] * 8)
+    penalty += min(15, result["empty_buttons"] * 7)
+    penalty += min(10, result["links_without_name"] * 4)
+    penalty += min(10, result["heading_order_issues"] * 5)
+    penalty += 8 if not result["html_lang"] else 0
+    penalty += 8 if result["horizontal_overflow_mobile"] else 0
+    penalty += min(10, result["small_tap_targets_mobile"] // 3)
+    result["score"] = max(0, 100 - penalty)
+    result["note"] = "Автоматическая проверка доступности по HTML и rendered DOM; не заменяет ручное WCAG-тестирование с клавиатурой и screen reader."
+    return result
+
+
+def _security_header_signals(headers: dict[str, Any], url: str) -> dict[str, Any]:
+    normalized = {str(key).lower(): _clean_text(str(value))[:240] for key, value in headers.items()}
+    csp = normalized.get("content-security-policy", "")
+    is_https = urlparse(url).scheme == "https"
+    checks: list[dict[str, str]] = []
+
+    def _add(key: str, title: str, passed: bool, action: str, *, evidence: str = "", weight: int = 10) -> int:
+        checks.append(
+            {
+                "key": key,
+                "title": title,
+                "status": "pass" if passed else "warn",
+                "evidence": evidence or ("настроено" if passed else "заголовок не обнаружен"),
+                "action": "Контроль настроен." if passed else action,
+            }
+        )
+        return weight if passed else 0
+
+    score = 0
+    score += _add("https", "HTTPS transport", is_https, "Переведите страницу и все редиректы на HTTPS.", evidence="HTTPS" if is_https else "страница открыта по HTTP", weight=15)
+    score += _add("csp", "Content Security Policy", bool(csp), "Добавьте CSP и начните с report-only режима.", evidence=csp, weight=25)
+    score += _add(
+        "hsts",
+        "HTTPS Strict Transport Security",
+        is_https and bool(normalized.get("strict-transport-security")),
+        "Для HTTPS добавьте HSTS после проверки всех поддоменов.",
+        evidence=normalized.get("strict-transport-security", ""),
+        weight=15,
+    )
+    frame_protection = bool(normalized.get("x-frame-options")) or "frame-ancestors" in csp.lower()
+    score += _add("frame", "Защита от clickjacking", frame_protection, "Добавьте frame-ancestors в CSP или X-Frame-Options.", evidence=normalized.get("x-frame-options", "") or ("CSP frame-ancestors" if frame_protection else ""), weight=15)
+    score += _add("nosniff", "MIME sniffing protection", normalized.get("x-content-type-options", "").lower() == "nosniff", "Добавьте X-Content-Type-Options: nosniff.", evidence=normalized.get("x-content-type-options", ""), weight=10)
+    score += _add("referrer", "Referrer Policy", bool(normalized.get("referrer-policy")), "Добавьте строгую Referrer-Policy.", evidence=normalized.get("referrer-policy", ""), weight=10)
+    score += _add("permissions", "Permissions Policy", bool(normalized.get("permissions-policy")), "Ограничьте неиспользуемые browser APIs через Permissions-Policy.", evidence=normalized.get("permissions-policy", ""), weight=5)
+    score += _add("cross_origin", "Cross-origin isolation policy", bool(normalized.get("cross-origin-opener-policy") or normalized.get("cross-origin-resource-policy")), "Оцените COOP/CORP для чувствительных интерфейсов.", evidence=normalized.get("cross-origin-opener-policy", "") or normalized.get("cross-origin-resource-policy", ""), weight=5)
+    return {
+        "mode": "passive_response_headers",
+        "score": min(100, score),
+        "checks": checks,
+        "headers_present": sorted(normalized),
+        "note": "Пассивная проверка публичных HTTP-заголовков. Она не является pentest и не проверяет сервер на эксплуатацию уязвимостей.",
     }
 
 
@@ -999,6 +1399,129 @@ def _technical_notes(parser: _PageParser, signals: dict[str, Any], context: dict
     if not parser.structured_data and _is_hotel_context(context):
         notes.append({"title": "Structured data для отеля не обнаружены", "detail": "После правок контента можно добавить Hotel/LocalBusiness schema.", "priority": "low"})
     return notes[:8]
+
+
+def _audit_overview(parser: _PageParser, facts: dict[str, Any], context: dict[str, Any]) -> dict[str, Any]:
+    screenshot = facts.get("screenshot", {}) if isinstance(facts.get("screenshot"), dict) else {}
+    mobile_screenshot = screenshot.get("mobile", {}) if isinstance(screenshot.get("mobile"), dict) else {}
+    accessibility = facts.get("accessibility", {}) if isinstance(facts.get("accessibility"), dict) else {}
+    security = facts.get("security", {}) if isinstance(facts.get("security"), dict) else {}
+    performance = facts.get("performance", {}) if isinstance(facts.get("performance"), dict) else {}
+    document = facts.get("document", {}) if isinstance(facts.get("document"), dict) else {}
+    seo = document.get("seo", {}) if isinstance(document.get("seo"), dict) else {}
+
+    sources = ["HTML страницы"]
+    confidence = 20
+    if facts.get("engine", {}).get("rendered_dom_used"):
+        sources.append("rendered DOM")
+        confidence += 25
+    if screenshot.get("captured"):
+        sources.append("desktop screenshot")
+        confidence += 20
+    if mobile_screenshot.get("captured"):
+        sources.append("mobile screenshot")
+        confidence += 15
+    if facts.get("main_text", {}).get("available"):
+        sources.append("основной текст страницы")
+        confidence += 10
+    if facts.get("pagespeed", {}).get("enabled") and not facts.get("pagespeed", {}).get("error"):
+        sources.append("PageSpeed API")
+        confidence += 10
+    confidence = min(100, confidence)
+
+    def _label(score: int) -> str:
+        if score >= 80:
+            return "сильный"
+        if score >= 60:
+            return "требует внимания"
+        return "риск"
+
+    def _check(title: str, passed: bool, evidence: str, action: str, *, severity: str = "medium") -> dict[str, str]:
+        return {
+            "title": title,
+            "status": "pass" if passed else ("fail" if severity == "high" else "warn"),
+            "evidence": evidence,
+            "action": "Проверка пройдена." if passed else action,
+            "severity": "ok" if passed else severity,
+        }
+
+    accessibility_score = int(accessibility.get("score", 0) or 0)
+    accessibility_checks = [
+        _check("Alt-тексты изображений", int(accessibility.get("images_without_alt", 0) or 0) == 0, f"Без alt: {int(accessibility.get('images_without_alt', 0) or 0)}", "Добавьте содержательные alt для информативных изображений.", severity="medium"),
+        _check("Подписи полей", int(accessibility.get("fields_without_label", 0) or 0) == 0, f"Полей без label: {int(accessibility.get('fields_without_label', 0) or 0)}", "Свяжите label и field через for/id или aria-label.", severity="high"),
+        _check("Доступные имена кнопок", int(accessibility.get("empty_buttons", 0) or 0) == 0, f"Кнопок без имени: {int(accessibility.get('empty_buttons', 0) or 0)}", "Добавьте видимый текст или aria-label.", severity="high"),
+        _check("Язык документа", bool(accessibility.get("html_lang")), f"lang: {accessibility.get('html_lang') or 'не задан'}", "Укажите lang на элементе html.", severity="medium"),
+        _check("Мобильный overflow", int(accessibility.get("horizontal_overflow_mobile", 0) or 0) == 0, f"Элементов за viewport: {int(accessibility.get('horizontal_overflow_mobile', 0) or 0)}", "Исправьте горизонтальный скролл и ширины элементов.", severity="high"),
+        _check("Размер интерактивных зон", int(accessibility.get("small_tap_targets_mobile", 0) or 0) == 0, f"Маленьких touch targets: {int(accessibility.get('small_tap_targets_mobile', 0) or 0)}", "Увеличьте кликабельные зоны примерно до 44x44 px.", severity="medium"),
+    ]
+
+    technical_rules = [
+        ("Title", bool(parser.title), parser.title or "не найден", "Добавьте уникальный title."),
+        ("Meta description", bool(parser.meta_description), parser.meta_description or "не найдена", "Добавьте описание страницы."),
+        ("Один главный H1", len(parser.h1) == 1, f"H1: {len(parser.h1)}", "Оставьте один содержательный H1."),
+        ("Mobile viewport", parser.viewport, "настроен" if parser.viewport else "не найден", "Добавьте viewport meta."),
+        ("Canonical", parser.canonical, seo.get("canonical_url") or "не найден", "Добавьте canonical URL."),
+        ("Structured data", parser.structured_data, ", ".join(facts.get("structured_data", {}).get("types", [])) or "не обнаружены", "Добавьте релевантную schema.org-разметку после проверки контента."),
+        ("Open Graph", bool(seo.get("og_title") and seo.get("og_description") and seo.get("og_image")), "title/description/image" if seo.get("og_title") and seo.get("og_description") and seo.get("og_image") else "набор неполный", "Заполните og:title, og:description и og:image."),
+    ]
+    technical_checks = [_check(title, passed, str(evidence), action, severity="medium") for title, passed, evidence, action in technical_rules]
+    technical_score = round(sum(1 for _, passed, _, _ in technical_rules if passed) / max(1, len(technical_rules)) * 100)
+
+    performance_checks: list[dict[str, str]] = []
+    if performance.get("available"):
+        resource_count = int(performance.get("resource_count", 0) or 0)
+        transfer_kb = int(performance.get("transfer_kb", 0) or 0)
+        dom_nodes = int(performance.get("dom_nodes", 0) or 0)
+        load_ms = int(performance.get("load_event_ms", 0) or 0)
+        performance_checks = [
+            _check("Количество ресурсов", resource_count <= 120, str(resource_count), "Сократите сторонние скрипты и объедините некритичные ресурсы."),
+            _check("Переданный объём", transfer_kb == 0 or transfer_kb <= 3500, f"{transfer_kb} КБ" if transfer_kb else "браузер не раскрыл transfer size", "Оптимизируйте изображения, шрифты и JavaScript."),
+            _check("Размер DOM", dom_nodes <= 1800, str(dom_nodes), "Упростите глубоко вложенную и повторяющуюся разметку."),
+            _check("Load event", load_ms == 0 or load_ms <= 4000, f"{load_ms} мс" if load_ms else "нет стабильного значения", "Отложите некритичные ресурсы и сократите блокирующий код."),
+        ]
+        performance_score = round(sum(1 for item in performance_checks if item["status"] == "pass") / len(performance_checks) * 100)
+    else:
+        performance_score = 0
+        performance_checks = [{"title": "Browser performance", "status": "unknown", "evidence": "rendered metrics недоступны", "action": "Повторите полный анализ с Playwright.", "severity": "unknown"}]
+
+    security_checks = security.get("checks", []) if isinstance(security.get("checks"), list) else []
+    security_score = int(security.get("score", 0) or 0)
+    pillars = [
+        {"id": "accessibility", "title": "Доступность и mobile UX", "score": accessibility_score, "status": _label(accessibility_score), "checks": accessibility_checks, "note": accessibility.get("note", "")},
+        {"id": "technical", "title": "Техническая готовность", "score": technical_score, "status": _label(technical_score), "checks": technical_checks, "note": "HTML/SEO/structured data проверки одной публичной страницы."},
+        {"id": "performance", "title": "Вес и сложность страницы", "score": performance_score, "status": _label(performance_score), "checks": performance_checks, "note": "Браузерные метрики текущего запуска; это не лабораторный Core Web Vitals замер."},
+        {"id": "security", "title": "Пассивная безопасность", "score": security_score, "status": _label(security_score), "checks": security_checks, "note": security.get("note", "")},
+    ]
+    return {
+        "confidence": {
+            "score": confidence,
+            "label": "высокая" if confidence >= 80 else "средняя" if confidence >= 55 else "ограниченная",
+            "sources": sources,
+            "limitations": [
+                "Проверена одна публичная страница, а не весь сайт.",
+                "Нет данных поведения пользователей, CRM и закрытых кабинетов.",
+                "Security-блок пассивный и не заменяет авторизованный pentest.",
+            ],
+        },
+        "pillars": pillars,
+        "screenshots": {
+            "desktop": {
+                "captured": bool(screenshot.get("captured")),
+                "preview_data_url": screenshot.get("preview_data_url", ""),
+                "viewport": screenshot.get("viewport", {}),
+            },
+            "mobile": {
+                "captured": bool(mobile_screenshot.get("captured")),
+                "preview_data_url": mobile_screenshot.get("preview_data_url", ""),
+                "viewport": mobile_screenshot.get("viewport", {}),
+            },
+        },
+        "scope": {
+            "page": facts.get("url", ""),
+            "vertical": context.get("vertical", "generic_landing"),
+            "mode": "public_page_evidence",
+        },
+    }
 
 
 def _display_cta_texts(values: list[str]) -> list[str]:
@@ -1964,6 +2487,12 @@ def _dedupe_issues(items: list[dict[str, str]]) -> list[dict[str, str]]:
 def _evidence(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None = None) -> dict[str, Any]:
     snippets = [part for part in parser.text_parts if len(part) > 28][:6]
     facts = audit_facts or {}
+    screenshot = facts.get("screenshot", {}) if isinstance(facts.get("screenshot"), dict) else {}
+    screenshot_evidence = {key: value for key, value in screenshot.items() if key != "preview_data_url"}
+    if isinstance(screenshot_evidence.get("mobile"), dict):
+        screenshot_evidence["mobile"] = {
+            key: value for key, value in screenshot_evidence["mobile"].items() if key != "preview_data_url"
+        }
     return {
         "title": parser.title,
         "h1": parser.h1[:3],
@@ -1980,7 +2509,7 @@ def _evidence(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None
         "audit_engine": {
             "rendered_dom_used": bool(facts.get("engine", {}).get("rendered_dom_used")),
             "render_reason": facts.get("engine", {}).get("render_reason", ""),
-            "screenshot": facts.get("screenshot", {"captured": False}),
+            "screenshot": screenshot_evidence or {"captured": False},
             "first_screen_blocks": facts.get("first_screen_blocks", [])[:12],
             "first_screen_text": facts.get("first_screen_text", "")[:700],
             "cta_texts": facts.get("cta_texts", [])[:12],
@@ -1991,6 +2520,10 @@ def _evidence(parser: _PageParser, text: str, audit_facts: dict[str, Any] | None
             "structured_data": facts.get("structured_data", {}),
             "main_text": facts.get("main_text", {}),
             "accessibility": facts.get("accessibility", {}),
+            "security": facts.get("security", {}),
+            "performance": facts.get("performance", {}),
+            "mobile_layout": facts.get("mobile_layout", {}),
+            "document": facts.get("document", {}),
             "visual_analysis": (facts.get("screenshot", {}) if isinstance(facts.get("screenshot"), dict) else {}).get("visual_analysis", {}),
             "pagespeed": facts.get("pagespeed", {"enabled": False}),
         },

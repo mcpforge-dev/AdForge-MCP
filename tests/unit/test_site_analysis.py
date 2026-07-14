@@ -195,6 +195,75 @@ def test_extract_audit_facts_collects_page_evidence_without_playwright() -> None
     assert facts["first_screen_blocks"]
 
 
+def test_extract_audit_facts_builds_accessibility_and_passive_security_evidence() -> None:
+    html = """
+    <html lang="ru">
+      <head><title>Secure demo</title><meta name="viewport" content="width=device-width"></head>
+      <body>
+        <main><h1>Demo</h1><form><input name="email"><button>Send</button></form></main>
+      </body>
+    </html>
+    """
+
+    facts = _extract_audit_facts(
+        html,
+        "https://example.com",
+        response_headers={
+            "strict-transport-security": "max-age=31536000",
+            "x-content-type-options": "nosniff",
+            "x-frame-options": "DENY",
+            "referrer-policy": "strict-origin-when-cross-origin",
+        },
+    )
+
+    assert facts["accessibility"]["html_lang"] == "ru"
+    assert facts["accessibility"]["fields_without_label"] == 1
+    assert facts["accessibility"]["score"] < 100
+    assert facts["security"]["mode"] == "passive_response_headers"
+    assert facts["security"]["score"] > 0
+    assert any(item["key"] == "csp" and item["status"] == "warn" for item in facts["security"]["checks"])
+
+
+def test_analyze_html_returns_diagnostic_pillars_and_confidence() -> None:
+    html = """
+    <html lang="ru">
+      <head>
+        <title>Demo service in Almaty</title>
+        <meta name="description" content="Demo service description">
+        <meta name="viewport" content="width=device-width">
+        <link rel="canonical" href="https://example.com/">
+      </head>
+      <body><main><h1>Demo service</h1><button>Get consultation</button></main></body>
+    </html>
+    """
+    facts = _extract_audit_facts(
+        html,
+        "https://example.com",
+        rendered_facts={
+            "first_screen_blocks": [{"tag": "h1", "text": "Demo service"}],
+            "dom_audit": {"available": True, "html_lang": "ru", "main_landmark_present": True},
+            "mobile_dom_audit": {"available": True, "horizontal_overflow_count": 0, "small_tap_targets": 0},
+            "performance": {"available": True, "resource_count": 20, "transfer_kb": 500, "dom_nodes": 120, "load_event_ms": 900},
+        },
+        screenshot={
+            "captured": True,
+            "viewport": {"width": 1365, "height": 768},
+            "mobile": {"captured": True, "viewport": {"width": 390, "height": 844}},
+        },
+        response_headers={"content-security-policy": "default-src 'self'", "strict-transport-security": "max-age=31536000"},
+        engine_status={"static_html_used": True, "rendered_dom_used": True},
+    )
+
+    result = analyze_html(html, url="https://example.com", audit_facts=facts, mode="full")
+
+    overview = result["audit_overview"]
+    assert overview["confidence"]["score"] >= 80
+    assert overview["screenshots"]["desktop"]["captured"] is True
+    assert overview["screenshots"]["mobile"]["captured"] is True
+    assert {item["id"] for item in overview["pillars"]} == {"accessibility", "technical", "performance", "security"}
+    assert result["checks"]["audit_engine"]["mobile_screenshot_captured"] is True
+
+
 def test_niche_detection_supports_non_hotel_verticals() -> None:
     html = """
     <html>

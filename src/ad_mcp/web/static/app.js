@@ -1196,7 +1196,7 @@
     el.siteAnalysisResult.innerHTML = emptyState(request.mode === "full" ? "Готовим полный аудит сайта..." : "Анализируем сайт...");
     try {
       const payload = await api("/api/site/analyze", "POST", request);
-      renderSiteAnalysis(payload.analysis || null);
+      renderSiteAnalysis(payload.analysis || null, payload.history_record?.id || "");
       loadSiteAnalysisHistory();
     } catch (error) {
       if (handle401(error)) return;
@@ -1206,7 +1206,7 @@
     }
   }
 
-  function renderSiteAnalysis(analysis) {
+  function renderSiteAnalysis(analysis, historyId = "") {
     if (!analysis) {
       el.siteAnalysisResult.innerHTML = errorState("Не удалось получить результат анализа.");
       return;
@@ -1214,7 +1214,7 @@
     const reportText = siteAnalysisMarkdown(analysis);
     const heroText = heroCopyMarkdown(analysis);
     const tasksText = tasksMarkdown(analysis);
-    state.siteAnalysisCopy = { reportText, heroText, tasksText, analysis };
+    state.siteAnalysisCopy = { reportText, heroText, tasksText, analysis, historyId };
     if (analysis.status !== "ok") {
       el.siteAnalysisResult.innerHTML = `
         <div class="site-analysis-report">
@@ -1256,6 +1256,7 @@
         <div class="site-result-tabs" role="tablist" aria-label="Разделы отчёта">
           ${[
             ["issues", "Топ улучшений"],
+            ["diagnostics", "Диагностика"],
             ["hero", "Первый экран"],
             ["day", "1 день"],
             ["wins", "Что поправить"],
@@ -1269,6 +1270,7 @@
           ${renderScorecards(analysis.scores || [])}
           ${renderTopIssues(analysis.top_issues || [])}
         </div>
+        <div class="site-result-panel" data-site-panel="diagnostics" hidden>${renderAuditOverview(analysis.audit_overview || {})}</div>
         <div class="site-result-panel" data-site-panel="hero" hidden>${renderFirstScreenReview(analysis.first_screen_review || {})}${renderReadyHero(analysis.ready_hero || {})}</div>
         <div class="site-result-panel" data-site-panel="day" hidden>${renderOneDayPlan(analysis.one_day_plan || [])}</div>
         <div class="site-result-panel" data-site-panel="wins" hidden>${renderQuickWins(analysis.quick_wins || [])}</div>
@@ -1308,7 +1310,7 @@
           const index = Number(node.getAttribute("data-history-index") || "-1");
           const item = state.siteAnalysisHistory[index];
           if (!item?.analysis) return;
-          renderSiteAnalysis(item.analysis);
+          renderSiteAnalysis(item.analysis, item.id || "");
           el.siteAnalysisResult.hidden = false;
         });
       });
@@ -1346,20 +1348,46 @@
 
   async function downloadSiteAnalysisReport() {
     const analysis = state.siteAnalysisCopy.analysis;
-    if (!analysis) return;
+    const historyId = state.siteAnalysisCopy.historyId;
+    if (!analysis || !historyId) {
+      showClientMessage("Не удалось собрать отчёт", "Повторите анализ страницы, чтобы создать DOCX.", "error");
+      return;
+    }
     showReportLoading(true);
     try {
-      await new Promise((resolve) => setTimeout(resolve, 350));
-      const html = siteAnalysisDocumentHtml(analysis);
-      const blob = new Blob([html], { type: "application/msword;charset=utf-8" });
+      const headers = {
+        Accept: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "Content-Type": "application/json",
+      };
+      const token = getToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch("/api/site/report.docx", {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ history_id: historyId }),
+      });
+      if (!response.ok) {
+        let message = `HTTP ${response.status}`;
+        try {
+          const payload = await response.json();
+          message = payload.error || payload.message || message;
+        } catch (error) {
+          // The report endpoint normally returns JSON errors; keep the HTTP fallback otherwise.
+        }
+        const reportError = new Error(message);
+        reportError.status = response.status;
+        throw reportError;
+      }
+      const blob = await response.blob();
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = `HolyMedia-MCP-site-audit-${safeFileDate()}.doc`;
+      link.download = `HolyMedia-MCP-site-audit-${safeFileDate()}.docx`;
       document.body.appendChild(link);
       link.click();
       link.remove();
       URL.revokeObjectURL(link.href);
-      toast("Отчёт скачан", "success");
+      toast("DOCX-отчёт скачан", "success");
     } catch (error) {
       showClientMessage("Не удалось собрать отчёт", humanizeError(error), "error");
     } finally {
@@ -1383,12 +1411,68 @@
     const dayCount = (analysis.one_day_plan || []).length;
     const cta = analysis.evidence?.audit_engine?.cta_texts || [];
     const ctaLabel = cta.length && cta[0] !== "не обнаружено в собранных данных" ? "CTA найден" : "CTA нужно усилить";
+    const confidence = analysis.audit_overview?.confidence || {};
+    const security = (analysis.audit_overview?.pillars || []).find((item) => item.id === "security") || {};
     return `<div class="site-analysis-kpis">
       <span>Ниша: ${esc(vertical)}</span>
       <span>${esc(String(topCount))} приоритетов</span>
       <span>${esc(String(dayCount))} задач на день</span>
       <span>${esc(ctaLabel)}</span>
+      ${confidence.score ? `<span>Достоверность: ${esc(String(confidence.score))}%</span>` : ""}
+      ${Number.isFinite(Number(security.score)) ? `<span>Пассивная безопасность: ${esc(String(security.score))}/100</span>` : ""}
     </div>`;
+  }
+
+  function renderAuditOverview(overview) {
+    if (!overview || !Object.keys(overview).length) {
+      return `<div class="site-analysis-block"><h3>Диагностика</h3><p>Для этого сохранённого анализа расширенная диагностика ещё не собиралась. Запустите анализ повторно.</p></div>`;
+    }
+    const confidence = overview.confidence || {};
+    const screenshots = overview.screenshots || {};
+    const screenshotItems = [
+      ["Desktop", screenshots.desktop || {}],
+      ["Mobile", screenshots.mobile || {}],
+    ].filter(([, item]) => item.captured && item.preview_data_url);
+    return `<div class="site-diagnostics">
+      <section class="site-diagnostics__intro">
+        <div>
+          <span class="site-analysis-eyebrow">Evidence-based аудит</span>
+          <h3>Что действительно проверено</h3>
+          <p>Достоверность выводов: <strong>${esc(String(confidence.score || 0))}% · ${esc(confidence.label || "ограниченная")}</strong></p>
+        </div>
+        <div class="site-evidence-sources">${(confidence.sources || []).map((item) => `<span>${esc(item)}</span>`).join("")}</div>
+      </section>
+      ${screenshotItems.length ? `<section class="site-screenshot-grid" aria-label="Скриншоты проверенной страницы">
+        ${screenshotItems.map(([label, item]) => `<figure>
+          <div class="site-screenshot-frame"><img src="${escAttr(item.preview_data_url)}" alt="${escAttr(label)} screenshot проверенной страницы" loading="lazy"></div>
+          <figcaption><strong>${esc(label)}</strong><span>${esc(String(item.viewport?.width || ""))}x${esc(String(item.viewport?.height || ""))}</span></figcaption>
+        </figure>`).join("")}
+      </section>` : ""}
+      <div class="site-diagnostic-pillars">
+        ${(overview.pillars || []).map((pillar) => `<section class="site-diagnostic-pillar ${scoreToneClass(pillar.score)}">
+          <header>
+            <div><h3>${esc(pillar.title || "Диагностика")}</h3><p>${esc(pillar.note || "")}</p></div>
+            <strong>${esc(String(pillar.score ?? "—"))}<small>/100</small></strong>
+          </header>
+          <div class="site-score-bar" aria-hidden="true"><i style="width:${scoreWidth(pillar.score)}%"></i></div>
+          <div class="site-diagnostic-checks">
+            ${(pillar.checks || []).map((check) => `<article class="is-${escAttr(check.status || "unknown")}">
+              <div><i aria-hidden="true"></i><strong>${esc(check.title || "Проверка")}</strong><span>${esc(auditStatusLabel(check.status))}</span></div>
+              <p>${esc(check.evidence || "Нет данных")}</p>
+              ${check.status === "pass" ? "" : `<small>${esc(check.action || "Нужна ручная проверка.")}</small>`}
+            </article>`).join("")}
+          </div>
+        </section>`).join("")}
+      </div>
+      ${(confidence.limitations || []).length ? `<section class="site-audit-limitations"><h3>Границы анализа</h3><ul>${confidence.limitations.map((item) => `<li>${esc(item)}</li>`).join("")}</ul></section>` : ""}
+    </div>`;
+  }
+
+  function auditStatusLabel(status) {
+    if (status === "pass") return "пройдено";
+    if (status === "fail") return "высокий риск";
+    if (status === "warn") return "нужно проверить";
+    return "нет данных";
   }
 
   function renderScorecards(items) {
@@ -1554,6 +1638,11 @@
   }
 
   function siteAnalysisMarkdown(analysis) {
+    const overview = analysis.audit_overview || {};
+    const diagnosticLines = (overview.pillars || []).flatMap((pillar) => [
+      `### ${pillar.title || "Диагностика"}: ${pillar.score ?? "—"}/100`,
+      ...(pillar.checks || []).filter((check) => check.status !== "pass").map((check) => `- ${check.title}: ${check.evidence}. ${check.action}`),
+    ]);
     return [
       `# AI-анализ сайта: ${analysis.url || ""}`,
       `Оценка: ${analysis.overall_score || "—"}/100`,
@@ -1564,6 +1653,10 @@
       "## Разбор первого экрана",
       analysis.first_screen_review?.five_second_takeaway || "",
       ...((analysis.first_screen_review?.friction || []).map((x) => `- ${x}`)),
+      "",
+      "## Техническая диагностика",
+      `Достоверность: ${overview.confidence?.score || 0}% (${overview.confidence?.label || "ограниченная"})`,
+      ...diagnosticLines,
       "",
       "## Топ улучшений",
       ...(analysis.top_issues || []).map((x) => `- ${x.priority}: ${x.title}. ${x.what_to_do}`),
@@ -1630,6 +1723,16 @@
     const firstScreen = analysis.first_screen_review || {};
     const firstFound = firstScreen.found || {};
     const firstExample = firstScreen.example_hero || {};
+    const auditOverview = analysis.audit_overview || {};
+    const diagnosticRows = (auditOverview.pillars || []).flatMap((pillar) => (pillar.checks || []).map((check) => `
+      <tr><td>${esc(pillar.title || "")}</td><td class="num">${esc(String(pillar.score ?? "—"))}/100</td><td>${esc(check.title || "")}</td><td>${esc(auditStatusLabel(check.status))}</td><td>${esc(check.evidence || "")}</td><td>${esc(check.status === "pass" ? "—" : check.action || "")}</td></tr>
+    `)).join("");
+    const desktopShot = auditOverview.screenshots?.desktop || {};
+    const mobileShot = auditOverview.screenshots?.mobile || {};
+    const screenshotHtml = [
+      ["Desktop", desktopShot],
+      ["Mobile", mobileShot],
+    ].filter(([, item]) => item.captured && item.preview_data_url).map(([label, item]) => `<div class="shot"><img src="${escAttr(item.preview_data_url)}" alt="${escAttr(label)} screenshot"><p><strong>${esc(label)}</strong> · ${esc(String(item.viewport?.width || ""))}x${esc(String(item.viewport?.height || ""))}</p></div>`).join("");
     return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
       <style>
         @page{margin:22mm 18mm}
@@ -1645,6 +1748,7 @@
         .section-note,.copy-box{background:#fbfcfe;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:12px 0}
         .hero-box{border:1px solid #d9e0ea;border-radius:14px;padding:16px;margin:12px 0;background:#fff}
         .hero-buttons span{display:inline-block;border:1px solid #d9e0ea;border-radius:10px;padding:7px 10px;margin:4px 6px 4px 0;font-weight:700}
+        .shots{display:flex;gap:14px;align-items:flex-start}.shot{width:48%}.shot img{display:block;max-width:100%;height:auto;border:1px solid #d9e0ea}.shot p{font-size:12px;color:#526174}
         table{border-collapse:collapse;width:100%;margin:12px 0 18px}
         td,th{border:1px solid #d9e0ea;padding:8px;vertical-align:top;text-align:left}
         th{background:#f3f6fa;color:#111827}
@@ -1671,6 +1775,10 @@
         <p><strong>Быстрый выигрыш:</strong> ${esc(analysis.verdict?.fastest_win || "")}</p>
       </div>
       <h2>Оценка по направлениям</h2><table><tr><th>Направление</th><th>Оценка</th><th>Комментарий</th></tr>${scoreRows}</table>
+      <h2>Диагностика и доказательства</h2>
+      <div class="section-note"><p><strong>Достоверность:</strong> ${esc(String(auditOverview.confidence?.score || 0))}% · ${esc(auditOverview.confidence?.label || "ограниченная")}</p><p><strong>Источники:</strong> ${esc((auditOverview.confidence?.sources || []).join(", "))}</p></div>
+      ${screenshotHtml ? `<div class="shots">${screenshotHtml}</div>` : ""}
+      <table><tr><th>Направление</th><th>Оценка</th><th>Проверка</th><th>Статус</th><th>Evidence</th><th>Действие</th></tr>${diagnosticRows}</table>
       <h2>Топ улучшений</h2><table><tr><th>Приоритет</th><th>Проблема</th><th>Что сделать</th><th>Что найдено</th></tr>${issueRows}</table>
       <h2>Разбор первого экрана</h2>
       <div class="section-note">
