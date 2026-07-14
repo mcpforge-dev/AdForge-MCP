@@ -21,6 +21,104 @@
 | Audit log | `/var/log/adforge-mcp/audit.jsonl` | `/var/log/adforge-mcp-staging/audit.jsonl` |
 | Session cookie | `adforge_session` | `adforge_staging_session` |
 
+## Что означает копия live 1:1
+
+Функциональная копия 1:1 означает одинаковые commit приложения, схему БД,
+версии runtime-зависимостей и доступные пользовательские сценарии. Она не
+означает использование production БД или перенос рабочих секретов в staging.
+
+Обязательные правила:
+
+- staging checkout совпадает с commit, который фактически запущен на live;
+- staging venv собирается по зафиксированному `pip freeze --exclude-editable`
+  live, после чего сам проект устанавливается editable из staging checkout;
+- схема staging БД копируется из live, но пользователи, сессии, MCP tokens,
+  password reset tokens и рекламные подключения по умолчанию не копируются;
+- OAuth и SMTP работают только с отдельными staging credentials и callback
+  URLs; отсутствие таких credentials является внешним blocker, а не поводом
+  копировать production secrets;
+- для проверки auth создаются временные staging-пользователи, которые удаляются
+  после smoke-теста;
+- `AD_MCP_PREVIEW_ONLY=true` остаётся обязательным.
+
+Если владелец данных отдельно разрешил snapshot production БД, restore всё
+равно выполняется только в отдельную staging БД. До запуска сервисов из копии
+удаляются active sessions, password reset tokens, MCP/OAuth tokens и provider
+connections. Подключать staging непосредственно к live БД запрещено.
+
+## Полный backup перед синхронизацией
+
+Кроме env, PostgreSQL и `/var/lib`, в backup нужно включать project-local
+runtime storage. Сейчас история AI-анализа хранится в
+`<project>/tokens/site_analysis_history.json`.
+
+Минимальный состав закрытого backup:
+
+```text
+env/live.env
+env/staging.env
+db/live.dump
+db/staging.dump
+storage/live.tar.gz
+storage/staging.tar.gz
+storage/live-project-tokens.tar.gz
+storage/staging-project-tokens.tar.gz
+nginx/
+systemd/
+meta/live-commit.txt
+meta/staging-commit.txt
+SHA256SUMS
+```
+
+Backup directory должна принадлежать root и иметь режим `0700`. Для чтения
+закрытого дампа процессом PostgreSQL используйте pipe от root-shell:
+
+```bash
+cat "$BACKUP/db/live.dump" \
+  | sudo -u postgres pg_restore --schema-only --no-owner --no-privileges \
+      --role=adforge_staging_user --dbname=adforge_mcp_staging_next
+```
+
+Не передавайте DB URL с паролем аргументом `pg_dump`/`pg_restore` и не печатайте
+env в terminal output.
+
+## Безопасная синхронизация БД
+
+Для функционального staging без production-данных используйте временную БД:
+
+1. Создайте `adforge_mcp_staging_next` с владельцем staging DB user.
+2. Восстановите в неё только schema из закрытого live dump через root-owned
+   pipe.
+3. Проверьте набор таблиц и отсутствие пользователей.
+4. Остановите только `adforge-mcp-staging-web` и
+   `adforge-mcp-staging-http`.
+5. Завершите соединения только с двумя staging БД.
+6. Переименуйте текущую БД в `adforge_mcp_staging_pre_sync_*`, а временную в
+   `adforge_mcp_staging`.
+7. Запустите `AuthStore.ensure_schema()` со staging env.
+8. Сохраните pre-sync DB до завершения auth, SEO, site analysis, report и MCP
+   smoke-проверок.
+
+Такое переключение сокращает простой и оставляет быстрый rollback без операций
+над live БД.
+
+## Проверка env без раскрытия значений
+
+Сравнивайте только имена ключей и логические признаки `set/unset`. Значения
+секретных переменных выводить нельзя. Структурно staging должен содержать те же
+функциональные ключи, что live, но отличаться по назначению для:
+
+- public/MCP URL и портов;
+- database URL;
+- session cookie name;
+- API token и registration code;
+- connection store, uploads и audit log paths;
+- OAuth client credentials и callback URLs;
+- SMTP credentials.
+
+После синхронизации отдельно подтвердите, что DB, storage, uploads, cookies и
+tokens различаются, а `preview_only` включён.
+
 Если DNS удобнее вести через `dev-mcp.holymedia.kz`, используйте его вместо `staging-mcp.holymedia.kz` во всех командах и env-переменных.
 
 ## DNS
