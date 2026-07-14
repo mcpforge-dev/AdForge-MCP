@@ -144,6 +144,10 @@
           <span class="field__label">Повторите пароль</span>
           <input id="auth-password-confirm" type="password" autocomplete="new-password" placeholder="Повторите пароль">
         </label>
+        <label id="auth-access-code-field" class="field" hidden>
+          <span class="field__label">Код регистрации <small>(если выдан)</small></span>
+          <input id="auth-access-code" type="text" autocomplete="one-time-code" placeholder="Код от менеджера HolyMedia">
+        </label>
         <button id="auth-forgot" type="button" class="link-button">Забыли пароль?</button>
         <p id="auth-error" class="gate__error" hidden></p>
         <button id="auth-submit" type="submit" class="btn btn--primary btn--block">Войти</button>

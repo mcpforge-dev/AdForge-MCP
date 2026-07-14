@@ -75,6 +75,8 @@
     el.authPassword = document.getElementById("auth-password");
     el.authConfirmField = document.getElementById("auth-confirm-field");
     el.authPasswordConfirm = document.getElementById("auth-password-confirm");
+    el.authAccessCodeField = document.getElementById("auth-access-code-field");
+    el.authAccessCode = document.getElementById("auth-access-code");
     el.authPasswordToggle = document.getElementById("auth-password-toggle");
     el.authForgot = document.getElementById("auth-forgot");
     el.authTitle = document.getElementById("auth-title");
@@ -296,6 +298,7 @@
           return;
         }
         payload.name = el.authName.value.trim();
+        payload.access_code = el.authAccessCode.value.trim();
       }
       setLoading(el.authSubmit, true);
       hideAuthError();
@@ -366,6 +369,7 @@
     el.authName.required = isRegister;
     el.authConfirmField.hidden = !isRegister;
     el.authPasswordConfirm.required = isRegister;
+    el.authAccessCodeField.hidden = !isRegister;
     el.authPassword.autocomplete = isRegister ? "new-password" : "current-password";
     el.authForgot.hidden = isRegister;
     el.authForm.dataset.mode = state.authMode;

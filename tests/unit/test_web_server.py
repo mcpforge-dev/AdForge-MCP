@@ -798,6 +798,27 @@ def test_legal_pages_are_public_and_linked_from_landing(tmp_path) -> None:
     assert privacy_head_body == terms_head_body == b""
 
 
+def test_registration_form_sends_optional_access_code(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        public_base_url="https://adforge.example",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        landing_status, landing = _get_text(base_url, "/")
+        script_status, script = _get_text(base_url, "/assets/app.js")
+    finally:
+        close()
+
+    assert landing_status == script_status == 200
+    assert 'id="auth-access-code"' in landing
+    assert "payload.access_code = el.authAccessCode.value.trim()" in script
+
+
 def test_email_registration_creates_session_and_authorizes_dashboard_api(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
