@@ -106,6 +106,12 @@ def _runtime_account(provider: str, account: dict[str, Any]) -> dict[str, Any]:
     credentials = account.get("credentials") if isinstance(account.get("credentials"), dict) else {}
     flattened = {key: value for key, value in account.items() if key != "credentials"}
     flattened.update(credentials)
+    if provider == "google_ads":
+        login_customer_id = _clean_google_customer_id(flattened.get("login_customer_id")) or _clean_google_customer_id(
+            flattened.get("manager_customer_id")
+        )
+        if login_customer_id:
+            flattened["login_customer_id"] = login_customer_id
     return flattened
 
 
