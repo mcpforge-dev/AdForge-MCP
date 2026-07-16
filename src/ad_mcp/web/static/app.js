@@ -263,6 +263,10 @@
     document.addEventListener("keydown", (event) => {
       if (event.key === "Escape" && !el.authModal.hidden) closeAuth();
       if (event.key === "Escape" && el.clientModal && !el.clientModal.hidden) closeClientModal();
+      if (event.key === "Tab") {
+        const openModal = [el.clientModal, el.authModal].find((node) => node && !node.hidden);
+        if (openModal) trapModalFocus(openModal, event);
+      }
     });
     el.authTabs.forEach((tab) => tab.addEventListener("click", () => setAuthMode(tab.dataset.authMode)));
     el.authPasswordToggle.addEventListener("click", () => togglePasswordVisibility());
@@ -339,7 +343,30 @@
     closeAuth();
   }
 
+  function trapModalFocus(modal, event) {
+    const panel = modal.querySelector(".modal__panel") || modal;
+    const focusables = [...panel.querySelectorAll(
+      "button, [href], input, select, textarea, [tabindex]:not([tabindex='-1'])",
+    )].filter((node) => !node.disabled && !node.hidden && node.offsetParent !== null);
+    if (!focusables.length) return;
+    const first = focusables[0];
+    const last = focusables[focusables.length - 1];
+    if (!panel.contains(document.activeElement)) {
+      event.preventDefault();
+      first.focus();
+      return;
+    }
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   function openAuth(mode) {
+    state.authReturnFocus = document.activeElement;
     setAuthMode(mode === "register" ? "register" : "login");
     el.authModal.hidden = false;
     hideAuthError();
@@ -353,12 +380,17 @@
   }
 
   function closeAuth() {
+    const wasOpen = !el.authModal.hidden;
     el.authModal.hidden = true;
     hideAuthError();
     el.authForm.reset();
     el.authForm.hidden = false;
     el.authSuccess.hidden = true;
     resetPasswordVisibility();
+    if (wasOpen && state.authReturnFocus?.focus && document.contains(state.authReturnFocus)) {
+      state.authReturnFocus.focus();
+    }
+    state.authReturnFocus = null;
   }
 
   function setAuthMode(mode) {
@@ -378,9 +410,9 @@
     resetPasswordVisibility();
     el.authTitle.textContent = isRegister ? "Создать аккаунт" : "Войти в HolyMedia MCP";
     el.authSubtitle.textContent = isRegister
-      ? "Создайте аккаунт, чтобы подключить рекламные кабинеты и получить MCP доступ."
+      ? "Аккаунт нужен, чтобы подключить рекламные кабинеты и открыть их вашему AI-клиенту."
       : "Введите email и пароль, чтобы открыть личный кабинет.";
-    el.authSubmit.textContent = isRegister ? "Зарегистрироваться" : "Войти";
+    el.authSubmit.textContent = isRegister ? "Создать аккаунт" : "Войти";
   }
 
   function showRegistrationSuccess() {
@@ -494,7 +526,7 @@
         window.setTimeout(() => {
           closeClientModal();
           openAuth("login");
-        }, 900);
+        }, 1600);
       } catch (error) {
         showClientMessage("Ссылка не сработала", humanizeError(error), "error");
       } finally {
@@ -721,21 +753,24 @@
   function showWelcomeModal(kind) {
     const isRegister = kind === "register";
     showClientModal({
-      title: isRegister ? "Добро пожаловать в HolyMedia MCP" : "С возвращением в HolyMedia MCP",
+      title: isRegister ? "Добро пожаловать в HolyMedia MCP" : "С возвращением",
       subtitle: isRegister
-        ? "Первый шаг простой: подключите рекламную платформу, выберите кабинеты и скопируйте MCP URL для AI-клиента."
-        : "Кабинет готов к работе. Можно перейти к подключениям или продолжить с текущего раздела.",
-      body: `
-        <div class="welcome-card">
-          <strong>${isRegister ? "Что сделать дальше" : "Быстрый старт"}</strong>
-          <span>${isRegister ? "Подключите Meta, Google, TikTok или Yandex, затем добавьте HolyMedia MCP в Codex, Claude или ChatGPT." : "Если нужно проверить кабинеты, откройте раздел подключений. Изменения в рекламе применяются только после подтверждения."}</span>
-        </div>
-      `,
+        ? "Три шага, и ваш AI-клиент начнёт отвечать на вопросы о рекламе."
+        : "Кабинет готов к работе.",
+      body: isRegister
+        ? `
+        <ol class="welcome-steps">
+          <li><span><strong>Подключите платформу</strong> — Meta, Google, TikTok или Яндекс Директ.</span></li>
+          <li><span><strong>Выберите рекламные аккаунты</strong>, с которыми будет работать AI.</span></li>
+          <li><span><strong>Добавьте HolyMedia MCP в AI-клиент</strong> — Claude, ChatGPT или Codex.</span></li>
+        </ol>
+      `
+        : "",
       closeLabel: "",
     });
     el.clientModalActions.innerHTML = `
-      <button type="button" class="btn btn--primary" data-welcome-connections>Перейти к подключениям</button>
-      <button type="button" class="btn btn--secondary" data-client-modal-close>Продолжить работу</button>
+      <button type="button" class="btn btn--primary" data-welcome-connections>Подключить платформу</button>
+      <button type="button" class="btn btn--secondary" data-client-modal-close>Позже</button>
     `;
     el.clientModalActions.querySelector("[data-welcome-connections]")?.addEventListener("click", () => {
       closeClientModal();
@@ -3429,7 +3464,13 @@
     el.clientModalActions.querySelectorAll("[data-client-modal-close]").forEach((node) => {
       node.addEventListener("click", () => closeClientModal());
     });
+    if (el.clientModal.hidden) state.clientModalReturnFocus = document.activeElement;
     el.clientModal.hidden = false;
+    window.setTimeout(() => {
+      const panel = el.clientModal.querySelector(".modal__panel");
+      const target = panel?.querySelector("input, select, textarea, .btn--primary, button:not(.modal__close)");
+      (target || panel?.querySelector("button"))?.focus();
+    }, 0);
   }
 
   function closeClientModal() {
@@ -3439,9 +3480,14 @@
       state.activePending = null;
       state.pendingModalId = null;
     }
+    const wasOpen = !el.clientModal.hidden;
     el.clientModal.hidden = true;
     el.clientModalBody.innerHTML = "";
     el.clientModalActions.innerHTML = "";
+    if (wasOpen && state.clientModalReturnFocus?.focus && document.contains(state.clientModalReturnFocus)) {
+      state.clientModalReturnFocus.focus();
+    }
+    state.clientModalReturnFocus = null;
   }
 
   function toast(message, tone = "info") {

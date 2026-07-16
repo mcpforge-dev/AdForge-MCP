@@ -1,0 +1,15 @@
+Manrope is licensed under the SIL Open Font License, Version 1.1.
+
+Copyright (c) 2018 The Manrope Project Authors (https://github.com/sharanda/manrope)
+
+The .woff2 files in this directory are subsets (cyrillic, cyrillic-ext,
+latin, latin-ext) of the Manrope variable font, self-hosted so the
+dashboard loads no external font resources in production.
+
+The full OFL-1.1 license text is available at:
+https://openfontlicense.org
+
+Under the OFL you may use, study, modify and redistribute these fonts,
+including bundling them with this application. The fonts may not be sold
+on their own, and any derivative fonts may not use the reserved name
+"Manrope".

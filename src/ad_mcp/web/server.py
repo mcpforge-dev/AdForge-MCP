@@ -595,6 +595,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_file(STATIC_ROOT / "app.css", "text/css; charset=utf-8")
             if route == "/assets/app.js":
                 return self._send_file(STATIC_ROOT / "app.js", "application/javascript; charset=utf-8")
+            if route.startswith("/assets/fonts/"):
+                font_name = route.removeprefix("/assets/fonts/")
+                font_path = STATIC_ROOT / "fonts" / font_name
+                if re.fullmatch(r"[A-Za-z0-9._-]+\.woff2", font_name) and font_path.is_file():
+                    return self._send_file(font_path, "font/woff2")
+                return self._send_json({"error": "not_found"}, HTTPStatus.NOT_FOUND)
             if route in {"/favicon.ico", "/favicon.png", "/apple-touch-icon.png"}:
                 return self._send_file(STATIC_ROOT / "favicon.png", "image/png")
             if route in {"/favicon.svg", "/apple-touch-icon.svg"}:

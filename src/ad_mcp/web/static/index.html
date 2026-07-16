@@ -4,9 +4,11 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>HolyMedia MCP — рекламные кабинеты в AI</title>
-  <meta name="description" content="HolyMedia MCP подключает рекламные кабинеты к AI-клиентам и помогает быстро смотреть аккаунты, кампании, статусы, метрики и точки роста сайта.">
+  <meta name="description" content="HolyMedia MCP подключает Meta, Google, TikTok и Яндекс Директ к Claude, ChatGPT или Codex. Кампании, расходы и статусы — в вашем AI-чате.">
     <link rel="icon" href="/favicon.ico?v=3" type="image/png">
     <link rel="apple-touch-icon" href="/apple-touch-icon.png?v=3">
+  <link rel="preload" href="/assets/fonts/manrope-cyrillic.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="/assets/fonts/manrope-latin.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
@@ -20,87 +22,110 @@
         <span>HolyMedia MCP</span>
       </a>
       <nav class="site-nav" aria-label="Навигация">
-        <a href="#features">Возможности</a>
+        <a href="#how">Как это работает</a>
         <button id="landing-login" type="button" class="btn btn--ghost btn--small">Войти</button>
-        <button id="landing-register" type="button" class="btn btn--primary btn--small">Регистрация</button>
+        <button id="landing-register" type="button" class="btn btn--primary btn--small">Создать аккаунт</button>
       </nav>
     </header>
     <main class="landing-main">
       <section class="hero">
         <div class="hero__copy">
-          <span class="eyebrow">AI-помощник для рекламных кабинетов</span>
-          <h1>Подключите рекламу к AI и задавайте вопросы в чате</h1>
-          <p>HolyMedia MCP связывает рекламные кабинеты с Codex, Claude или ChatGPT. После подключения можно спросить AI о кампаниях, бюджетах, статусах и базовых метриках без ручных выгрузок и таблиц.</p>
+          <h1>Вся ваша реклама — в одном AI-чате</h1>
+          <p>HolyMedia MCP подключает Meta, Google, TikTok и Яндекс Директ к Claude, ChatGPT или Codex. Спрашивайте о кампаниях, расходах и статусах обычными словами.</p>
           <div class="hero__actions">
-            <button type="button" class="btn btn--primary" data-auth-open="register">Зарегистрироваться</button>
+            <button type="button" class="btn btn--primary" data-auth-open="register">Создать аккаунт</button>
             <button type="button" class="btn btn--secondary" data-auth-open="login">Войти</button>
           </div>
-          <div class="hero__benefits">
-            <span>Подключение через сайт</span>
-            <span>Личный доступ для AI</span>
-            <span>Изменения только после подтверждения</span>
-            <span>Codex, Claude и ChatGPT</span>
-          </div>
         </div>
-        <div class="hero__visual" aria-label="Схема подключения">
-          <div class="flow-card flow-card--source">
-            <strong>Рекламные платформы</strong>
-            <span>Meta Ads · Google Ads · TikTok · Yandex</span>
+        <div class="hero-chat">
+          <div class="hero-chat__title">
+            <span>Ваш AI-клиент</span>
+            <span>Claude · ChatGPT · Codex</span>
           </div>
-          <div class="flow-arrow" aria-hidden="true">→</div>
-          <div class="flow-card flow-card--middle">
-            <strong>HolyMedia MCP</strong>
-            <span>Подключения, аккаунты и понятные отчёты</span>
-          </div>
-          <div class="flow-arrow" aria-hidden="true">→</div>
-          <div class="flow-card flow-card--target">
-            <strong>AI-клиент</strong>
-            <span>Codex · Claude · ChatGPT · ваш рабочий чат</span>
+          <div class="hero-chat__q">Какие кампании активны и сколько мы потратили за неделю?</div>
+          <div class="hero-chat__a">
+            <strong>Активны 3 кампании, расходы за 7 дней — 412 500 ₸.</strong>
+            <span class="hero-chat__row"><span>Лидогенерация · Meta Ads</span><b>184 300 ₸</b></span>
+            <span class="hero-chat__row"><span>Поиск · Google Ads</span><b>141 900 ₸</b></span>
+            <span class="hero-chat__row"><span>Ретаргетинг · Яндекс Директ</span><b>86 300 ₸</b></span>
+            <span class="hero-chat__src">Данные из ваших подключённых кабинетов · только просмотр</span>
           </div>
         </div>
       </section>
-      <section class="site-analysis-strip" aria-label="AI-анализ сайта">
-        <div>
-          <span class="eyebrow">AI-анализ сайта</span>
-          <h2>Найдите, что мешает заявкам на сайте</h2>
-          <p>HolyMedia MCP помогает не только смотреть рекламные данные, но и быстро находить точки роста на сайте: первый экран, оффер, тексты, CTA, доверие, UX и конверсию.</p>
-        </div>
-        <div class="site-analysis-points">
-          <span>Проверка первого экрана и оффера</span>
-          <span>Короткие приоритетные рекомендации</span>
-          <span>UX, тексты, доверие и конверсия</span>
-        </div>
+      <section id="how" class="how" aria-label="Как это работает">
+        <h2>Три шага до первого ответа</h2>
+        <p class="how__intro">Настройка занимает один вечер и не требует разработчика.</p>
+        <ol class="how-steps">
+          <li>
+            <h3>Подключите рекламные кабинеты</h3>
+            <p>Войдите в HolyMedia MCP и подключите Meta, Google, TikTok или Яндекс Директ через официальный вход платформы.</p>
+          </li>
+          <li>
+            <h3>Добавьте HolyMedia MCP в AI-клиент</h3>
+            <p>Скопируйте адрес подключения и личный ключ доступа в Claude, ChatGPT или Codex по готовой инструкции.</p>
+          </li>
+          <li>
+            <h3>Задавайте вопросы</h3>
+            <p>Спрашивайте про кампании, бюджеты, статусы и метрики прямо в чате, без выгрузок и таблиц.</p>
+          </li>
+        </ol>
       </section>
-      <section id="features" class="feature-grid" aria-label="Возможности">
-        <article>
-          <h2>Подключение через сайт</h2>
-          <p>Пользователь входит в кабинет, выбирает рекламную платформу и отмечает нужные аккаунты. Никаких локальных скриптов и ручных конфигов.</p>
-        </article>
-        <article>
-          <h2>AI видит только ваши аккаунты</h2>
-          <p>Каждый пользователь работает со своими подключениями. Чужие рекламные кабинеты не смешиваются с вашим рабочим пространством.</p>
-        </article>
-        <article>
-          <h2>Контроль перед изменениями</h2>
-          <p>AI может анализировать рекламу и готовить рекомендации. Реальные изменения в кабинетах не выполняются без отдельного подтверждения.</p>
-        </article>
-      </section>
-      <section class="question-strip" aria-label="Что можно спросить у AI">
-        <div>
-          <span class="eyebrow">После подключения</span>
-          <h2>Что можно спросить у AI</h2>
-          <p>Начните с простых рабочих вопросов, которые обычно требуют переключения между кабинетами и таблицами.</p>
+      <section class="capabilities" aria-label="Что AI видит в кабинетах">
+        <div class="capabilities__copy">
+          <h2>Что AI видит в ваших кабинетах</h2>
+          <p>Только ваши подключённые аккаунты и только просмотр. AI анализирует и советует, а изменения в рекламе применяются после вашего подтверждения.</p>
+          <ul class="capabilities__list">
+            <li>Кампании и их статусы на всех платформах</li>
+            <li>Расходы и базовые метрики за любой период</li>
+            <li>Проблемы с подключениями и доставкой рекламы</li>
+            <li>SEO-отчёты и аудит сайта в том же кабинете</li>
+          </ul>
         </div>
-        <div class="question-list">
+        <div class="question-list" aria-label="Примеры вопросов">
           <span>Какие рекламные аккаунты подключены?</span>
           <span>Какие кампании сейчас активны?</span>
-          <span>Покажи расходы за последние 7 дней.</span>
+          <span>Покажи расходы за последние 7 дней</span>
           <span>Где есть проблемы со статусами?</span>
         </div>
       </section>
+      <section class="growth" aria-label="SEO и аудит сайта">
+        <h2>Больше, чем реклама</h2>
+        <div class="growth__rows">
+          <div class="growth-row">
+            <h3>SEO-отчёты из Search Console</h3>
+            <p>Понятный отчёт по запросам, страницам, CTR и позициям, который не стыдно отправить клиенту. Без входа в Search Console.</p>
+          </div>
+          <div class="growth-row">
+            <h3>AI-аудит сайта</h3>
+            <p>Вставьте адрес страницы и получите оценку, приоритетные правки и план на один день: первый экран, тексты, доверие, конверсия.</p>
+          </div>
+        </div>
+      </section>
+      <section class="safety" aria-label="Безопасность">
+        <h2>Вы контролируете изменения</h2>
+        <ul class="safety-list">
+          <li>
+            <h3>Ничего не меняется само</h3>
+            <p>AI готовит рекомендации, а изменения в кабинетах применяются только после вашего подтверждения.</p>
+          </li>
+          <li>
+            <h3>Личный ключ доступа</h3>
+            <p>AI-клиент видит только ваши аккаунты. Ключ можно перевыпустить в один клик.</p>
+          </li>
+          <li>
+            <h3>Подключение без паролей</h3>
+            <p>Платформы подключаются через их официальный вход. HolyMedia MCP не хранит пароли от кабинетов.</p>
+          </li>
+        </ul>
+      </section>
+      <section class="cta-band" aria-label="Регистрация">
+        <h2>Подключите первый кабинет сегодня</h2>
+        <p>Регистрация и настройка занимают один вечер. Работает с Claude, ChatGPT и Codex.</p>
+        <button type="button" class="btn btn--primary" data-auth-open="register">Создать аккаунт</button>
+      </section>
     </main>
     <footer class="footer footer--landing">
-      <p>HolyMedia MCP · рекламные кабинеты, сайт и AI-клиенты в одном рабочем процессе.</p>
+      <p>HolyMedia MCP — продукт агентства HolyMedia.</p>
       <nav class="footer__links" aria-label="Юридическая информация">
         <a href="/privacy">Политика конфиденциальности</a>
         <a href="/terms">Условия использования</a>
@@ -149,16 +174,16 @@
           <input id="auth-access-code" type="text" autocomplete="one-time-code" placeholder="Код от менеджера HolyMedia">
         </label>
         <button id="auth-forgot" type="button" class="link-button">Забыли пароль?</button>
-        <p id="auth-error" class="gate__error" hidden></p>
+        <p id="auth-error" class="gate__error" role="alert" hidden></p>
         <button id="auth-submit" type="submit" class="btn btn--primary btn--block">Войти</button>
       </form>
       <div id="auth-success" class="auth-success" hidden>
         <div class="auth-success__mark" aria-hidden="true">✓</div>
         <h2>Аккаунт создан</h2>
-        <p>Добро пожаловать в HolyMedia MCP. Теперь вы можете перейти в личный кабинет и подключить рекламные платформы.</p>
-        <button id="auth-success-app" type="button" class="btn btn--primary btn--block">Перейти в личный кабинет</button>
+        <p>Осталось подключить рекламные платформы и добавить HolyMedia MCP в ваш AI-клиент.</p>
+        <button id="auth-success-app" type="button" class="btn btn--primary btn--block">Открыть личный кабинет</button>
       </div>
-      <p class="modal__footnote">Регистрируясь, вы получаете личный кабинет HolyMedia MCP и персональный ключ доступа для AI-клиента.</p>
+      <p class="modal__footnote">Вместе с аккаунтом вы получите личный ключ доступа для AI-клиента.</p>
     </section>
   </div>
 
@@ -189,7 +214,7 @@
           <input id="gate-token" type="password" autocomplete="off" spellcheck="false" placeholder="Введите код доступа" required>
         </label>
         <button id="gate-submit" class="btn btn--primary btn--block" type="submit">Открыть панель</button>
-        <p id="gate-error" class="gate__error" hidden>Неверный или пустой код доступа.</p>
+        <p id="gate-error" class="gate__error" role="alert" hidden>Неверный или пустой код доступа.</p>
       </form>
       <p class="gate__footnote">Код доступа выдает менеджер HolyMedia. Действия, которые могут повлиять на рекламу, применяются только после отдельного подтверждения.</p>
     </div>
