@@ -110,8 +110,8 @@ def _normalize_campaign(platform: str, row: dict[str, Any]) -> dict[str, Any]:
         "objective": row.get("objective") or row.get("advertising_channel_type"),
         "created_time": row.get("created_time"),
         "updated_time": row.get("updated_time"),
-        "start_date": row.get("start_time") or row.get("start_date"),
-        "end_date": row.get("stop_time") or row.get("end_time"),
+        "start_date": row.get("start_time") or row.get("start_date") or row.get("start_date_time"),
+        "end_date": row.get("stop_time") or row.get("end_time") or row.get("end_date") or row.get("end_date_time"),
         "currency": row.get("currency"),
     }
     if platform == "meta_ads":
@@ -358,6 +358,14 @@ def build_beta_read_tools(
                 account_id=account_id,
                 message=payload.get("message", "Campaign listing is not implemented for this platform yet."),
                 source_api=provider_client.source_api,
+            )
+        if payload.get("status") == "requires_client_account":
+            return _not_available(
+                platform=platform,
+                account_id=account_id,
+                message=payload.get("message", "Для чтения кампаний выберите клиентский Google Ads аккаунт."),
+                source_api=provider_client.source_api,
+                extra={"status": "requires_client_account", "manager_account": True},
             )
         rows = [_normalize_campaign(platform, row) for row in payload.get("rows", [])]
         return {
