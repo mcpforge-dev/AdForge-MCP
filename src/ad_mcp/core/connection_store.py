@@ -447,7 +447,18 @@ class HostedConnectionStore:
             account_id = str(runtime_account.get("account_id", "") or "").strip()
             if account_id in selected_ids and not _account_selection_disabled(runtime_account):
                 account = dict(runtime_account)
+                discovered_login_customer_id = account.get("login_customer_id")
                 account.update(credentials)
+                if provider == "google_ads":
+                    login_customer_id = (
+                        _clean_google_customer_id(discovered_login_customer_id)
+                        or _clean_google_customer_id(account.get("manager_customer_id"))
+                        or _clean_google_customer_id(credentials.get("login_customer_id"))
+                    )
+                    if login_customer_id:
+                        account["login_customer_id"] = login_customer_id
+                    else:
+                        account.pop("login_customer_id", None)
                 account["status"] = account.get("status") or "connected"
                 selected_accounts.append(account)
         if provider == "google_ads" and not selected_accounts:
