@@ -17,3 +17,9 @@ tokens/*
 !tokens/.gitkeep
 logs/*
 !logs/.gitkeep
+
+# Local-machine agent config and data (project skills ARE committed)
+.claude/settings.local.json
+.codex/hooks.json
+.impeccable/
+.openhands/
