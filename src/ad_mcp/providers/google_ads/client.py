@@ -64,6 +64,20 @@ class GoogleAdsProvider(BaseAdsProvider):
             return super().list_account_objects(account_id, object_type, fields, params, limit)
         if object_type.strip().lower() != "campaign":
             return super().list_account_objects(account_id, object_type, fields, params, limit)
+        if str(account_config.get("google_ads_account_type") or "").strip().lower() == "manager":
+            return {
+                "provider": "google_ads",
+                "account_id": account_id,
+                "object_type": "campaign",
+                "status": "requires_client_account",
+                "message": (
+                    "Это управляющий аккаунт Google Ads (MCC), у него нет собственных кампаний. "
+                    "Вызовите list_ad_accounts и передайте account_id кабинета с "
+                    "google_ads_account_type=customer."
+                ),
+                "rows": [],
+                "source_api": self.source_api,
+            }
         credentials = credentials_from_config(account_config)
         return fetch_google_campaigns(credentials, status=(params or {}).get("status"), limit=limit)
 

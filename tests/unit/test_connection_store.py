@@ -235,6 +235,32 @@ def test_google_customer_id_becomes_account_id_for_oauth_store(tmp_path: Path) -
     assert config["accounts"][0]["account_id"] == "123-456-7890"
 
 
+def test_google_manager_id_becomes_effective_login_customer_id(tmp_path: Path) -> None:
+    store = HostedConnectionStore(tmp_path / "tokens" / "connections.json")
+    store.save_provider_config(
+        "google_ads",
+        {
+            "provider": "google_ads",
+            "accounts": [
+                {
+                    "name": "Google Client",
+                    "account_id": "2222222222",
+                    "customer_id": "2222222222",
+                    "manager_customer_id": "1111111111",
+                    "login_customer_id": "",
+                    "refresh_token": "refresh-token",
+                }
+            ],
+        },
+    )
+
+    runtime_account = store.provider_config("google_ads")["accounts"][0]
+    safe_account = store.safe_provider_status("google_ads")["accounts"][0]
+
+    assert runtime_account["login_customer_id"] == "1111111111"
+    assert safe_account["login_customer_id"] == "1111111111"
+
+
 def test_safe_account_summary_keeps_provider_metadata_without_secrets(tmp_path: Path) -> None:
     store = HostedConnectionStore(tmp_path / "tokens" / "connections.json")
     store.save_provider_config(

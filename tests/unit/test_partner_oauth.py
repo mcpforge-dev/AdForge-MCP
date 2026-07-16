@@ -173,6 +173,19 @@ def test_google_oauth_discovers_customers_and_select_saves_credentials(tmp_path)
     assert stored["accounts"][0]["developer_token"] == "google-dev-token"
 
 
+def test_google_oauth_preserves_manager_as_login_customer_id(tmp_path) -> None:
+    service = GoogleOAuthService(_settings(tmp_path), _FakePartnerHTTP())
+    state = parse_qs(urlparse(service.authorization_url()).query)["state"][0]
+
+    pending = service.handle_callback({"code": "google-code", "state": state})
+    service.select_accounts(pending["pending_id"], ["5555555555"])
+    account = service._store.provider_config("google_ads")["accounts"][0]  # noqa: SLF001
+
+    assert account["customer_id"] == "5555555555"
+    assert account["manager_customer_id"] == "1234567890"
+    assert account["login_customer_id"] == "1234567890"
+
+
 def test_google_oauth_allows_manual_customer_id_when_discovery_fails(tmp_path) -> None:
     http = _FakePartnerHTTP(fail_google_accessible_customers=True)
     service = GoogleOAuthService(_settings(tmp_path), http)

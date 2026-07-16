@@ -173,6 +173,44 @@ async def test_unscoped_mcp_tools_read_single_workspace_google_accounts(tmp_path
 
 
 @pytest.mark.asyncio
+async def test_list_campaigns_explains_google_manager_account(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    HostedConnectionStore(settings.connection_store_file).save_provider_config(
+        "google_ads",
+        {
+            "provider": "google_ads",
+            "accounts": [
+                {
+                    "name": "Google MCC",
+                    "account_id": "1111111111",
+                    "customer_id": "1111111111",
+                    "google_ads_account_type": "manager",
+                    "status": "connected",
+                    "refresh_token": "refresh-token",
+                    "developer_token": "developer-token",
+                }
+            ],
+        },
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+    mcp = create_server(settings)
+
+    campaigns = _json_tool_payload(
+        await mcp.call_tool("list_campaigns", {"platform": "google_ads", "account_id": "1111111111"})
+    )
+
+    assert campaigns["status"] == "requires_client_account"
+    assert campaigns["manager_account"] is True
+    assert campaigns["real_data"] is False
+    assert "list_ad_accounts" in campaigns["message"]
+
+
+@pytest.mark.asyncio
 async def test_beta_read_tools_are_registered_and_hide_connection_secrets(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,

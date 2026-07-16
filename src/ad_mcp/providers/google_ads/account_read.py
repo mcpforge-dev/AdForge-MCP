@@ -15,8 +15,8 @@ CAMPAIGN_FIELDS = [
     "campaign.name",
     "campaign.status",
     "campaign.advertising_channel_type",
-    "campaign.start_date",
-    "campaign.end_date",
+    "campaign.start_date_time",
+    "campaign.end_date_time",
     "campaign_budget.amount_micros",
     "campaign_budget.delivery_method",
     "customer.currency_code",
@@ -58,13 +58,17 @@ def _campaign_row(result: Any) -> dict[str, Any]:
     campaign = result.campaign
     budget = result.campaign_budget
     amount_micros = getattr(budget, "amount_micros", None)
+    start_date_time = getattr(campaign, "start_date_time", None) or None
+    end_date_time = getattr(campaign, "end_date_time", None) or None
     return {
         "id": str(campaign.id),
         "name": campaign.name,
         "status": _enum_name(campaign.status),
         "advertising_channel_type": _enum_name(campaign.advertising_channel_type),
-        "start_date": campaign.start_date or None,
-        "end_date": campaign.end_date or None,
+        "start_date": str(start_date_time)[:10] if start_date_time else None,
+        "end_date": str(end_date_time)[:10] if end_date_time else None,
+        "start_date_time": start_date_time,
+        "end_date_time": end_date_time,
         "daily_budget": (float(amount_micros) / 1_000_000) if amount_micros is not None else None,
         "daily_budget_micros": amount_micros,
         "budget_delivery_method": _enum_name(budget.delivery_method),
