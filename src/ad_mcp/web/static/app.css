@@ -758,8 +758,8 @@ select option {
   background: var(--warn-bg);
 }
 
-.token-status strong,
-.token-reveal strong { color: var(--text); }
+.token-status strong { color: var(--text); }
+.token-reveal strong { color: var(--text); font-size: var(--fs-h3); }
 
 .token-secret-row {
   display: flex;
@@ -1153,7 +1153,7 @@ select option {
 
 .section-head__actions { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 
-.section-head h2 { font-size: 20px; }
+.section-head h2 { font-size: var(--fs-h1); }
 
 /* ---------- Cards ---------- */
 
@@ -1186,7 +1186,6 @@ select option {
 
 .overview-main-grid > .card {
   height: 100%;
-  min-height: 292px;
 }
 
 .overview-progress-card {
@@ -2475,26 +2474,13 @@ select option {
 .steps li.is-done { color: var(--text); }
 .steps li.is-done::before { content: "✓"; color: var(--ok); border-color: rgba(62, 207, 142, 0.4); background: var(--ok-bg); }
 
-.overview-next-note {
-  margin-top: 16px;
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-small);
-  background: var(--bg-inset);
-  padding: 14px;
-  display: grid;
-  gap: 6px;
-}
-
-.overview-next-note strong {
-  color: var(--text);
-  font-size: 13.5px;
-}
-
-.overview-next-note span {
+.onboarding-status {
   color: var(--text-muted);
-  font-size: 13px;
-  line-height: 1.55;
+  font-size: 14px;
+  margin: 0;
 }
+
+.onboarding-cta { margin-top: 16px; }
 
 .mcp-card { display: flex; flex-direction: column; }
 
@@ -2526,25 +2512,16 @@ select option {
   overflow-x: auto;
 }
 
-.safe-mode-note,
-.setup-card,
-.prompt-card {
-  border: 1px solid var(--border-soft);
-  background: var(--bg-inset);
-  border-radius: var(--radius-small);
-  padding: 12px 14px;
+/* Flat subsection: a divider + heading, not a nested box (no card-in-card). */
+.subsection {
+  border-top: 1px solid var(--border);
+  margin-top: 16px;
+  padding-top: 16px;
   color: var(--text-muted);
   font-size: 13.5px;
 }
 
-.safe-mode-note {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: auto;
-}
-
-.safe-mode-note strong { color: var(--text); }
+.mcp-card > .callout { margin-top: 16px; }
 
 .setup-list {
   margin: 10px 0 0;
@@ -2598,26 +2575,6 @@ select option {
   background: rgba(245, 183, 89, 0.09);
 }
 
-.client-card__badge {
-  display: inline-flex;
-  align-items: center;
-  border-radius: 999px;
-  padding: 4px 8px;
-  margin-bottom: 10px;
-  font-size: 11.5px;
-  font-weight: 700;
-}
-
-.client-card__badge--ok {
-  color: var(--ok);
-  background: var(--ok-bg);
-}
-
-.client-card__badge--warn {
-  color: var(--warn);
-  background: rgba(245, 183, 89, 0.12);
-}
-
 .client-card h4 {
   margin-bottom: 6px;
   color: var(--text);
@@ -2645,7 +2602,6 @@ select option {
 }
 
 .client-fields div {
-  border: 1px solid var(--border-soft);
   border-radius: var(--radius-small);
   background: rgba(255, 255, 255, 0.025);
   padding: 10px;
@@ -2985,6 +2941,7 @@ select option {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 44px;
   background: var(--bg-inset);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius-small);
@@ -3068,6 +3025,12 @@ details.raw-json pre {
   text-align: center;
   color: var(--text-faint);
   font-size: 14px;
+}
+
+.empty-state--error {
+  border-style: solid;
+  border-color: rgba(240, 113, 123, 0.3);
+  color: var(--err);
 }
 
 .notice {
@@ -3180,7 +3143,12 @@ details.raw-json pre {
   .topbar__side .btn--small { flex: none; padding-inline: 10px; }
   .user-pill { flex: 1 1 auto; min-width: 0; max-width: none; padding-inline: 9px; }
   .tabs-shell { width: calc(100% - 28px); align-items: stretch; flex-direction: column; margin-top: 10px; }
-  .tabs-bar { width: 100%; border-radius: var(--radius-small); }
+  .tabs-bar {
+    width: 100%;
+    border-radius: var(--radius-small);
+    /* Edge fade signals the row scrolls; keeps focus rings on visible tabs unclipped. */
+    mask-image: linear-gradient(90deg, transparent 0, black 14px, black calc(100% - 14px), transparent 100%);
+  }
   .tabs-shell .badge { align-self: flex-start; margin-left: 0; }
   .nav-tab { flex: 0 0 auto; }
   .main { padding: 20px 14px 40px; }

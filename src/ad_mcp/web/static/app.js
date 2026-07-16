@@ -104,6 +104,7 @@
     el.signout = document.getElementById("signout");
     el.overviewNotice = document.getElementById("overview-notice");
     el.overviewStats = document.getElementById("overview-stats");
+    el.overviewCta = document.getElementById("overview-cta");
     el.siteAnalysisForm = document.getElementById("site-analysis-form");
     el.siteAnalysisUrl = document.getElementById("site-analysis-url");
     el.siteAnalysisType = document.getElementById("site-analysis-type");
@@ -626,7 +627,7 @@
       if (!url || url === "—") return;
       await copyText(url);
       markMcpUrlCopied();
-      showClientMessage("MCP URL скопирован", "Теперь перейдите в раздел MCP и выберите инструкцию для Codex, Claude или ChatGPT.", "success");
+      showClientMessage("Адрес скопирован", "Теперь перейдите в раздел «AI-клиент» и выберите инструкцию для Codex, Claude или ChatGPT.", "success");
     });
     el.copyMcpUrlPanel.addEventListener("click", async () => {
       const url = el.mcpUrlPanel.textContent.trim();
@@ -1161,7 +1162,7 @@
 
   async function loadOverview() {
     el.overviewNotice.innerHTML = "";
-    el.overviewStats.innerHTML = emptyState("Загружаем статус...");
+    el.overviewStats.textContent = "Загружаем статус...";
     try {
       const [capabilities, connections] = await Promise.all([
         api("/api/beta/capabilities"),
@@ -1173,7 +1174,7 @@
       renderOverview(capabilities, connections);
     } catch (error) {
       if (handle401(error)) return;
-      el.overviewStats.innerHTML = errorState(humanizeError(error));
+      el.overviewStats.textContent = humanizeError(error);
     }
   }
 
@@ -1190,26 +1191,41 @@
       el.copyMcpUrlPanel.disabled = !mcpUrl;
     }
 
-    const stats = [
-      stat("Сервис", plainValue("Работает")),
-      stat("Адрес кабинета", monoText(window.location.origin)),
-      stat("Подключенные платформы", String(connectedPlatforms.length)),
-      stat("Рекламные аккаунты", String(connectedAccounts)),
-      stat("AI-подключение", plainValue(state.mcpUrlCopied ? "URL скопирован" : "Ожидает настройки")),
-      stat("Режим работы", plainValue("Без автозапуска")),
-    ];
-    el.overviewStats.innerHTML = stats.join("");
+    el.overviewStats.textContent = platforms.length
+      ? `Подключено ${connectedPlatforms.length} из ${platforms.length} ${pluralRu(platforms.length, "платформы", "платформ", "платформ")}, ${connectedAccounts} ${pluralRu(connectedAccounts, "аккаунт", "аккаунта", "аккаунтов")}.`
+      : "Платформы ещё не загружены.";
 
     el.overviewNotice.innerHTML = state.notice ? noticeMarkup(state.notice.text, state.notice.tone) : "";
 
     const steps = [
-      { text: "Подключите рекламную платформу", done: connectedPlatforms.length > 0 || hasPending(platforms) },
-      { text: "Выберите рекламные аккаунты", done: connectedAccounts > 0 },
-      { text: "Скопируйте MCP URL", done: state.mcpUrlCopied },
+      {
+        text: "Подключите рекламную платформу",
+        done: connectedPlatforms.length > 0 || hasPending(platforms),
+        ctaLabel: "Подключить платформу",
+        action: () => setSection("connections"),
+      },
+      {
+        text: "Выберите рекламные аккаунты",
+        done: connectedAccounts > 0,
+        ctaLabel: "Выбрать аккаунты",
+        action: () => setSection("connections"),
+      },
+      {
+        text: "Скопируйте адрес подключения",
+        done: state.mcpUrlCopied,
+        ctaLabel: "Скопировать адрес",
+        action: () => el.copyMcpUrl.click(),
+      },
     ];
     el.nextSteps.innerHTML = steps
       .map((s) => `<li class="${s.done ? "is-done" : ""}">${esc(s.text)}</li>`)
       .join("");
+
+    const nextStep = steps.find((s) => !s.done);
+    el.overviewCta.innerHTML = nextStep
+      ? `<button type="button" class="btn btn--primary btn--small" data-overview-cta>${esc(nextStep.ctaLabel)}</button>`
+      : `<button type="button" class="btn btn--secondary btn--small" data-overview-cta>Открыть AI-клиента</button>`;
+    el.overviewCta.querySelector("[data-overview-cta]").addEventListener("click", nextStep ? nextStep.action : () => setSection("mcp"));
   }
 
   function hasPending(platforms) {
@@ -2458,9 +2474,8 @@
           </div>
           ${statusBadge(status, testMode)}
         </div>
-        <div class="platform-card__meta">${metaBits.join("")}</div>
+        ${metaBits.length ? `<div class="platform-card__meta">${metaBits.join("")}</div>` : ""}
         <p class="platform-card__hint">${esc(statusHint(status, canConnect))}</p>
-        ${status === "provider_setup_required" ? renderProviderSetupCallout(platform) : ""}
         ${accountsBlock}
         ${pending ? renderPendingCallout(platform, pending) : ""}
         ${expired && !pending ? renderExpiredCallout() : ""}
@@ -2473,6 +2488,7 @@
   }
 
   function platformMeta(platform, status, accounts) {
+    // Only surface real counts here; the badge and hint below already say what the status means.
     if (accounts.length) {
       return [`<span>Подключено аккаунтов <strong>${accounts.length}</strong></span>`];
     }
@@ -2481,12 +2497,7 @@
       const count = (pending?.accounts || []).length;
       return [`<span>Найдено аккаунтов <strong>${count}</strong></span>`];
     }
-    if (status === "ready_to_connect") return [`<span>Состояние <strong>готово к подключению</strong></span>`];
-    if (status === "reconnect_required") return [`<span>Состояние <strong>нужно подключить заново</strong></span>`];
-    if (status === "provider_setup_required" || status === "credentials_missing") {
-      return [`<span>Состояние <strong>платформа настраивается</strong></span>`];
-    }
-    return [`<span>Состояние <strong>${esc(statusLabel(status))}</strong></span>`];
+    return [];
   }
 
   function renderAccountRow(account) {
@@ -2513,15 +2524,6 @@
         </summary>
         <div class="platform-card__accounts-list">${rows}</div>
       </details>
-    `;
-  }
-
-  function renderProviderSetupCallout(platform) {
-    return `
-      <div class="callout callout--warn">
-        <strong>Платформа настраивается</strong>
-        <span>Мы готовим подключение этой платформы. Как только настройка будет завершена, кнопка подключения станет доступна.</span>
-      </div>
     `;
   }
 
@@ -2576,15 +2578,16 @@
   }
 
   function renderPendingDiagnostics(pending) {
+    // Only surface this box when there's an actual snag to explain; the happy path speaks for itself via the account list below.
     const meta = pending?.metadata || {};
     if (pending.provider === "google_ads" && Object.keys(meta).length) {
       const blocked = meta.accessible_customers_status === "blocked";
+      if (!blocked) return "";
       const detail = meta.provider_api_error ? `<small>${esc(meta.provider_api_error)}</small>` : "";
       return `
         <div class="pending-diagnostics">
-        <strong>Подсказка Google Ads</strong>
-          <span>${blocked ? "Google подключён, но список кабинетов не подтянулся автоматически." : "Google Ads вернул список доступных кабинетов."}</span>
-          ${blocked ? "<span>Можно завершить подключение вручную: введите Customer ID рекламного кабинета.</span>" : ""}
+        <strong>Список кабинетов не подтянулся автоматически</strong>
+          <span>Можно завершить подключение вручную: введите Customer ID рекламного кабинета ниже.</span>
           ${detail}
         </div>
       `;
@@ -2594,6 +2597,15 @@
     const archived = Number(meta.archived_clients ?? 0);
     const active = Number(meta.active_clients ?? Math.max(0, returned - archived));
     const fallback = meta.fallback_used === true || meta.fallback_used === "true";
+    if (returned > 0 && !fallback) return "";
+    if (returned === 0 && !fallback) {
+      return `
+        <div class="pending-diagnostics">
+          <strong>Yandex Direct не вернул кабинеты</strong>
+          <span>Проверьте права пользователя или агентский доступ в Yandex Direct.</span>
+        </div>
+      `;
+    }
     return `
       <div class="pending-diagnostics">
         <strong>Подсказка Yandex Direct</strong>
@@ -2601,7 +2613,6 @@
         <span>Активных: ${esc(active)}</span>
         <span>Архивных/отключённых: ${esc(archived)}</span>
         <span>Fallback использован: ${fallback ? "да" : "нет"}</span>
-        ${returned === 0 && !fallback ? `<small>Yandex API не вернул кабинеты. Проверьте права пользователя или агентский доступ в Yandex Direct.</small>` : ""}
       </div>
     `;
   }
@@ -3142,17 +3153,18 @@
   }
 
   function statusBadge(status, testMode) {
+    // Color carries meaning, not decoration: green = connected, amber = needs your action now, everything else neutral.
     const map = {
       connected: ["Подключено", "ok"],
-      ready_to_connect: ["Не подключено", "info"],
+      ready_to_connect: ["Не подключено", "muted"],
       select_accounts: ["Выберите аккаунт", "warn"],
       reconnect_required: ["Нужно подключить заново", "warn"],
-      provider_setup_required: ["Платформа настраивается", "warn"],
+      provider_setup_required: ["Платформа настраивается", "muted"],
       credentials_missing: ["Платформа настраивается", "muted"],
       error: ["Ошибка подключения", "err"],
     };
     const [label, tone] = map[status] || ["Статус неизвестен", "muted"];
-    const modeChip = testMode ? `<span class="badge badge--info">Тестовый режим</span>` : "";
+    const modeChip = testMode ? `<span class="badge badge--muted">Тестовый режим</span>` : "";
     return `<div class="status-badge-group">${modeChip}<span class="badge badge--${tone}">${esc(label)}</span></div>`;
   }
 
@@ -3207,24 +3219,12 @@
 
   /* ---------- small renderers ---------- */
 
-  function stat(label, valueHtml) {
-    return `<div class="stat"><span class="stat__label">${esc(label)}</span><span class="stat__value">${valueHtml}</span></div>`;
-  }
-
   function badge(text, tone) {
     return `<span class="badge badge--${tone}">${esc(text)}</span>`;
   }
 
   function statusBadgeMarkup(text, tone) {
     return `<span class="badge badge--${escAttr(tone)}">${esc(text)}</span>`;
-  }
-
-  function monoText(value) {
-    return `<span class="mono">${esc(value)}</span>`;
-  }
-
-  function plainValue(value) {
-    return `<span>${esc(value)}</span>`;
   }
 
   function kvGrid(rows) {
@@ -3254,7 +3254,7 @@
   }
 
   function errorState(text) {
-    return `<div class="empty-state"><p>${esc(text)}</p></div>`;
+    return `<div class="empty-state empty-state--error"><p>${esc(text)}</p></div>`;
   }
 
   /* ---------- network ---------- */
