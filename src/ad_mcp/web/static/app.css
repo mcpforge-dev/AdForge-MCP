@@ -413,28 +413,34 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 
 .how__intro { color: var(--text-muted); max-width: 60ch; margin-top: 10px; }
 
+/* One shared surface for the whole sequence (not three separate cards) is
+   what gives the block depth; individual steps stay flat and are only
+   distinguished by number, "current" wash and final "done" color. */
 .how-steps {
   list-style: none;
-  counter-reset: step;
   margin: 40px 0 0;
-  padding: 0;
+  padding: 44px 40px;
   position: relative;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 40px;
+  gap: 8px 32px;
 }
 
-/* Thread connecting the three steps: a static base line plus an accent
-   progress line whose width grows in JS as steps activate. Both sit behind
-   the number circles (z-index 0) and are purely decorative. */
+/* Thread connecting the three number circles: a static base line plus an
+   accent progress line whose width grows in JS as each step is reached.
+   Positioned to cross the vertical center of the 56px number circles. */
 .how-steps::before,
 .how-steps::after {
   content: "";
   position: absolute;
-  top: 22px;
+  top: 72px;
   left: calc((100% / 6));
   right: calc((100% / 6));
-  height: 1px;
+  height: 2px;
+  border-radius: 2px;
   z-index: 0;
 }
 
@@ -445,7 +451,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   width: 0;
   right: auto;
   transform-origin: left center;
-  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width var(--line-duration, 0.65s) cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .how-steps[data-progress="1"]::after { width: calc((100% / 6)); }
@@ -453,16 +459,25 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .how-steps[data-progress="3"]::after { width: calc(100% - (100% / 6)); }
 
 .how-step {
-  counter-increment: step;
   position: relative;
+  z-index: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
   opacity: 1;
   transform: none;
+  padding: 6px 14px 6px 0;
+  margin: -6px 0;
+  border-radius: var(--radius-small);
+  background: transparent;
+  box-shadow: none;
+  transition: background-color 0.35s ease-out, box-shadow 0.35s ease-out;
 }
 
 .how-steps.js-armed .how-step {
   opacity: 0;
-  transform: translateY(10px);
-  transition: opacity 0.22s ease-out, transform 0.22s ease-out;
+  transform: translateY(12px);
+  transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .how-steps.js-armed .how-step.is-active {
@@ -470,11 +485,19 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   transform: none;
 }
 
+/* "Current" is a transient spotlight while the sequence is mid-flight: one
+   step at a time, never all three, so it never reads as three cards. */
+.how-steps.js-armed .how-step.is-current {
+  background: linear-gradient(180deg, rgba(124, 154, 255, 0.08), transparent 75%);
+  box-shadow: inset 2px 0 0 var(--accent);
+  transition: background-color 0.4s ease-out, box-shadow 0.4s ease-out;
+}
+
 .how-step__num {
   position: relative;
   z-index: 1;
-  width: 44px;
-  height: 44px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -482,57 +505,59 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   display: flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 16px;
-  transition: border-color 0.25s ease-out, color 0.25s ease-out;
+  font-size: 21px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  transition: border-color 0.35s cubic-bezier(0.22, 1, 0.36, 1), color 0.35s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.how-step__body { display: flex; flex-direction: column; gap: 6px; }
+
+.how-steps h3 {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: var(--fs-h3);
 }
 
 .how-step__icon {
-  width: 20px;
-  height: 20px;
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--text-faint);
+  transition: color 0.35s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.how-step__digit {
-  position: absolute;
-  right: -2px;
-  bottom: -2px;
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border);
-  color: var(--text-faint);
-  font-size: 10px;
-  font-weight: 700;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: border-color 0.25s ease-out, color 0.25s ease-out, background-color 0.25s ease-out;
-}
+.how-steps p { color: var(--text-muted); font-size: 14px; max-width: 40ch; }
 
 .how-step.is-active .how-step__num {
   border-color: var(--accent);
   color: var(--accent);
 }
 
-.how-step.is-active .how-step__digit {
+.how-step.is-active .how-step__icon { color: var(--accent); }
+
+.how-step.is-current .how-step__num {
+  background: var(--accent);
   border-color: var(--accent);
   color: var(--accent-ink);
-  background: var(--accent);
+  box-shadow: 0 0 0 6px rgba(124, 154, 255, 0.14);
 }
 
-.how-steps.js-armed .how-step:not(.is-active) .how-step__num,
-.how-steps.js-armed .how-step:not(.is-active) .how-step__digit {
-  opacity: 0.6;
+.how-steps.js-armed .how-step:not(.is-active) .how-step__num {
+  opacity: 0.72;
 }
-
-.how-steps h3 { font-size: var(--fs-h3); margin-bottom: 6px; }
-.how-steps p { color: var(--text-muted); font-size: 14px; max-width: 40ch; }
 
 @media (prefers-reduced-motion: reduce) {
   .how-steps.js-armed .how-step {
     opacity: 1;
     transform: none;
     transition: none;
+  }
+  .how-steps.js-armed .how-step.is-current {
+    background: transparent;
+    box-shadow: none;
   }
   .how-steps::after { transition: none; }
 }
@@ -606,9 +631,26 @@ select option {
   color: #f4f7fb;
 }
 
-/* Growth: SEO + site audit, one split row each. */
+/* Growth: a large statement on the left, the two SEO/audit rows on the
+   right — differs from the "Три шага" panel and the safety block's
+   emphasis grid so no two consecutive sections repeat the same shape. */
+.growth {
+  display: grid;
+  grid-template-columns: minmax(0, 0.85fr) minmax(0, 1.15fr);
+  gap: 56px;
+  align-items: start;
+}
+
+.growth__lead {
+  font-size: 21px;
+  line-height: 1.4;
+  font-weight: 600;
+  color: var(--text);
+  margin-top: 16px;
+  max-width: 34ch;
+}
+
 .growth__rows {
-  margin-top: 36px;
   display: flex;
   flex-direction: column;
 }
@@ -636,19 +678,38 @@ select option {
 /* Safety: plain list, no cards. */
 .safety p { color: var(--text-muted); margin-top: 10px; max-width: 58ch; }
 
+/* Asymmetric emphasis grid: the first guarantee (no silent changes) is the
+   headline trust claim and gets its own column and larger type; the other
+   two stack as supporting points. Deliberately not three equal cards. */
 .safety-list {
   margin: 26px 0 0;
   padding: 0;
   list-style: none;
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 32px;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+  gap: 0 44px;
 }
 
-.safety-list li { border-top: 1px solid var(--border); padding-top: 18px; }
-.safety-list__icon { width: 22px; height: 22px; color: var(--accent); margin-bottom: 12px; }
-.safety-list h3 { font-size: 15.5px; margin-bottom: 6px; }
-.safety-list p { color: var(--text-muted); font-size: 14px; margin: 0; }
+.safety-list__primary {
+  grid-row: 1 / 3;
+  padding-right: 36px;
+  border-right: 1px solid var(--border);
+}
+
+.safety-list li:not(.safety-list__primary) {
+  border-top: 1px solid var(--border);
+  padding-top: 18px;
+}
+
+.safety-list li:nth-child(3) { margin-top: 26px; }
+
+.safety-list__primary .safety-list__icon { width: 28px; height: 28px; margin-bottom: 18px; }
+.safety-list__primary h3 { font-size: 20px; margin-bottom: 8px; }
+.safety-list__primary p { font-size: 15px; max-width: 40ch; }
+
+.safety-list__icon { width: 20px; height: 20px; color: var(--accent); margin-bottom: 12px; }
+.safety-list h3 { font-size: 15px; margin-bottom: 6px; }
+.safety-list p { color: var(--text-muted); font-size: 14px; margin: 0; max-width: 42ch; }
 
 /* AI clients strip */
 .clients-strip {
@@ -2782,13 +2843,42 @@ select option {
 
 /* ---------- Profile ---------- */
 
+#profile-card {
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+}
+
+#profile-card .subsection {
+  margin-top: 28px;
+  padding-top: 28px;
+}
+
+#profile-form {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+#profile-form .btn { align-self: flex-start; }
+
+.profile-password-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.profile-password-form .btn { align-self: flex-start; margin-top: 4px; }
+
 .profile-layout {
   display: flex;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 16px;
+  gap: 18px;
   min-width: 0;
 }
+
+.profile-layout__copy { margin-top: 2px; }
+.profile-layout__copy .card__title { margin-bottom: 6px; }
 
 .profile-avatar {
   width: 74px;
@@ -3211,10 +3301,16 @@ details.raw-json pre {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 1024px) {
-  .how-steps { grid-template-columns: 1fr; gap: 24px; }
+  .how-steps { grid-template-columns: 1fr; gap: 26px; padding: 28px 22px; }
   .how-steps::before, .how-steps::after { display: none; }
+  .how-step { padding: 4px 0; margin: -4px 0; }
+  .how-step__num { width: 48px; height: 48px; font-size: 18px; }
   .safety-list { grid-template-columns: 1fr; gap: 20px; }
+  .safety-list__primary { grid-row: auto; padding-right: 0; border-right: none; }
+  .safety-list li:nth-child(3) { margin-top: 0; }
   .capabilities { grid-template-columns: 1fr; gap: 32px; }
+  .growth { grid-template-columns: 1fr; gap: 28px; }
+  .growth__lead { max-width: 60ch; }
 }
 
 @media (max-width: 860px) {
@@ -3288,6 +3384,9 @@ details.raw-json pre {
   .main { padding: 20px 14px 40px; }
   .card { padding: 16px; }
   .stats-grid { grid-template-columns: 1fr; }
+  #profile-card { padding: 20px; }
+  #profile-card .subsection { margin-top: 22px; padding-top: 22px; }
+  #profile-form { gap: 18px; }
   .profile-layout { align-items: flex-start; gap: 12px; }
   .profile-avatar { width: 64px; height: 64px; }
   .card-lite { padding: 13px; }

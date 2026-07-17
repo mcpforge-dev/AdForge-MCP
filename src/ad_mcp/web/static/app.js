@@ -257,9 +257,11 @@
   }
 
   /* Sequential reveal for the "Три шага до первого ответа" block: step 1
-     activates, the thread animates toward step 2, step 2 activates, and so
-     on. Runs once per page load (IntersectionObserver, disconnected after
-     the first trigger) and is skipped entirely under reduced motion. */
+     becomes the current/active step, a pause, the thread animates toward
+     step 2, step 2 becomes current, and so on — each phase waits for the
+     previous one to finish (no overlapping phases). Runs once per page load
+     (IntersectionObserver, disconnected after the first trigger) and is
+     skipped entirely under reduced motion. */
   function initStepsReveal() {
     const container = document.querySelector('[data-reveal="steps"]');
     if (!container) return;
@@ -278,13 +280,35 @@
       return;
     }
 
+    // Mobile plays a slightly faster cadence but stays above ~2.5s total.
+    const isCompact = window.matchMedia("(max-width: 767px)").matches;
+    const STEP_MS = isCompact ? 420 : 520;
+    const LINE_MS = isCompact ? 550 : 650;
+    const PAUSE_MS = isCompact ? 180 : 220;
+    container.style.setProperty("--line-duration", `${LINE_MS}ms`);
+
     const runSequence = () => {
       container.classList.add("js-armed");
+      let t = 0;
+
       steps.forEach((step, index) => {
+        // Reveal this step and mark it "current" (transient spotlight).
         window.setTimeout(() => {
-          step.classList.add("is-active");
+          step.classList.add("is-active", "is-current");
           container.dataset.progress = String(index + 1);
-        }, index * 380);
+        }, t);
+        t += STEP_MS + PAUSE_MS;
+
+        // Once the next step is about to start, drop the spotlight so only
+        // one step is ever "current" at a time; the line grows in between.
+        if (index < steps.length - 1) {
+          window.setTimeout(() => step.classList.remove("is-current"), t);
+          t += LINE_MS + PAUSE_MS;
+        } else {
+          // Last step: let the spotlight settle, then rest in the plain
+          // "done" state so the finished sequence stays calm, not glowing.
+          window.setTimeout(() => step.classList.remove("is-current"), t + 500);
+        }
       });
     };
 
@@ -302,7 +326,7 @@
           }
         });
       },
-      { threshold: 0.3 },
+      { threshold: 0.5 },
     );
     observer.observe(container);
   }
