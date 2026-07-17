@@ -417,61 +417,35 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
    what gives the block depth; individual steps stay flat and are only
    distinguished by number, "current" wash and final "done" color. */
 .how-steps {
+  --how-circle: 56px;
+  --how-gap: 32px;
+  --how-step-pad: 6px;
   list-style: none;
-  margin: 40px 0 0;
-  padding: 44px 40px;
+  margin: 44px 0 0;
+  padding: 48px 44px;
   position: relative;
   background: var(--bg-elevated);
   border: 1px solid var(--border-soft);
   border-radius: var(--radius);
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 8px 32px;
+  gap: 8px var(--how-gap);
 }
-
-/* Thread connecting the three number circles: a static base line plus an
-   accent progress line whose width grows in JS as each step is reached.
-   Positioned to cross the vertical center of the 56px number circles. */
-.how-steps::before,
-.how-steps::after {
-  content: "";
-  position: absolute;
-  top: 72px;
-  left: calc((100% / 6));
-  right: calc((100% / 6));
-  height: 2px;
-  border-radius: 2px;
-  z-index: 0;
-}
-
-.how-steps::before { background: var(--border); }
-
-.how-steps::after {
-  background: var(--accent);
-  width: 0;
-  right: auto;
-  transform-origin: left center;
-  transition: width var(--line-duration, 0.65s) cubic-bezier(0.22, 1, 0.36, 1);
-}
-
-.how-steps[data-progress="1"]::after { width: calc((100% / 6)); }
-.how-steps[data-progress="2"]::after { width: calc((100% / 6) + (100% / 3)); }
-.how-steps[data-progress="3"]::after { width: calc(100% - (100% / 6)); }
 
 .how-step {
   position: relative;
   z-index: 1;
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 20px;
   opacity: 1;
   transform: none;
-  padding: 6px 14px 6px 0;
-  margin: -6px 0;
+  padding: var(--how-step-pad) 0;
+  margin: calc(-1 * var(--how-step-pad)) 0;
   border-radius: var(--radius-small);
   background: transparent;
   box-shadow: none;
-  transition: background-color 0.35s ease-out, box-shadow 0.35s ease-out;
+  transition: background-color 0.4s ease-out, box-shadow 0.4s ease-out;
 }
 
 .how-steps.js-armed .how-step {
@@ -493,11 +467,40 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   transition: background-color 0.4s ease-out, box-shadow 0.4s ease-out;
 }
 
+/* Connector segment: one per "from" step (steps 1 and 2), anchored to its own
+   circle centre — start at the circle centre, run exactly one column pitch
+   (column width + gap) to the next circle centre. Geometry is a pure function
+   of circle size and grid gap, so it stays correct at any width. A static grey
+   rail sits under an accent line that draws via transform (never width/left). */
+.how-step__seg {
+  position: absolute;
+  z-index: 0;
+  top: calc(var(--how-step-pad) + var(--how-circle) / 2);
+  left: calc(var(--how-circle) / 2);
+  width: calc(100% + var(--how-gap));
+  height: 2px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.how-step__seg::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--accent);
+  transform: scaleX(0);
+  transform-origin: left center;
+  transition: transform var(--seg-duration, 0.68s) cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.how-step.is-drawn .how-step__seg::after { transform: scaleX(1); }
+
 .how-step__num {
   position: relative;
   z-index: 1;
-  width: 56px;
-  height: 56px;
+  width: var(--how-circle);
+  height: var(--how-circle);
   border-radius: 50%;
   border: 1px solid var(--border);
   background: var(--bg);
@@ -505,31 +508,31 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 21px;
+  font-size: 22px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  transition: border-color 0.35s cubic-bezier(0.22, 1, 0.36, 1), color 0.35s cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 0.35s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color 0.4s cubic-bezier(0.22, 1, 0.36, 1), color 0.4s cubic-bezier(0.22, 1, 0.36, 1),
+    background-color 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.how-step__body { display: flex; flex-direction: column; gap: 6px; }
+.how-step__body { display: flex; flex-direction: column; gap: 7px; }
 
 .how-steps h3 {
   display: flex;
   align-items: center;
-  gap: 9px;
-  font-size: var(--fs-h3);
+  gap: 10px;
+  font-size: 18px;
 }
 
 .how-step__icon {
-  width: 17px;
-  height: 17px;
+  width: 18px;
+  height: 18px;
   flex: none;
   color: var(--text-faint);
-  transition: color 0.35s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: color 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.how-steps p { color: var(--text-muted); font-size: 14px; max-width: 40ch; }
+.how-steps p { color: var(--text-muted); font-size: 15px; line-height: 1.6; max-width: 42ch; }
 
 .how-step.is-active .how-step__num {
   border-color: var(--accent);
@@ -559,7 +562,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
     background: transparent;
     box-shadow: none;
   }
-  .how-steps::after { transition: none; }
+  .how-step__seg::after { transition: none; }
 }
 
 /* Capabilities: copy + real question examples. */
@@ -642,12 +645,12 @@ select option {
 }
 
 .growth__lead {
-  font-size: 21px;
-  line-height: 1.4;
+  font-size: 24px;
+  line-height: 1.38;
   font-weight: 600;
   color: var(--text);
-  margin-top: 16px;
-  max-width: 34ch;
+  margin-top: 18px;
+  max-width: 32ch;
 }
 
 .growth__rows {
@@ -657,23 +660,23 @@ select option {
 
 .growth-row {
   display: grid;
-  grid-template-columns: 40px minmax(0, 1fr);
+  grid-template-columns: 44px minmax(0, 1fr);
   align-items: start;
-  gap: 20px;
-  padding: 28px 0;
+  gap: 22px;
+  padding: 30px 0;
   border-top: 1px solid var(--border);
 }
 
 .growth-row__icon {
-  width: 22px;
-  height: 22px;
+  width: 26px;
+  height: 26px;
   color: var(--accent);
   margin-top: 2px;
 }
 
-.growth-row__body { display: flex; flex-direction: column; gap: 8px; }
-.growth-row h3 { font-size: 19px; }
-.growth-row p { color: var(--text-muted); font-size: 14.5px; max-width: 58ch; }
+.growth-row__body { display: flex; flex-direction: column; gap: 9px; }
+.growth-row h3 { font-size: 20px; }
+.growth-row p { color: var(--text-muted); font-size: 15.5px; line-height: 1.6; max-width: 56ch; }
 
 /* Safety: plain list, no cards. */
 .safety p { color: var(--text-muted); margin-top: 10px; max-width: 58ch; }
@@ -682,34 +685,34 @@ select option {
    headline trust claim and gets its own column and larger type; the other
    two stack as supporting points. Deliberately not three equal cards. */
 .safety-list {
-  margin: 26px 0 0;
+  margin: 30px 0 0;
   padding: 0;
   list-style: none;
   display: grid;
   grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 0 44px;
+  gap: 0 48px;
 }
 
 .safety-list__primary {
   grid-row: 1 / 3;
-  padding-right: 36px;
+  padding-right: 40px;
   border-right: 1px solid var(--border);
 }
 
 .safety-list li:not(.safety-list__primary) {
   border-top: 1px solid var(--border);
-  padding-top: 18px;
+  padding-top: 20px;
 }
 
-.safety-list li:nth-child(3) { margin-top: 26px; }
+.safety-list li:nth-child(3) { margin-top: 30px; }
 
-.safety-list__primary .safety-list__icon { width: 28px; height: 28px; margin-bottom: 18px; }
-.safety-list__primary h3 { font-size: 20px; margin-bottom: 8px; }
-.safety-list__primary p { font-size: 15px; max-width: 40ch; }
+.safety-list__primary .safety-list__icon { width: 30px; height: 30px; margin-bottom: 20px; }
+.safety-list__primary h3 { font-size: 22px; margin-bottom: 10px; }
+.safety-list__primary p { font-size: 16px; line-height: 1.6; max-width: 40ch; }
 
-.safety-list__icon { width: 20px; height: 20px; color: var(--accent); margin-bottom: 12px; }
-.safety-list h3 { font-size: 15px; margin-bottom: 6px; }
-.safety-list p { color: var(--text-muted); font-size: 14px; margin: 0; max-width: 42ch; }
+.safety-list__icon { width: 24px; height: 24px; color: var(--accent); margin-bottom: 14px; }
+.safety-list h3 { font-size: 17px; margin-bottom: 7px; }
+.safety-list p { color: var(--text-muted); font-size: 15px; line-height: 1.6; margin: 0; max-width: 42ch; }
 
 /* AI clients strip */
 .clients-strip {
@@ -1542,6 +1545,135 @@ select option {
 .site-analysis-report {
   display: grid;
   gap: 16px;
+  animation: report-in 0.5s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Loading → result should feel like a settle, not a swap. */
+@keyframes report-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+
+/* Honest staged loading indicator for site analysis. One active stage pulses,
+   passed stages fill their marker + connector, the final stage holds until the
+   real result lands. No spinner, no percentage. */
+.analysis-progress {
+  border: 1px solid var(--border-soft);
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 28px;
+  animation: report-in 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.analysis-progress__head h3 { font-size: 18px; }
+.analysis-progress__head p { color: var(--text-muted); font-size: 14px; line-height: 1.55; margin-top: 5px; max-width: 52ch; }
+
+.analysis-progress__list {
+  list-style: none;
+  margin: 24px 0 0;
+  padding: 0;
+}
+
+.analysis-progress__step {
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+  padding-bottom: 20px;
+}
+
+.analysis-progress__step:last-child { padding-bottom: 0; }
+
+.analysis-progress__marker {
+  position: relative;
+  width: 14px;
+  height: 14px;
+  margin: 3px 5px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  background: var(--bg);
+  flex: none;
+  transition: border-color 0.4s cubic-bezier(0.22, 1, 0.36, 1), background-color 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Connector down to the next marker (drawn from the marker centre). */
+.analysis-progress__step:not(:last-child) .analysis-progress__marker::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: calc(100% + 2px);
+  transform: translateX(-50%);
+  width: 2px;
+  height: 22px;
+  background: var(--border);
+  transition: background-color 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.analysis-progress__step.is-done .analysis-progress__marker {
+  border-color: var(--accent);
+  background: var(--accent);
+}
+
+.analysis-progress__step.is-done .analysis-progress__marker::before { background: var(--accent); }
+
+.analysis-progress__step.is-active .analysis-progress__marker { border-color: var(--accent); }
+
+/* Soft expanding ring = the "current stage is working" signal. */
+.analysis-progress__step.is-active .analysis-progress__marker::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border-radius: 50%;
+  border: 2px solid var(--accent);
+  animation: analysis-pulse 1.7s ease-out infinite;
+}
+
+.analysis-progress__label {
+  font-size: 14.5px;
+  color: var(--text-faint);
+  padding-top: 1px;
+  transition: color 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.analysis-progress__step.is-active .analysis-progress__label { color: var(--text); font-weight: 500; }
+.analysis-progress__step.is-done .analysis-progress__label { color: var(--text-muted); }
+
+@keyframes analysis-pulse {
+  0% { transform: scale(0.55); opacity: 0.65; }
+  100% { transform: scale(1.5); opacity: 0; }
+}
+
+.analysis-progress__skeleton {
+  margin-top: 22px;
+  padding-top: 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.analysis-progress__skeleton span {
+  height: 12px;
+  border-radius: 6px;
+  background: linear-gradient(90deg, var(--bg-inset) 25%, var(--bg-elevated) 37%, var(--bg-inset) 63%);
+  background-size: 320% 100%;
+  animation: analysis-shimmer 1.8s ease-in-out infinite;
+}
+
+.analysis-progress__skeleton span:nth-child(1) { width: 68%; }
+.analysis-progress__skeleton span:nth-child(2) { width: 100%; }
+.analysis-progress__skeleton span:nth-child(3) { width: 84%; }
+
+@keyframes analysis-shimmer {
+  0% { background-position: 160% 0; }
+  100% { background-position: -160% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-analysis-report,
+  .analysis-progress,
+  .analysis-progress__skeleton span { animation: none; }
+  .analysis-progress__step.is-active .analysis-progress__marker::after { animation: none; opacity: 0; }
 }
 
 .site-analysis-actions {
@@ -3301,10 +3433,32 @@ details.raw-json pre {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 1024px) {
-  .how-steps { grid-template-columns: 1fr; gap: 26px; padding: 28px 22px; }
-  .how-steps::before, .how-steps::after { display: none; }
-  .how-step { padding: 4px 0; margin: -4px 0; }
-  .how-step__num { width: 48px; height: 48px; font-size: 18px; }
+  /* Stacked: a vertical timeline — circle in a left rail, body indented,
+     connector runs straight down the rail between circle centres via scaleY. */
+  .how-steps { --how-circle: 48px; grid-template-columns: 1fr; gap: 0; padding: 30px 24px; }
+  .how-step {
+    display: grid;
+    grid-template-columns: var(--how-circle) minmax(0, 1fr);
+    column-gap: 18px;
+    row-gap: 0;
+    align-items: start;
+    padding: 0 0 32px;
+    margin: 0;
+  }
+  .how-step:last-child { padding-bottom: 0; }
+  .how-step__num { grid-column: 1; align-self: start; font-size: 19px; }
+  .how-step__body { grid-column: 2; }
+  .how-step__seg {
+    top: calc(var(--how-circle) / 2);
+    left: calc(var(--how-circle) / 2);
+    width: 2px;
+    height: 100%;
+  }
+  .how-step__seg::after {
+    transform: scaleY(0);
+    transform-origin: center top;
+  }
+  .how-step.is-drawn .how-step__seg::after { transform: scaleY(1); }
   .safety-list { grid-template-columns: 1fr; gap: 20px; }
   .safety-list__primary { grid-row: auto; padding-right: 0; border-right: none; }
   .safety-list li:nth-child(3) { margin-top: 0; }

@@ -256,11 +256,12 @@
     initStepsReveal();
   }
 
-  /* Sequential reveal for the "Три шага до первого ответа" block: step 1
-     becomes the current/active step, a pause, the thread animates toward
-     step 2, step 2 becomes current, and so on — each phase waits for the
-     previous one to finish (no overlapping phases). Runs once per page load
-     (IntersectionObserver, disconnected after the first trigger) and is
+  /* Sequential reveal for the "Три шага до первого ответа" block. Strictly
+     phased so segments never race the circles: step appears + is highlighted,
+     a pause, its connector segment draws to the next circle, a pause, the next
+     step appears, and so on. Each connector is its own element animated with
+     transform (see .how-step__seg), so geometry can't drift. Runs once per
+     page load (IntersectionObserver, disconnected after first trigger) and is
      skipped entirely under reduced motion. */
   function initStepsReveal() {
     const container = document.querySelector('[data-reveal="steps"]');
@@ -271,8 +272,7 @@
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const activateAll = () => {
-      steps.forEach((step) => step.classList.add("is-active"));
-      container.dataset.progress = String(steps.length);
+      steps.forEach((step) => step.classList.add("is-active", "is-drawn"));
     };
 
     if (reduceMotion) {
@@ -280,34 +280,34 @@
       return;
     }
 
-    // Mobile plays a slightly faster cadence but stays above ~2.5s total.
-    const isCompact = window.matchMedia("(max-width: 767px)").matches;
-    const STEP_MS = isCompact ? 420 : 520;
-    const LINE_MS = isCompact ? 550 : 650;
-    const PAUSE_MS = isCompact ? 180 : 220;
-    container.style.setProperty("--line-duration", `${LINE_MS}ms`);
+    // Stacked layout runs a touch faster but the full cycle stays ~3s+.
+    const isCompact = window.matchMedia("(max-width: 1024px)").matches;
+    const STEP_MS = isCompact ? 440 : 500;
+    const SEG_MS = isCompact ? 560 : 680;
+    const PAUSE_MS = isCompact ? 170 : 200;
+    container.style.setProperty("--seg-duration", `${SEG_MS}ms`);
 
     const runSequence = () => {
       container.classList.add("js-armed");
       let t = 0;
 
       steps.forEach((step, index) => {
-        // Reveal this step and mark it "current" (transient spotlight).
-        window.setTimeout(() => {
-          step.classList.add("is-active", "is-current");
-          container.dataset.progress = String(index + 1);
-        }, t);
+        // Phase A: step appears and takes the transient "current" spotlight.
+        window.setTimeout(() => step.classList.add("is-active", "is-current"), t);
         t += STEP_MS + PAUSE_MS;
 
-        // Once the next step is about to start, drop the spotlight so only
-        // one step is ever "current" at a time; the line grows in between.
         if (index < steps.length - 1) {
-          window.setTimeout(() => step.classList.remove("is-current"), t);
-          t += LINE_MS + PAUSE_MS;
+          // Phase B: drop the spotlight and draw this step's connector segment
+          // toward the next circle. Only one step is ever "current".
+          window.setTimeout(() => {
+            step.classList.remove("is-current");
+            step.classList.add("is-drawn");
+          }, t);
+          t += SEG_MS + PAUSE_MS;
         } else {
-          // Last step: let the spotlight settle, then rest in the plain
-          // "done" state so the finished sequence stays calm, not glowing.
-          window.setTimeout(() => step.classList.remove("is-current"), t + 500);
+          // Last step: let the spotlight settle, then rest in the calm
+          // "done" state (no lingering glow).
+          window.setTimeout(() => step.classList.remove("is-current"), t + 400);
         }
       });
     };
@@ -326,7 +326,7 @@
           }
         });
       },
-      { threshold: 0.5 },
+      { threshold: 0.45 },
     );
     observer.observe(container);
   }
@@ -1301,6 +1301,67 @@
     return platforms.some((p) => (p.pending_selections || []).some((x) => x.status === "pending_account_selection"));
   }
 
+  /* Honest staged loading for site analysis. The backend does not stream
+     progress, so we advance a single "active" stage on a calm timer and then
+     HOLD the final stage (pulsing) until the real result arrives — we never
+     auto-complete or show a percentage, so nothing claims an operation
+     finished before it did. Returns a stop() to clear the timer. */
+  const ANALYSIS_STAGES_FULL = [
+    "Открываем сайт",
+    "Изучаем страницы и структуру",
+    "Проверяем контент и интерфейс",
+    "Формируем рекомендации",
+    "Собираем результат",
+  ];
+  const ANALYSIS_STAGES_QUICK = [
+    "Открываем сайт",
+    "Изучаем страницы и контент",
+    "Формируем рекомендации",
+    "Собираем результат",
+  ];
+
+  function startAnalysisProgress(container, mode) {
+    const stages = mode === "full" ? ANALYSIS_STAGES_FULL : ANALYSIS_STAGES_QUICK;
+    const title = mode === "full" ? "Готовим полный аудит сайта" : "Анализируем сайт";
+    const stepMarkup = stages
+      .map(
+        (label) =>
+          `<li class="analysis-progress__step"><span class="analysis-progress__marker" aria-hidden="true"></span><span class="analysis-progress__label">${esc(label)}</span></li>`,
+      )
+      .join("");
+    container.innerHTML = `
+      <div class="analysis-progress" role="status" aria-live="polite">
+        <div class="analysis-progress__head">
+          <h3>${esc(title)}</h3>
+          <p>Это занимает от нескольких секунд до минуты. Не закрывайте страницу.</p>
+        </div>
+        <ol class="analysis-progress__list">${stepMarkup}</ol>
+        <div class="analysis-progress__skeleton" aria-hidden="true"><span></span><span></span><span></span></div>
+      </div>
+    `;
+    const items = Array.from(container.querySelectorAll(".analysis-progress__step"));
+    let index = 0;
+    const paint = () => {
+      items.forEach((item, n) => {
+        item.classList.toggle("is-done", n < index);
+        item.classList.toggle("is-active", n === index);
+      });
+    };
+    paint();
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      return () => {};
+    }
+    const timer = window.setInterval(() => {
+      if (index < items.length - 1) {
+        index += 1;
+        paint();
+      } else {
+        window.clearInterval(timer);
+      }
+    }, 1300);
+    return () => window.clearInterval(timer);
+  }
+
   async function runSiteAnalysis(event) {
     event.preventDefault();
     const url = el.siteAnalysisUrl.value.trim();
@@ -1317,12 +1378,14 @@
     };
     setLoading(el.siteAnalysisSubmit, true);
     el.siteAnalysisResult.hidden = false;
-    el.siteAnalysisResult.innerHTML = emptyState(request.mode === "full" ? "Готовим полный аудит сайта..." : "Анализируем сайт...");
+    const stopProgress = startAnalysisProgress(el.siteAnalysisResult, request.mode);
     try {
       const payload = await api("/api/site/analyze", "POST", request);
+      stopProgress();
       renderSiteAnalysis(payload.analysis || null, payload.history_record?.id || "");
       loadSiteAnalysisHistory();
     } catch (error) {
+      stopProgress();
       if (handle401(error)) return;
       el.siteAnalysisResult.innerHTML = errorState(humanizeError(error));
     } finally {
