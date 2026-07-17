@@ -798,7 +798,7 @@ def test_legal_pages_are_public_and_linked_from_landing(tmp_path) -> None:
     assert privacy_head_body == terms_head_body == b""
 
 
-def test_registration_form_sends_optional_access_code(tmp_path) -> None:
+def test_registration_form_has_no_access_code_field(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
         env="production",
@@ -815,8 +815,8 @@ def test_registration_form_sends_optional_access_code(tmp_path) -> None:
         close()
 
     assert landing_status == script_status == 200
-    assert 'id="auth-access-code"' in landing
-    assert "payload.access_code = el.authAccessCode.value.trim()" in script
+    assert 'id="auth-access-code"' not in landing
+    assert "access_code" not in script
 
 
 def test_email_registration_creates_session_and_authorizes_dashboard_api(tmp_path) -> None:

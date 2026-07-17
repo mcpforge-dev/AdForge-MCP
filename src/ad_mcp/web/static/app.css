@@ -75,6 +75,10 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 
+@media (prefers-reduced-motion: no-preference) {
+  html { scroll-behavior: smooth; }
+}
+
 html, body {
   margin: 0;
   padding: 0;
@@ -405,35 +409,133 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 /* How it works: a real 3-step sequence. */
 .how h2, .capabilities h2, .growth h2, .safety h2 { font-size: var(--fs-h1); font-weight: 700; letter-spacing: -0.015em; }
 
+.how { scroll-margin-top: 88px; }
+
 .how__intro { color: var(--text-muted); max-width: 60ch; margin-top: 10px; }
 
 .how-steps {
   list-style: none;
   counter-reset: step;
-  margin: 36px 0 0;
+  margin: 40px 0 0;
   padding: 0;
+  position: relative;
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 40px;
 }
 
-.how-steps li {
-  counter-increment: step;
-  border-top: 1px solid var(--border);
-  padding-top: 18px;
+/* Thread connecting the three steps: a static base line plus an accent
+   progress line whose width grows in JS as steps activate. Both sit behind
+   the number circles (z-index 0) and are purely decorative. */
+.how-steps::before,
+.how-steps::after {
+  content: "";
+  position: absolute;
+  top: 22px;
+  left: calc((100% / 6));
+  right: calc((100% / 6));
+  height: 1px;
+  z-index: 0;
 }
 
-.how-steps li::before {
-  content: counter(step);
-  display: inline-flex;
+.how-steps::before { background: var(--border); }
+
+.how-steps::after {
+  background: var(--accent);
+  width: 0;
+  right: auto;
+  transform-origin: left center;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.how-steps[data-progress="1"]::after { width: calc((100% / 6)); }
+.how-steps[data-progress="2"]::after { width: calc((100% / 6) + (100% / 3)); }
+.how-steps[data-progress="3"]::after { width: calc(100% - (100% / 6)); }
+
+.how-step {
+  counter-increment: step;
+  position: relative;
+  opacity: 1;
+  transform: none;
+}
+
+.how-steps.js-armed .how-step {
+  opacity: 0;
+  transform: translateY(10px);
+  transition: opacity 0.22s ease-out, transform 0.22s ease-out;
+}
+
+.how-steps.js-armed .how-step.is-active {
+  opacity: 1;
+  transform: none;
+}
+
+.how-step__num {
+  position: relative;
+  z-index: 1;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg);
   color: var(--text-faint);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  transition: border-color 0.25s ease-out, color 0.25s ease-out;
+}
+
+.how-step__icon {
+  width: 20px;
+  height: 20px;
+}
+
+.how-step__digit {
+  position: absolute;
+  right: -2px;
+  bottom: -2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-faint);
+  font-size: 10px;
   font-weight: 700;
-  font-size: 14px;
-  margin-bottom: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: border-color 0.25s ease-out, color 0.25s ease-out, background-color 0.25s ease-out;
+}
+
+.how-step.is-active .how-step__num {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.how-step.is-active .how-step__digit {
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  background: var(--accent);
+}
+
+.how-steps.js-armed .how-step:not(.is-active) .how-step__num,
+.how-steps.js-armed .how-step:not(.is-active) .how-step__digit {
+  opacity: 0.6;
 }
 
 .how-steps h3 { font-size: var(--fs-h3); margin-bottom: 6px; }
 .how-steps p { color: var(--text-muted); font-size: 14px; max-width: 40ch; }
+
+@media (prefers-reduced-motion: reduce) {
+  .how-steps.js-armed .how-step {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+  .how-steps::after { transition: none; }
+}
 
 /* Capabilities: copy + real question examples. */
 .capabilities {
@@ -443,15 +545,15 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   align-items: start;
 }
 
-.capabilities__copy p { color: var(--text-muted); margin-top: 10px; max-width: 46ch; }
+.capabilities__copy p { color: var(--text-muted); margin-top: 12px; max-width: 46ch; }
 
 .capabilities__list {
-  margin: 18px 0 0;
+  margin: 28px 0 0;
   padding: 0;
   list-style: none;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 12px;
   color: var(--text);
   font-size: 14.5px;
 }
@@ -471,7 +573,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   background: var(--bg-inset);
   color: var(--text);
   font-size: 13.5px;
-  padding: 12px 14px;
+  padding: 13px 16px;
 }
 
 select {
@@ -513,14 +615,23 @@ select option {
 
 .growth-row {
   display: grid;
-  grid-template-columns: minmax(0, 0.55fr) minmax(0, 1fr);
-  gap: 48px;
+  grid-template-columns: 40px minmax(0, 1fr);
+  align-items: start;
+  gap: 20px;
   padding: 28px 0;
   border-top: 1px solid var(--border);
 }
 
+.growth-row__icon {
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  margin-top: 2px;
+}
+
+.growth-row__body { display: flex; flex-direction: column; gap: 8px; }
 .growth-row h3 { font-size: 19px; }
-.growth-row > p { color: var(--text-muted); font-size: 14.5px; max-width: 58ch; }
+.growth-row p { color: var(--text-muted); font-size: 14.5px; max-width: 58ch; }
 
 /* Safety: plain list, no cards. */
 .safety p { color: var(--text-muted); margin-top: 10px; max-width: 58ch; }
@@ -534,7 +645,8 @@ select option {
   gap: 32px;
 }
 
-.safety-list li { border-top: 1px solid var(--border); padding-top: 16px; }
+.safety-list li { border-top: 1px solid var(--border); padding-top: 18px; }
+.safety-list__icon { width: 22px; height: 22px; color: var(--accent); margin-bottom: 12px; }
 .safety-list h3 { font-size: 15.5px; margin-bottom: 6px; }
 .safety-list p { color: var(--text-muted); font-size: 14px; margin: 0; }
 
@@ -3100,9 +3212,9 @@ details.raw-json pre {
 
 @media (max-width: 1024px) {
   .how-steps { grid-template-columns: 1fr; gap: 24px; }
+  .how-steps::before, .how-steps::after { display: none; }
   .safety-list { grid-template-columns: 1fr; gap: 20px; }
   .capabilities { grid-template-columns: 1fr; gap: 32px; }
-  .growth-row { grid-template-columns: 1fr; gap: 14px; }
 }
 
 @media (max-width: 860px) {

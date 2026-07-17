@@ -22,7 +22,7 @@
         <span>HolyMedia MCP</span>
       </a>
       <nav class="site-nav" aria-label="Навигация">
-        <a href="#how">Как это работает</a>
+        <a href="#steps">Как это работает</a>
         <button id="landing-login" type="button" class="btn btn--ghost btn--small">Войти</button>
         <button id="landing-register" type="button" class="btn btn--primary btn--small">Создать аккаунт</button>
       </nav>
@@ -52,19 +52,31 @@
           </div>
         </div>
       </section>
-      <section id="how" class="how" aria-label="Как это работает">
+      <section id="steps" class="how" aria-label="Как это работает">
         <h2>Три шага до первого ответа</h2>
         <p class="how__intro">Настройка занимает один вечер и не требует разработчика.</p>
-        <ol class="how-steps">
-          <li>
+        <ol class="how-steps" data-reveal="steps">
+          <li class="how-step" data-step="1">
+            <div class="how-step__num" aria-hidden="true">
+              <svg class="how-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l6-6"/><path d="M10 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L15 11.5"/><path d="M14 17.5L12.5 19a3.5 3.5 0 0 1-5-5L9 12.5"/></svg>
+              <span class="how-step__digit">1</span>
+            </div>
             <h3>Подключите рекламные кабинеты</h3>
             <p>Войдите в HolyMedia MCP и подключите Meta, Google, TikTok или Яндекс Директ через официальный вход платформы.</p>
           </li>
-          <li>
+          <li class="how-step" data-step="2">
+            <div class="how-step__num" aria-hidden="true">
+              <svg class="how-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><circle cx="8" cy="15" r="3.2"/><path d="M10.3 12.7L18 5"/><path d="M15.5 7.5l2 2"/><path d="M18 5l2 2"/></svg>
+              <span class="how-step__digit">2</span>
+            </div>
             <h3>Добавьте HolyMedia MCP в AI-клиент</h3>
             <p>Скопируйте адрес подключения и личный ключ доступа в Claude, ChatGPT или Codex по готовой инструкции.</p>
           </li>
-          <li>
+          <li class="how-step" data-step="3">
+            <div class="how-step__num" aria-hidden="true">
+              <svg class="how-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6.5A2.5 2.5 0 0 1 6.5 4h11A2.5 2.5 0 0 1 20 6.5v7A2.5 2.5 0 0 1 17.5 16H10l-4.5 4v-4H6.5A2.5 2.5 0 0 1 4 13.5v-7z"/></svg>
+              <span class="how-step__digit">3</span>
+            </div>
             <h3>Задавайте вопросы</h3>
             <p>Спрашивайте про кампании, бюджеты, статусы и метрики прямо в чате, без выгрузок и таблиц.</p>
           </li>
@@ -92,12 +104,18 @@
         <h2>Больше, чем реклама</h2>
         <div class="growth__rows">
           <div class="growth-row">
-            <h3>SEO-отчёты из Search Console</h3>
-            <p>Понятный отчёт по запросам, страницам, CTR и позициям, который не стыдно отправить клиенту. Без входа в Search Console.</p>
+            <svg class="growth-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3.5h7l4 4V19a1.5 1.5 0 0 1-1.5 1.5h-9A1.5 1.5 0 0 1 6 19V5A1.5 1.5 0 0 1 7 3.5z"/><path d="M14 3.5V8h4"/><path d="M9 13l2 2 4-4"/></svg>
+            <div class="growth-row__body">
+              <h3>SEO-отчёты из Search Console</h3>
+              <p>Понятный отчёт по запросам, страницам, CTR и позициям, который не стыдно отправить клиенту. Без входа в Search Console.</p>
+            </div>
           </div>
           <div class="growth-row">
-            <h3>AI-аудит сайта</h3>
-            <p>Вставьте адрес страницы и получите оценку, приоритетные правки и план на один день: первый экран, тексты, доверие, конверсия.</p>
+            <svg class="growth-row__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/><path d="M10.5 8v5"/><path d="M8 10.5h5"/></svg>
+            <div class="growth-row__body">
+              <h3>AI-аудит сайта</h3>
+              <p>Вставьте адрес страницы и получите оценку, приоритетные правки и план на один день: первый экран, тексты, доверие, конверсия.</p>
+            </div>
           </div>
         </div>
       </section>
@@ -105,14 +123,17 @@
         <h2>Вы контролируете изменения</h2>
         <ul class="safety-list">
           <li>
+            <svg class="safety-list__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l7 3v5c0 4.5-3 7.7-7 8.5-4-0.8-7-4-7-8.5v-5l7-3z"/><path d="M9.3 12l1.8 1.8 3.6-3.6"/></svg>
             <h3>Ничего не меняется само</h3>
             <p>AI готовит рекомендации, а изменения в кабинетах применяются только после вашего подтверждения.</p>
           </li>
           <li>
+            <svg class="safety-list__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="16.5" r="3"/><path d="M9.6 14.4L18 6"/><path d="M14.5 9.5l2 2"/><path d="M17 7l2 2"/></svg>
             <h3>Личный ключ доступа</h3>
             <p>AI-клиент видит только ваши аккаунты. Ключ можно перевыпустить в один клик.</p>
           </li>
           <li>
+            <svg class="safety-list__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="10.5" width="12" height="9" rx="1.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0"/><path d="M9.5 15l2 2 3-3.5"/></svg>
             <h3>Подключение без паролей</h3>
             <p>Платформы подключаются через их официальный вход. HolyMedia MCP не хранит пароли от кабинетов.</p>
           </li>
@@ -168,10 +189,6 @@
         <label id="auth-confirm-field" class="field" hidden>
           <span class="field__label">Повторите пароль</span>
           <input id="auth-password-confirm" type="password" autocomplete="new-password" placeholder="Повторите пароль">
-        </label>
-        <label id="auth-access-code-field" class="field" hidden>
-          <span class="field__label">Код регистрации <small>(если выдан)</small></span>
-          <input id="auth-access-code" type="text" autocomplete="one-time-code" placeholder="Код от менеджера HolyMedia">
         </label>
         <button id="auth-forgot" type="button" class="link-button">Забыли пароль?</button>
         <p id="auth-error" class="gate__error" role="alert" hidden></p>

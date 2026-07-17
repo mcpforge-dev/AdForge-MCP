@@ -75,8 +75,6 @@
     el.authPassword = document.getElementById("auth-password");
     el.authConfirmField = document.getElementById("auth-confirm-field");
     el.authPasswordConfirm = document.getElementById("auth-password-confirm");
-    el.authAccessCodeField = document.getElementById("auth-access-code-field");
-    el.authAccessCode = document.getElementById("auth-access-code");
     el.authPasswordToggle = document.getElementById("auth-password-toggle");
     el.authForgot = document.getElementById("auth-forgot");
     el.authTitle = document.getElementById("auth-title");
@@ -255,6 +253,58 @@
     });
     el.landingLogin.addEventListener("click", () => openAuth("login"));
     el.landingRegister.addEventListener("click", () => openAuth("register"));
+    initStepsReveal();
+  }
+
+  /* Sequential reveal for the "Три шага до первого ответа" block: step 1
+     activates, the thread animates toward step 2, step 2 activates, and so
+     on. Runs once per page load (IntersectionObserver, disconnected after
+     the first trigger) and is skipped entirely under reduced motion. */
+  function initStepsReveal() {
+    const container = document.querySelector('[data-reveal="steps"]');
+    if (!container) return;
+    const steps = Array.from(container.querySelectorAll(".how-step"));
+    if (!steps.length) return;
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    const activateAll = () => {
+      steps.forEach((step) => step.classList.add("is-active"));
+      container.dataset.progress = String(steps.length);
+    };
+
+    if (reduceMotion) {
+      activateAll();
+      return;
+    }
+
+    const runSequence = () => {
+      container.classList.add("js-armed");
+      steps.forEach((step, index) => {
+        window.setTimeout(() => {
+          step.classList.add("is-active");
+          container.dataset.progress = String(index + 1);
+        }, index * 380);
+      });
+    };
+
+    if (!("IntersectionObserver" in window)) {
+      activateAll();
+      return;
+    }
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            runSequence();
+            observer.disconnect();
+          }
+        });
+      },
+      { threshold: 0.3 },
+    );
+    observer.observe(container);
   }
 
   function bindAuth() {
@@ -303,7 +353,6 @@
           return;
         }
         payload.name = el.authName.value.trim();
-        payload.access_code = el.authAccessCode.value.trim();
       }
       setLoading(el.authSubmit, true);
       hideAuthError();
@@ -402,7 +451,6 @@
     el.authName.required = isRegister;
     el.authConfirmField.hidden = !isRegister;
     el.authPasswordConfirm.required = isRegister;
-    el.authAccessCodeField.hidden = !isRegister;
     el.authPassword.autocomplete = isRegister ? "new-password" : "current-password";
     el.authForgot.hidden = isRegister;
     el.authForm.dataset.mode = state.authMode;
