@@ -399,9 +399,9 @@
         </div>
         <div id="seo-notice"></div>
         <div id="seo-toolbar" class="seo-toolbar" hidden></div>
-        <article id="seo-panel" class="card seo-panel">
+        <div id="seo-panel" class="seo-panel">
           <div class="empty-state"><p>Загружаем SEO-отчет...</p></div>
-        </article>
+        </div>
       </section>
 
       <!-- Site Analysis -->
@@ -421,58 +421,63 @@
               <input id="site-analysis-url" type="text" inputmode="url" autocomplete="url" placeholder="https://example.com" required>
             </label>
             <label class="field">
-              <span class="field__label">Тип сайта</span>
-              <select id="site-analysis-type">
-                <option value="">Определить автоматически</option>
-                <option value="лендинг">Лендинг</option>
-                <option value="корпоративный сайт">Корпоративный сайт</option>
-                <option value="интернет-магазин">Интернет-магазин</option>
-                <option value="клиника/услуги">Клиника / услуги</option>
-                <option value="отель">Отель</option>
-                <option value="B2B">B2B</option>
-                <option value="другое">Другое</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="field__label">Цель сайта</span>
-              <select id="site-analysis-goal">
-                <option value="">Определить автоматически</option>
-                <option value="заявки">Заявки</option>
-                <option value="звонки">Звонки</option>
-                <option value="продажи">Продажи</option>
-                <option value="бронирования">Бронирования</option>
-                <option value="лиды">Лиды</option>
-                <option value="доверие/презентация компании">Доверие / презентация</option>
-              </select>
-            </label>
-            <label class="field">
               <span class="field__label">Режим анализа</span>
               <select id="site-analysis-mode">
                 <option value="quick">Быстрый анализ</option>
                 <option value="full">Полный анализ</option>
               </select>
             </label>
-            <label class="field">
-              <span class="field__label">Целевая аудитория</span>
-              <input id="site-analysis-audience" type="text" placeholder="Например: владельцы клиник, B2B-клиенты, родители">
-            </label>
-            <label class="field">
-              <span class="field__label">Город / страна</span>
-              <input id="site-analysis-region" type="text" placeholder="Например: Алматы, Казахстан">
-            </label>
-            <label class="field">
-              <span class="field__label">Главный конкурент</span>
-              <input id="site-analysis-competitor" type="text" placeholder="Опционально">
-            </label>
-            <label class="field">
-              <span class="field__label">Что волнует больше всего</span>
-              <input id="site-analysis-concern" type="text" placeholder="Например: мало заявок, слабый первый экран, нет доверия">
-            </label>
+            <details class="field-disclosure">
+              <summary>Уточнить детали <span class="field-disclosure__hint">необязательно</span></summary>
+              <div class="field-disclosure__grid">
+                <label class="field">
+                  <span class="field__label">Тип сайта</span>
+                  <select id="site-analysis-type">
+                    <option value="">Определить автоматически</option>
+                    <option value="лендинг">Лендинг</option>
+                    <option value="корпоративный сайт">Корпоративный сайт</option>
+                    <option value="интернет-магазин">Интернет-магазин</option>
+                    <option value="клиника/услуги">Клиника / услуги</option>
+                    <option value="отель">Отель</option>
+                    <option value="B2B">B2B</option>
+                    <option value="другое">Другое</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field__label">Цель сайта</span>
+                  <select id="site-analysis-goal">
+                    <option value="">Определить автоматически</option>
+                    <option value="заявки">Заявки</option>
+                    <option value="звонки">Звонки</option>
+                    <option value="продажи">Продажи</option>
+                    <option value="бронирования">Бронирования</option>
+                    <option value="лиды">Лиды</option>
+                    <option value="доверие/презентация компании">Доверие / презентация</option>
+                  </select>
+                </label>
+                <label class="field">
+                  <span class="field__label">Целевая аудитория</span>
+                  <input id="site-analysis-audience" type="text" placeholder="Например: владельцы клиник, B2B-клиенты, родители">
+                </label>
+                <label class="field">
+                  <span class="field__label">Город / страна</span>
+                  <input id="site-analysis-region" type="text" placeholder="Например: Алматы, Казахстан">
+                </label>
+                <label class="field">
+                  <span class="field__label">Главный конкурент</span>
+                  <input id="site-analysis-competitor" type="text" placeholder="Опционально">
+                </label>
+                <label class="field">
+                  <span class="field__label">Что волнует больше всего</span>
+                  <input id="site-analysis-concern" type="text" placeholder="Например: мало заявок, слабый первый экран, нет доверия">
+                </label>
+              </div>
+            </details>
             <button id="site-analysis-submit" type="submit" class="btn btn--primary btn--block">Проанализировать сайт</button>
           </form>
           <div class="site-analysis-examples">
-            <span>На выходе: score, приоритеты, desktop/mobile screenshots, пример первого экрана, план на 1 день и документ для клиента.</span>
-            <span>Показываем источники и границы выводов. Security-блок пассивный и не выполняет эксплуатацию уязвимостей.</span>
+            <span>На выходе: оценка, приоритеты, скриншоты десктопа и мобильной версии, пример первого экрана, план на 1 день и документ для клиента.</span>
+            <span>Показываем источники и границы выводов. Проверка безопасности пассивная, без вмешательства в работу сайта.</span>
           </div>
           <div id="site-analysis-history" class="site-analysis-history" hidden></div>
           <div id="site-analysis-result" class="site-analysis-result" hidden></div>

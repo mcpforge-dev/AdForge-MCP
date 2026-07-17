@@ -951,31 +951,28 @@
         </label>
         <div class="profile-layout__copy">
           <h3 class="card__title">Аккаунт</h3>
-          <p class="card__hint">Нажмите на аватар, чтобы загрузить фото. Никнейм и пароль можно изменить ниже.</p>
+          <p class="card__hint">Нажмите на аватар, чтобы загрузить фото.</p>
           <span class="profile-avatar__hint">JPG, PNG или WEBP до 2 MB.</span>
         </div>
       </form>
-      <div class="grid-2 profile-grid">
-        <form id="profile-form" class="card-lite">
-          <h3 class="card__title">Профиль</h3>
-          <label class="field">
-            <span class="field__label">Никнейм</span>
-            <input name="nickname" type="text" maxlength="80" value="${escAttr(data.nickname || "")}" required>
-          </label>
-          <div class="kv">
-            <div class="kv-row"><span>Email</span><strong>${esc(data.email)}</strong></div>
-            <div class="kv-row"><span>Статус аккаунта</span><strong>${esc(data.account_status === "active" ? "Активен" : data.account_status || "—")}</strong></div>
-            <div class="kv-row"><span>Дата регистрации</span><strong>${esc(formatTime(data.created_at))}</strong></div>
-            <div class="kv-row"><span>Подключённые платформы</span><strong>${esc((data.connected_platforms || []).map(providerLabel).join(", ") || "Нет")}</strong></div>
-            <div class="kv-row"><span>Рекламные аккаунты</span><strong>${esc(data.connected_ad_accounts_count ?? 0)}</strong></div>
-          </div>
-          <button type="submit" class="btn btn--primary btn--small">Сохранить профиль</button>
-        </form>
-        <div class="card-lite profile-password-form">
-          <h3 class="card__title">Пароль</h3>
-          <p class="card__hint">Поля смены пароля открываются отдельно, чтобы профиль оставался аккуратным.</p>
-          <button id="open-change-password" type="button" class="btn btn--secondary btn--small">Сменить пароль</button>
+      <form id="profile-form" class="subsection">
+        <label class="field">
+          <span class="field__label">Никнейм</span>
+          <input name="nickname" type="text" maxlength="80" value="${escAttr(data.nickname || "")}" required>
+        </label>
+        <div class="kv">
+          <div class="kv-row"><span>Email</span><strong>${esc(data.email)}</strong></div>
+          <div class="kv-row"><span>Статус аккаунта</span><strong>${esc(data.account_status === "active" ? "Активен" : data.account_status || "—")}</strong></div>
+          <div class="kv-row"><span>Дата регистрации</span><strong>${esc(formatTime(data.created_at))}</strong></div>
+          <div class="kv-row"><span>Подключённые платформы</span><strong>${esc((data.connected_platforms || []).map(providerLabel).join(", ") || "Нет")}</strong></div>
+          <div class="kv-row"><span>Рекламные аккаунты</span><strong>${esc(data.connected_ad_accounts_count ?? 0)}</strong></div>
         </div>
+        <button type="submit" class="btn btn--primary btn--small">Сохранить профиль</button>
+      </form>
+      <div class="subsection profile-password-form">
+        <h3 class="card__title">Пароль</h3>
+        <p class="card__hint">Пароль меняется в отдельном окне, чтобы не путать его с профилем.</p>
+        <button id="open-change-password" type="button" class="btn btn--secondary btn--small">Сменить пароль</button>
       </div>
     `;
     bindProfileForms();
@@ -1290,7 +1287,7 @@
             <small>оценка сайта</small>
           </div>
           <div class="site-analysis-summary__body">
-            <span class="site-analysis-eyebrow">AI-аудит страницы</span>
+            <span class="site-source">AI-аудит страницы</span>
             <h3>Краткий вердикт</h3>
             <p>${esc(analysis.verdict?.summary || analysis.summary || "")}</p>
             <div class="site-analysis-verdict-grid">
@@ -1302,39 +1299,42 @@
           <div class="site-analysis-actions">
             <button type="button" class="btn btn--primary btn--small" data-site-download>Скачать отчёт</button>
             <button type="button" class="btn btn--secondary btn--small" data-site-copy="report">Скопировать отчёт</button>
-            <button type="button" class="btn btn--secondary btn--small" data-site-copy="tasks">Задачи команде</button>
-            <button type="button" class="btn btn--secondary btn--small" data-site-copy="hero">Hero-тексты</button>
-            <button type="button" class="btn btn--secondary btn--small" data-site-repeat>Новый анализ</button>
+            <details class="actions-menu">
+              <summary class="btn btn--ghost btn--small">Ещё</summary>
+              <div class="actions-menu__list">
+                <button type="button" data-site-copy="tasks">Задачи команде</button>
+                <button type="button" data-site-copy="hero">Тексты первого экрана</button>
+                <button type="button" data-site-repeat>Новый анализ</button>
+              </div>
+            </details>
           </div>
         </div>
         ${renderAssumptions(analysis.assumptions || [])}
         <div class="site-result-tabs" role="tablist" aria-label="Разделы отчёта">
           ${[
-            ["issues", "Топ улучшений"],
-            ["diagnostics", "Диагностика"],
+            ["issues", "Приоритеты"],
             ["hero", "Первый экран"],
-            ["day", "1 день"],
-            ["wins", "Что поправить"],
+            ["plan", "План"],
             ["copy", "Готовые тексты"],
-            ["structure", "Структура"],
-            ["plan", "План внедрения"],
-            ["questions", "Вопросы"],
-          ].map(([id, label], index) => `<button type="button" class="${index === 0 ? "is-active" : ""}" data-site-tab="${id}">${label}</button>`).join("")}
+            ["diagnostics", "Диагностика"],
+          ].map(([id, label], index) => `<button type="button" class="${index === 0 ? "is-active" : ""}" data-site-tab="${id}" role="tab" aria-selected="${index === 0 ? "true" : "false"}">${label}</button>`).join("")}
         </div>
         <div class="site-result-panel is-active" data-site-panel="issues">
           ${renderScorecards(analysis.scores || [])}
           ${renderTopIssues(analysis.top_issues || [])}
+          ${renderQuickWins(analysis.quick_wins || [])}
         </div>
-        <div class="site-result-panel" data-site-panel="diagnostics" hidden>${renderAuditOverview(analysis.audit_overview || {})}</div>
         <div class="site-result-panel" data-site-panel="hero" hidden>${renderFirstScreenReview(analysis.first_screen_review || {})}${renderReadyHero(analysis.ready_hero || {})}</div>
-        <div class="site-result-panel" data-site-panel="day" hidden>${renderOneDayPlan(analysis.one_day_plan || [])}</div>
-        <div class="site-result-panel" data-site-panel="wins" hidden>${renderQuickWins(analysis.quick_wins || [])}</div>
+        <div class="site-result-panel" data-site-panel="plan" hidden>${renderOneDayPlan(analysis.one_day_plan || [])}${renderRecommendedStructure(analysis.recommended_structure || [])}${renderImplementationPlan(analysis.implementation_plan || [])}</div>
         <div class="site-result-panel" data-site-panel="copy" hidden>${renderRewrittenCopy(analysis.rewritten_copy || {})}</div>
-        <div class="site-result-panel" data-site-panel="structure" hidden>${renderRecommendedStructure(analysis.recommended_structure || [])}</div>
-        <div class="site-result-panel" data-site-panel="plan" hidden>${renderImplementationPlan(analysis.implementation_plan || [])}</div>
-        <div class="site-result-panel" data-site-panel="questions" hidden>${renderQuestions(analysis.questions || [])}</div>
+        <div class="site-result-panel" data-site-panel="diagnostics" hidden>${renderAuditOverview(analysis.audit_overview || {})}${renderQuestions(analysis.questions || [])}</div>
       </div>
     `;
+    el.siteAnalysisResult.querySelector(".actions-menu")?.addEventListener("click", (event) => {
+      if (event.target.closest("[data-site-copy], [data-site-repeat]")) {
+        event.currentTarget.removeAttribute("open");
+      }
+    });
   }
 
   async function loadSiteAnalysisHistory() {
@@ -1465,17 +1465,19 @@
     const topCount = (analysis.top_issues || []).length;
     const dayCount = (analysis.one_day_plan || []).length;
     const cta = analysis.evidence?.audit_engine?.cta_texts || [];
-    const ctaLabel = cta.length && cta[0] !== "не обнаружено в собранных данных" ? "CTA найден" : "CTA нужно усилить";
+    const ctaLabel = cta.length && cta[0] !== "не обнаружено в собранных данных" ? "Кнопка действия найдена" : "Кнопку действия нужно усилить";
     const confidence = analysis.audit_overview?.confidence || {};
     const security = (analysis.audit_overview?.pillars || []).find((item) => item.id === "security") || {};
-    return `<div class="site-analysis-kpis">
-      <span>Ниша: ${esc(vertical)}</span>
-      <span>${esc(String(topCount))} приоритетов</span>
-      <span>${esc(String(dayCount))} задач на день</span>
-      <span>${esc(ctaLabel)}</span>
-      ${confidence.score ? `<span>Достоверность: ${esc(String(confidence.score))}%</span>` : ""}
-      ${Number.isFinite(Number(security.score)) ? `<span>Пассивная безопасность: ${esc(String(security.score))}/100</span>` : ""}
-    </div>`;
+    const nicheLabel = vertical === "auto" ? "определена автоматически" : vertical;
+    const parts = [
+      `Ниша: ${nicheLabel}`,
+      `${topCount} ${pluralRu(topCount, "приоритет", "приоритета", "приоритетов")}`,
+      `${dayCount} ${pluralRu(dayCount, "задача", "задачи", "задач")} на день`,
+      ctaLabel,
+    ];
+    if (confidence.score) parts.push(`Достоверность: ${confidence.score}%`);
+    if (Number.isFinite(Number(security.score))) parts.push(`Пассивная безопасность: ${security.score}/100`);
+    return `<p class="site-analysis-kpis">${esc(parts.join(" · "))}</p>`;
   }
 
   function renderAuditOverview(overview) {
@@ -1491,7 +1493,7 @@
     return `<div class="site-diagnostics">
       <section class="site-diagnostics__intro">
         <div>
-          <span class="site-analysis-eyebrow">Evidence-based аудит</span>
+          <span class="site-source">Аудит на основе собранных данных</span>
           <h3>Что действительно проверено</h3>
           <p>Достоверность выводов: <strong>${esc(String(confidence.score || 0))}% · ${esc(confidence.label || "ограниченная")}</strong></p>
         </div>
@@ -1607,7 +1609,7 @@
         <div>
           <h4>Визуальные сигналы</h4>
           <p>${screenshot.captured ? `Скриншот: ${esc(String(screenshot.viewport?.width || ""))}x${esc(String(screenshot.viewport?.height || ""))}` : "Скриншот не получен"}</p>
-          <p>${visual.available ? `Тема: ${esc(visual.theme_guess || "mixed")}, яркость: ${esc(String(visual.average_luma || ""))}` : "Pillow-анализ недоступен"}</p>
+          <p>${visual.available ? `Тема: ${esc(visual.theme_guess || "mixed")}, яркость: ${esc(String(visual.average_luma || ""))}` : "Визуальный анализ скриншота недоступен"}</p>
           <ul>${(found.visual_notes || []).map((item) => `<li>${esc(item)}</li>`).join("")}</ul>
         </div>
         <div>
@@ -1788,35 +1790,48 @@
       ["Desktop", desktopShot],
       ["Mobile", mobileShot],
     ].filter(([, item]) => item.captured && item.preview_data_url).map(([label, item]) => `<div class="shot"><img src="${escAttr(item.preview_data_url)}" alt="${escAttr(label)} screenshot"><p><strong>${esc(label)}</strong> · ${esc(String(item.viewport?.width || ""))}x${esc(String(item.viewport?.height || ""))}</p></div>`).join("");
-    return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP site audit</title>
+    return `<!doctype html><html><head><meta charset="utf-8"><title>HolyMedia MCP — аудит сайта</title>
       <style>
         @page{margin:22mm 18mm}
-        body{font-family:Arial,sans-serif;line-height:1.55;color:#1f2937;background:#fff;font-size:13.5px}
-        h1{font-size:28px;line-height:1.18;margin:0 0 10px;color:#111827}
-        h2{font-size:18px;margin:26px 0 10px;color:#111827;border-bottom:1px solid #e5e7eb;padding-bottom:7px}
-        h3{font-size:15px;margin:16px 0 6px;color:#111827}
+        :root{
+          --doc-bg:#ffffff; --doc-surface:#f7f8fb; --doc-border:#dde1e8;
+          --doc-ink:#171a20; --doc-ink-muted:#5b6472; --doc-accent:#3d5fd6;
+        }
+        body{font-family:Manrope,-apple-system,"Segoe UI",Arial,sans-serif;line-height:1.55;color:var(--doc-ink);background:var(--doc-bg);font-size:13.5px}
+        h1{font-size:28px;line-height:1.2;letter-spacing:-0.01em;font-weight:700;margin:0 0 10px;color:var(--doc-ink)}
+        h2{font-size:20px;font-weight:700;margin:28px 0 12px;color:var(--doc-ink);border-bottom:1px solid var(--doc-border);padding-bottom:8px}
+        h3{font-size:15px;font-weight:600;margin:16px 0 6px;color:var(--doc-ink)}
         p{margin:6px 0 10px}
-        .cover{border:1px solid #d9e0ea;border-radius:16px;padding:26px;margin-bottom:22px;background:#f8fafc}
-        .cover p{color:#526174;max-width:680px}
-        .score{display:inline-block;background:#ecfdf3;color:#087443;border:1px solid #bfebcf;border-radius:12px;padding:10px 16px;font-size:28px;font-weight:700;margin-top:8px}
-        .meta{width:100%;margin-top:16px}.meta td{border:0;border-top:1px solid #e5e7eb;padding:7px 0;color:#526174}
-        .section-note,.copy-box{background:#fbfcfe;border:1px solid #e5e7eb;border-radius:12px;padding:14px;margin:12px 0}
-        .hero-box{border:1px solid #d9e0ea;border-radius:14px;padding:16px;margin:12px 0;background:#fff}
-        .hero-buttons span{display:inline-block;border:1px solid #d9e0ea;border-radius:10px;padding:7px 10px;margin:4px 6px 4px 0;font-weight:700}
-        .shots{display:flex;gap:14px;align-items:flex-start}.shot{width:48%}.shot img{display:block;max-width:100%;height:auto;border:1px solid #d9e0ea}.shot p{font-size:12px;color:#526174}
+        .doc-header{display:flex;align-items:center;justify-content:space-between;padding-bottom:14px;margin-bottom:18px;border-bottom:1px solid var(--doc-border)}
+        .doc-header strong{font-size:14px;letter-spacing:-0.01em}
+        .doc-header span{color:var(--doc-ink-muted);font-size:12px}
+        .cover{border:1px solid var(--doc-border);border-radius:16px;padding:26px;margin-bottom:22px;background:var(--doc-surface)}
+        .cover p{color:var(--doc-ink-muted);max-width:680px}
+        .score{display:inline-block;color:var(--doc-accent);border:1px solid var(--doc-border);border-radius:12px;padding:10px 16px;font-size:26px;font-weight:700;margin-top:8px}
+        .score small{display:block;color:var(--doc-ink-muted);font-size:11px;font-weight:600;margin-top:2px}
+        .meta{width:100%;margin-top:16px}.meta td{border:0;border-top:1px solid var(--doc-border);padding:7px 0;color:var(--doc-ink-muted)}
+        .section-note,.copy-box{background:var(--doc-surface);border:1px solid var(--doc-border);border-radius:12px;padding:14px;margin:12px 0}
+        .hero-box{border:1px solid var(--doc-border);border-radius:14px;padding:16px;margin:12px 0;background:var(--doc-bg)}
+        .hero-buttons span{display:inline-block;border:1px solid var(--doc-border);border-radius:10px;padding:7px 10px;margin:4px 6px 4px 0;font-weight:600}
+        .shots{display:flex;gap:14px;align-items:flex-start}.shot{width:48%}.shot img{display:block;max-width:100%;height:auto;border:1px solid var(--doc-border);border-radius:8px}.shot p{font-size:12px;color:var(--doc-ink-muted)}
         table{border-collapse:collapse;width:100%;margin:12px 0 18px}
-        td,th{border:1px solid #d9e0ea;padding:8px;vertical-align:top;text-align:left}
-        th{background:#f3f6fa;color:#111827}
-        .num{white-space:nowrap;font-weight:700;color:#374151}
-        .small{color:#6b7280;font-size:12px}
-        .muted{color:#6b7280}
+        td,th{border:1px solid var(--doc-border);padding:8px;vertical-align:top;text-align:left}
+        th{background:var(--doc-surface);color:var(--doc-ink);font-weight:600}
+        .num{white-space:nowrap;font-weight:600;color:var(--doc-ink)}
+        .small{color:var(--doc-ink-muted);font-size:12px}
+        .muted{color:var(--doc-ink-muted)}
         ul,ol{margin-top:8px}
+        .doc-footer{margin-top:32px;padding-top:14px;border-top:1px solid var(--doc-border);color:var(--doc-ink-muted);font-size:11.5px;display:flex;justify-content:space-between}
       </style>
       </head><body>
+      <header class="doc-header">
+        <strong>HolyMedia MCP</strong>
+        <span>Отчёт подготовлен ${esc(new Date().toLocaleDateString())}</span>
+      </header>
       <section class="cover">
-        <h1>AI-анализ сайта HolyMedia MCP</h1>
+        <h1>AI-анализ сайта</h1>
         <p>Продуктовый и конверсионный аудит публичной страницы: что мешает заявкам, какие правки важнее и что можно передать команде в работу.</p>
-        <div class="score">${esc(String(analysis.overall_score || "—"))}/100</div>
+        <div class="score">${esc(String(analysis.overall_score || "—"))}/100<small>оценка сайта</small></div>
         <table class="meta">
           <tr><td><strong>Сайт:</strong></td><td>${esc(analysis.url || "")}</td></tr>
           <tr><td><strong>Дата:</strong></td><td>${esc(new Date().toLocaleString())}</td></tr>
@@ -1863,6 +1878,10 @@
       <h2>Рекомендуемая структура страницы</h2><ol>${(analysis.recommended_structure || []).map((x) => `<li><strong>${esc(x.block)}</strong> — ${esc(x.purpose)}</li>`).join("")}</ol>
       <h2>План внедрения</h2><table><tr><th>Задача</th><th>Влияние</th><th>Сложность</th><th>Приоритет</th><th>Ответственный</th></tr>${planRows}</table>
       <h2>Вопросы для уточнения</h2><ol>${(analysis.questions || []).map((x) => `<li>${esc(x)}</li>`).join("")}</ol>
+      <footer class="doc-footer">
+        <span>HolyMedia MCP · hello@holymedia.kz</span>
+        <span>Отчёт для внутреннего и клиентского использования</span>
+      </footer>
       </body></html>`;
   }
 
@@ -1935,14 +1954,14 @@
     el.seoPanel.innerHTML = `
       <div class="seo-report-head">
         <div>
-          <span class="seo-eyebrow">Google Search Console</span>
+          <span class="seo-source">Google Search Console</span>
           <h3 class="seo-title">${esc(seoSelectedTitle(report.selected_property))}</h3>
-          <p class="card__hint">Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Сравнение: ${esc(previousRange.start_date || "")} - ${esc(previousRange.end_date || "")}. Данные read-only.</p>
+          <p class="card__hint">Период: ${esc(range.start_date || "")} - ${esc(range.end_date || "")}. Сравнение: ${esc(previousRange.start_date || "")} - ${esc(previousRange.end_date || "")}. Только просмотр, без изменений.</p>
         </div>
         <div class="seo-report-actions">
           <button type="button" class="btn btn--secondary btn--small" data-seo-export="doc">Скачать отчет</button>
           <button type="button" class="btn btn--secondary btn--small" data-seo-export="csv">CSV</button>
-          <button type="button" class="btn btn--secondary btn--small" data-seo-connect>Переподключить</button>
+          <button type="button" class="btn btn--ghost btn--small" data-seo-connect>Переподключить</button>
         </div>
       </div>
       <div class="stats-grid seo-stats">
@@ -1955,7 +1974,7 @@
       ${renderSeoInsights(report.insights || [])}
       ${renderSeoTrend(report.trend || [], metrics)}
       ${renderSeoProperties(report.property_summaries || [], report.selected_property)}
-      <div class="seo-grid">
+      <div class="subsection seo-grid">
         ${renderSeoTable("Топ запросов", report.top_queries || [], "query")}
         ${renderSeoTable("Топ страниц", report.top_pages || [], "page")}
       </div>
@@ -2052,23 +2071,18 @@
   function renderSeoExecutiveSummary(report) {
     const score = seoScore(report);
     const items = seoExecutiveItems(report);
-    const tone = score >= 75 ? "good" : score >= 50 ? "mid" : "low";
+    const tone = score >= 75 ? "ok" : score >= 50 ? "warn" : "err";
+    const verdict = score >= 75 ? "Сильная динамика" : score >= 50 ? "Есть точки роста" : "Нужна оптимизация";
     return `
-      <section class="seo-executive">
-        <div class="seo-score seo-score--${tone}">
-          <span class="seo-score__label">SEO score</span>
-          <strong>${esc(score)}</strong>
-          <span>${score >= 75 ? "Сильная динамика" : score >= 50 ? "Есть точки роста" : "Нужна оптимизация"}</span>
+      <section class="subsection seo-executive">
+        <div class="seo-subhead">
+          <h3 class="card__title">Короткий вывод</h3>
+          <span>для клиентского отчета</span>
         </div>
-        <div class="seo-executive__body">
-          <div class="seo-subhead">
-            <h3 class="card__title">Короткий вывод</h3>
-            <span>для клиентского отчета</span>
-          </div>
-          <ul class="seo-summary-list">
-            ${items.map((item) => `<li>${esc(item)}</li>`).join("")}
-          </ul>
-        </div>
+        <p class="seo-executive__lead">Оценка ${esc(score)} из 100 ${statusBadgeMarkup(verdict, tone)}</p>
+        <ul class="seo-summary-list">
+          ${items.map((item) => `<li>${esc(item)}</li>`).join("")}
+        </ul>
       </section>
     `;
   }
@@ -2116,14 +2130,18 @@
 
   function renderSeoInsights(insights) {
     if (!insights.length) return "";
+    const toneMap = { positive: "ok", warning: "warn", action: "info", info: "muted" };
     return `
-      <section class="seo-insights">
-        ${insights.map((insight) => `
-          <article class="seo-insight seo-insight--${escAttr(insight.tone || "info")}">
-            <strong>${esc(insight.title || "Инсайт")}</strong>
-            <span>${esc(insight.text || "")}</span>
-          </article>
-        `).join("")}
+      <section class="subsection seo-insights">
+        <h3 class="card__title">Наблюдения</h3>
+        <ul class="seo-insight-list">
+          ${insights.map((insight) => `
+            <li class="seo-insight-row">
+              ${statusBadgeMarkup(insight.title || "Инсайт", toneMap[insight.tone] || "muted")}
+              <span>${esc(insight.text || "")}</span>
+            </li>
+          `).join("")}
+        </ul>
       </section>
     `;
   }
@@ -2132,7 +2150,7 @@
     if (!properties.length) return "";
     const selectedId = selected?.site_url || selected?.account_id || "";
     return `
-      <div class="seo-properties">
+      <div class="subsection seo-properties">
         <div class="seo-subhead">
           <h3 class="card__title">Ресурсы Search Console</h3>
           <span>${properties.length} подключено</span>
@@ -2157,14 +2175,14 @@
   function renderSeoTable(title, rows, key) {
     if (!rows.length) {
       return `
-        <section class="seo-table">
+        <section class="seo-table-block">
           <h3 class="card__title">${esc(title)}</h3>
           ${emptyState("Данных пока нет. Проверьте выбранную property и период в Search Console.")}
         </section>
       `;
     }
     return `
-      <section class="seo-table">
+      <section class="seo-table-block">
         <div class="seo-table__head">
           <h3 class="card__title">${esc(title)}</h3>
           <span>${rows.length} строк</span>
@@ -2202,7 +2220,7 @@
   function renderSeoOpportunities(rows) {
     if (!rows.length) return "";
     return `
-      <section class="seo-table">
+      <section class="subsection seo-table-block">
         <div class="seo-table__head">
           <h3 class="card__title">Запросы для роста</h3>
           <span>позиции 4-20</span>
@@ -2293,7 +2311,7 @@
   function renderSeoSitemaps(sitemaps) {
     const items = sitemaps.items || [];
     return `
-      <section class="seo-table">
+      <section class="subsection seo-table-block">
         <h3 class="card__title">Sitemap</h3>
         ${items.length ? `
           <div class="seo-table__rows">
@@ -2337,13 +2355,14 @@
     const range = report.date_range || {};
     const title = `SEO-отчет: ${seoSelectedTitle(report.selected_property)}`;
     const lines = [
+      rtfHeading("HolyMedia MCP", 20),
       rtfHeading(title, 32),
-      rtfParagraph(`Период: ${range.start_date || ""} - ${range.end_date || ""}. Источник: Google Search Console. Доступ read-only.`),
+      rtfParagraph(`Период: ${range.start_date || ""} - ${range.end_date || ""}. Источник: Google Search Console. Только просмотр, без изменений.`),
       rtfHeading("Ключевые метрики", 24),
       rtfParagraph(`Клики: ${formatNumber(metrics.clicks)}   Показы: ${formatNumber(metrics.impressions)}   CTR: ${formatPercent(metrics.ctr)}   Средняя позиция: ${formatNumber(metrics.position)}`),
       rtfHeading("Короткий вывод", 24),
       ...seoExecutiveItems(report).map((item) => rtfBullet(item)),
-      rtfHeading("Инсайты", 24),
+      rtfHeading("Наблюдения", 24),
       ...(report.insights || []).map((item) => rtfBullet(`${item.title || "Инсайт"}: ${item.text || ""}`)),
       rtfHeading("Топ запросов", 24),
       rtfPlainTable(report.top_queries || [], "query"),
@@ -2351,8 +2370,9 @@
       rtfPlainTable(report.top_pages || [], "page"),
       rtfHeading("Запросы для роста", 24),
       rtfPlainTable(report.opportunities || [], "query"),
+      rtfParagraph(`\\par HolyMedia MCP \\emdash отчёт подготовлен ${new Date().toLocaleDateString()}`),
     ];
-    return `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Arial;}}\\fs22\\f0\\paperw11907\\paperh16840\\margl1134\\margr1134\\margt1134\\margb1134\n${lines.join("\\par\n")}\n}`;
+    return `{\\rtf1\\ansi\\deff0{\\fonttbl{\\f0 Manrope;}{\\f1 Arial;}}\\fs22\\f1\\paperw11907\\paperh16840\\margl1134\\margr1134\\margt1134\\margb1134\n${lines.join("\\par\n")}\n}`;
   }
 
   function rtfHeading(text, size) {
@@ -2369,15 +2389,22 @@
 
   function rtfPlainTable(rows, key) {
     if (!rows.length) return rtfParagraph("Данных нет.");
-    const header = "Название | Клики | Показы | CTR | Позиция";
+    const headers = [key === "query" ? "Запрос" : "Страница", "Клики", "Показы", "CTR", "Позиция"];
     const body = rows.slice(0, 15).map((row) => [
       row[key] || "",
       formatNumber(row.clicks),
       formatNumber(row.impressions),
       formatPercent(row.ctr),
       formatNumber(row.position),
-    ].join(" | "));
-    return [header, ...body].map((line) => rtfParagraph(line)).join("\\par\n");
+    ]);
+    const colWidths = [5300, 1650, 1650, 1450, 1450];
+    let cellx = 0;
+    const cellxDef = colWidths.map((w) => { cellx += w; return `\\cellx${cellx}`; }).join("");
+    const rowDef = (cells, bold) => {
+      const cellsRtf = cells.map((cell) => `${bold ? "\\b" : ""} ${rtfEscape(String(cell))}${bold ? "\\b0" : ""}\\cell`).join("");
+      return `\\trowd\\trgaph70\\trleft0${cellxDef}${cellsRtf}\\row`;
+    };
+    return [rowDef(headers, true), ...body.map((row) => rowDef(row, false))].join("\n");
   }
 
   function rtfEscape(value) {
