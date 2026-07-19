@@ -407,18 +407,18 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
 .hero-chat__src { color: var(--text-faint); font-size: 12px; }
 
 /* How it works: a real 3-step sequence. */
-.how h2, .capabilities h2, .growth h2, .safety h2 { font-size: var(--fs-h1); font-weight: 700; letter-spacing: -0.015em; }
+.how h2, .capabilities h2, .growth h2, .control h2 { font-size: var(--fs-h1); font-weight: 700; letter-spacing: -0.015em; }
 
 .how { scroll-margin-top: 88px; }
 
 .how__intro { color: var(--text-muted); max-width: 60ch; margin-top: 10px; }
 
-/* One shared surface for the whole sequence (not three separate cards) is
-   what gives the block depth; individual steps stay flat and are only
-   distinguished by number, "current" wash and final "done" color. */
+/* Steps sit on a strict 3-column grid with no connecting line — direction is
+   carried by standalone chevrons in the reserved column gaps. No shadows,
+   glows or washes; a step is "on" purely by its accent circle. */
 .how-steps {
   --how-circle: 56px;
-  --how-gap: 32px;
+  --how-gap: 40px;
   --how-step-pad: 6px;
   list-style: none;
   margin: 44px 0 0;
@@ -442,10 +442,6 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   transform: none;
   padding: var(--how-step-pad) 0;
   margin: calc(-1 * var(--how-step-pad)) 0;
-  border-radius: var(--radius-small);
-  background: transparent;
-  box-shadow: none;
-  transition: background-color 0.4s ease-out, box-shadow 0.4s ease-out;
 }
 
 .how-steps.js-armed .how-step {
@@ -454,47 +450,44 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   transition: opacity 0.5s cubic-bezier(0.22, 1, 0.36, 1), transform 0.5s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.how-steps.js-armed .how-step.is-active {
+.how-steps.js-armed .how-step.is-in {
   opacity: 1;
   transform: none;
 }
 
-/* "Current" is a transient spotlight while the sequence is mid-flight: one
-   step at a time, never all three, so it never reads as three cards. */
-.how-steps.js-armed .how-step.is-current {
-  background: linear-gradient(180deg, rgba(124, 154, 255, 0.08), transparent 75%);
-  box-shadow: inset 2px 0 0 var(--accent);
-  transition: background-color 0.4s ease-out, box-shadow 0.4s ease-out;
-}
-
-/* Connector segment: one per "from" step (steps 1 and 2), anchored to its own
-   circle centre — start at the circle centre, run exactly one column pitch
-   (column width + gap) to the next circle centre. Geometry is a pure function
-   of circle size and grid gap, so it stays correct at any width. A static grey
-   rail sits under an accent line that draws via transform (never width/left). */
-.how-step__seg {
+/* Standalone direction chevron, centred in the gap between this circle and the
+   next one (a pure function of circle size + gap, so it stays put at any
+   width) and vertically on the circle centre. Absolute → never shifts layout;
+   lives entirely inside the reserved column gap. */
+.how-step__arrow {
   position: absolute;
-  z-index: 0;
+  z-index: 2;
   top: calc(var(--how-step-pad) + var(--how-circle) / 2);
-  left: calc(var(--how-circle) / 2);
-  width: calc(100% + var(--how-gap));
-  height: 2px;
-  border-radius: 2px;
-  background: var(--border);
-  overflow: hidden;
+  left: calc(var(--how-circle) / 2 + (100% + var(--how-gap)) / 2);
+  transform: translate(-50%, -50%);
+  width: 22px;
+  height: 22px;
+  color: var(--accent);
+  opacity: 1;
 }
 
-.how-step__seg::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: var(--accent);
-  transform: scaleX(0);
-  transform-origin: left center;
-  transition: transform var(--seg-duration, 0.68s) cubic-bezier(0.22, 1, 0.36, 1);
+.how-step__arrow svg { width: 100%; height: 100%; display: block; }
+
+.how-steps.js-armed .how-step__arrow {
+  opacity: 0;
 }
 
-.how-step.is-drawn .how-step__seg::after { transform: scaleX(1); }
+.how-steps.js-armed .how-step__arrow svg {
+  transform: scale(0.5);
+  transition: transform 0.45s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.how-steps.js-armed .how-step.arrow-in .how-step__arrow {
+  opacity: 1;
+  transition: opacity 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.how-steps.js-armed .how-step.arrow-in .how-step__arrow svg { transform: scale(1); }
 
 .how-step__num {
   position: relative;
@@ -502,17 +495,16 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   width: var(--how-circle);
   height: var(--how-circle);
   border-radius: 50%;
-  border: 1px solid var(--border);
+  border: 1px solid var(--accent);
   background: var(--bg);
-  color: var(--text-faint);
+  color: var(--accent);
   display: flex;
   align-items: center;
   justify-content: center;
   font-size: 22px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  transition: border-color 0.4s cubic-bezier(0.22, 1, 0.36, 1), color 0.4s cubic-bezier(0.22, 1, 0.36, 1),
-    background-color 0.4s cubic-bezier(0.22, 1, 0.36, 1), box-shadow 0.4s cubic-bezier(0.22, 1, 0.36, 1);
+  transition: border-color 0.4s cubic-bezier(0.22, 1, 0.36, 1), color 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .how-step__body { display: flex; flex-direction: column; gap: 7px; }
@@ -528,29 +520,20 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
   width: 18px;
   height: 18px;
   flex: none;
-  color: var(--text-faint);
+  color: var(--accent);
   transition: color 0.4s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .how-steps p { color: var(--text-muted); font-size: 15px; line-height: 1.6; max-width: 42ch; }
 
-.how-step.is-active .how-step__num {
-  border-color: var(--accent);
-  color: var(--accent);
+/* Until a step is revealed (armed sequence), its circle/icon read as muted
+   grey; revealing switches them to accent. No shadow at any point. */
+.how-steps.js-armed .how-step:not(.is-in) .how-step__num {
+  border-color: var(--border);
+  color: var(--text-faint);
 }
 
-.how-step.is-active .how-step__icon { color: var(--accent); }
-
-.how-step.is-current .how-step__num {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
-  box-shadow: 0 0 0 6px rgba(124, 154, 255, 0.14);
-}
-
-.how-steps.js-armed .how-step:not(.is-active) .how-step__num {
-  opacity: 0.72;
-}
+.how-steps.js-armed .how-step:not(.is-in) .how-step__icon { color: var(--text-faint); }
 
 @media (prefers-reduced-motion: reduce) {
   .how-steps.js-armed .how-step {
@@ -558,11 +541,7 @@ input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focu
     transform: none;
     transition: none;
   }
-  .how-steps.js-armed .how-step.is-current {
-    background: transparent;
-    box-shadow: none;
-  }
-  .how-step__seg::after { transition: none; }
+  .how-steps.js-armed .how-step__arrow svg { transition: none; }
 }
 
 /* Capabilities: copy + real question examples. */
@@ -678,41 +657,188 @@ select option {
 .growth-row h3 { font-size: 20px; }
 .growth-row p { color: var(--text-muted); font-size: 15.5px; line-height: 1.6; max-width: 56ch; }
 
-/* Safety: plain list, no cards. */
-.safety p { color: var(--text-muted); margin-top: 10px; max-width: 58ch; }
+/* Control: one confident "assurance panel" whose visual metaphor is an
+   approval gate (AI proposes, you apply/reject), with a compact guarantees
+   strip beneath. Deliberately different in shape from every neighbouring
+   section — not an icon+title+text triptych. */
+.control__panel {
+  margin-top: 30px;
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius);
+  background: var(--bg-elevated);
+  padding: 40px;
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  gap: 28px 48px;
+  align-items: center;
+}
 
-/* Asymmetric emphasis grid: the first guarantee (no silent changes) is the
-   headline trust claim and gets its own column and larger type; the other
-   two stack as supporting points. Deliberately not three equal cards. */
-.safety-list {
-  margin: 30px 0 0;
-  padding: 0;
+.control__eyebrow {
+  display: inline-block;
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 14px;
+}
+
+.control__lead h2 { font-size: 30px; line-height: 1.18; letter-spacing: -0.02em; }
+.control__lead p {
+  color: var(--text-muted);
+  font-size: 16px;
+  line-height: 1.62;
+  margin-top: 16px;
+  max-width: 46ch;
+}
+
+/* Approval-gate preview — the metaphor for "nothing applies without your yes". */
+.control__demo {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-card);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.control__demo-head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.control__demo-icon { width: 26px; height: 26px; color: var(--accent); flex: none; }
+.control__demo-icon svg { width: 100%; height: 100%; display: block; }
+
+.control__demo-tag {
+  margin-left: auto;
+  font-size: 11.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--warn);
+  background: var(--warn-bg);
+  border-radius: 999px;
+  padding: 3px 10px;
+  white-space: nowrap;
+}
+
+.control__demo-text { color: var(--text-muted); font-size: 14.5px; line-height: 1.55; margin: 0; }
+
+.control__demo-actions { display: flex; gap: 10px; margin-top: 2px; }
+
+.control__btn {
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: var(--radius-small);
+  padding: 9px 16px;
+}
+
+.control__btn--apply { background: var(--accent); color: var(--accent-ink); }
+.control__btn--reject { border: 1px solid var(--border); color: var(--text-muted); }
+
+.control__points {
+  grid-column: 1 / -1;
+  margin: 4px 0 0;
+  padding: 26px 0 0;
+  border-top: 1px solid var(--border);
   list-style: none;
   display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
-  gap: 0 48px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 28px;
 }
 
-.safety-list__primary {
-  grid-row: 1 / 3;
-  padding-right: 40px;
-  border-right: 1px solid var(--border);
+.control__points li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 12px; align-items: start; }
+.control__points svg { width: 22px; height: 22px; color: var(--accent); margin-top: 1px; }
+.control__points strong { display: block; font-size: 15.5px; color: var(--text); margin-bottom: 4px; }
+.control__points span { color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+
+/* First-open loading scene: a full-screen brand hold that fades into the page.
+   Indeterminate motion only — no spinner, no percentage, no fake progress. */
+.app-loader {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  background: var(--bg);
+  opacity: 1;
+  transition: opacity 0.55s cubic-bezier(0.22, 1, 0.36, 1);
+  /* CSS-only failsafe: even if app.js never loads, the scene clears itself. */
+  animation: loader-failsafe 0.01s linear 4s forwards;
 }
 
-.safety-list li:not(.safety-list__primary) {
-  border-top: 1px solid var(--border);
-  padding-top: 20px;
+.app-loader.is-hidden { opacity: 0; pointer-events: none; }
+
+@keyframes loader-failsafe {
+  to { opacity: 0; visibility: hidden; pointer-events: none; }
 }
 
-.safety-list li:nth-child(3) { margin-top: 30px; }
+.app-loader__brand {
+  display: flex;
+  align-items: center;
+  gap: 13px;
+  font-size: 23px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  opacity: 0;
+  transform: translateY(9px);
+  animation: loader-rise 0.6s cubic-bezier(0.22, 1, 0.36, 1) 0.05s forwards;
+}
 
-.safety-list__primary .safety-list__icon { width: 30px; height: 30px; margin-bottom: 20px; }
-.safety-list__primary h3 { font-size: 22px; margin-bottom: 10px; }
-.safety-list__primary p { font-size: 16px; line-height: 1.6; max-width: 40ch; }
+.app-loader__dot {
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 0 rgba(124, 154, 255, 0.35);
+  animation: loader-pulse 1.6s ease-out infinite;
+}
 
-.safety-list__icon { width: 24px; height: 24px; color: var(--accent); margin-bottom: 14px; }
-.safety-list h3 { font-size: 17px; margin-bottom: 7px; }
-.safety-list p { color: var(--text-muted); font-size: 15px; line-height: 1.6; margin: 0; max-width: 42ch; }
+.app-loader__bar {
+  width: 172px;
+  height: 3px;
+  border-radius: 3px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.app-loader__bar span {
+  display: block;
+  width: 38%;
+  height: 100%;
+  border-radius: 3px;
+  background: var(--accent);
+  animation: loader-sweep 1.15s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+@keyframes loader-rise { to { opacity: 1; transform: none; } }
+
+@keyframes loader-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(124, 154, 255, 0.35); }
+  70% { box-shadow: 0 0 0 11px rgba(124, 154, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(124, 154, 255, 0); }
+}
+
+@keyframes loader-sweep {
+  0% { transform: translateX(-120%); }
+  100% { transform: translateX(330%); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-loader { transition: none; }
+  .app-loader__brand { animation: none; opacity: 1; transform: none; }
+  .app-loader__dot { animation: none; }
+  .app-loader__bar span { animation: none; width: 100%; }
+}
 
 /* AI clients strip */
 .clients-strip {
@@ -3433,8 +3559,8 @@ details.raw-json pre {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 1024px) {
-  /* Stacked: a vertical timeline — circle in a left rail, body indented,
-     connector runs straight down the rail between circle centres via scaleY. */
+  /* Stacked: circle in a left rail, body indented, down-chevron in the rail
+     gap between steps (still a standalone element, not a running line). */
   .how-steps { --how-circle: 48px; grid-template-columns: 1fr; gap: 0; padding: 30px 24px; }
   .how-step {
     display: grid;
@@ -3442,29 +3568,26 @@ details.raw-json pre {
     column-gap: 18px;
     row-gap: 0;
     align-items: start;
-    padding: 0 0 32px;
+    padding: 0 0 34px;
     margin: 0;
   }
   .how-step:last-child { padding-bottom: 0; }
   .how-step__num { grid-column: 1; align-self: start; font-size: 19px; }
   .how-step__body { grid-column: 2; }
-  .how-step__seg {
-    top: calc(var(--how-circle) / 2);
+  .how-step__arrow {
+    top: auto;
+    bottom: 7px;
     left: calc(var(--how-circle) / 2);
-    width: 2px;
-    height: 100%;
+    transform: translate(-50%, 0) rotate(90deg);
+    width: 20px;
+    height: 20px;
   }
-  .how-step__seg::after {
-    transform: scaleY(0);
-    transform-origin: center top;
-  }
-  .how-step.is-drawn .how-step__seg::after { transform: scaleY(1); }
-  .safety-list { grid-template-columns: 1fr; gap: 20px; }
-  .safety-list__primary { grid-row: auto; padding-right: 0; border-right: none; }
-  .safety-list li:nth-child(3) { margin-top: 0; }
   .capabilities { grid-template-columns: 1fr; gap: 32px; }
   .growth { grid-template-columns: 1fr; gap: 28px; }
   .growth__lead { max-width: 60ch; }
+  .control__panel { grid-template-columns: 1fr; padding: 32px; gap: 26px; }
+  .control__lead h2 { font-size: 26px; }
+  .control__points { grid-template-columns: 1fr; gap: 18px; padding-top: 24px; }
 }
 
 @media (max-width: 860px) {
@@ -3518,6 +3641,9 @@ details.raw-json pre {
   .hero h1 { font-size: 34px; }
   .hero p { font-size: 16px; }
   .hero__actions .btn { flex: 1 1 auto; }
+  .control__panel { padding: 22px; }
+  .control__lead h2 { font-size: 23px; }
+  .control__demo { padding: 18px; }
   .growth-row { padding: 20px 0; }
   .cta-band { padding: 48px 8px 64px; }
   .topbar__inner { padding: 8px 14px; gap: 8px; min-height: auto; }

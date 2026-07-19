@@ -1,3 +1,36 @@
+/* First-open loader control. Kept at the very top, outside the main IIFE, so a
+   later runtime error can never leave the loader covering the page. Inline
+   scripts are blocked by CSP, so this lives in app.js (same-origin); a CSS
+   failsafe animation on .app-loader covers app.js failing to load at all. */
+(function () {
+  var loader = document.getElementById("app-loader");
+  if (!loader) return;
+  var done = false;
+  function hideLoader() {
+    if (done) return;
+    done = true;
+    loader.classList.add("is-hidden");
+    window.setTimeout(function () {
+      if (loader && loader.parentNode) loader.parentNode.removeChild(loader);
+    }, 600);
+  }
+  try {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      hideLoader();
+      return;
+    }
+  } catch (e) {}
+  var shownAt = Date.now();
+  if (document.readyState === "complete") {
+    window.setTimeout(hideLoader, 300);
+  } else {
+    window.addEventListener("load", function () {
+      window.setTimeout(hideLoader, Math.max(0, 500 - (Date.now() - shownAt)));
+    });
+  }
+  window.setTimeout(hideLoader, 2200); // anti-hang hard cap
+})();
+
 /* HolyMedia MCP dashboard.
    Onboarding flow: access code gate -> onboarding -> connections -> MCP setup.
    Uses only existing hosted/diagnostics endpoints. Never renders the access code
@@ -257,12 +290,11 @@
   }
 
   /* Sequential reveal for the "Три шага до первого ответа" block. Strictly
-     phased so segments never race the circles: step appears + is highlighted,
-     a pause, its connector segment draws to the next circle, a pause, the next
-     step appears, and so on. Each connector is its own element animated with
-     transform (see .how-step__seg), so geometry can't drift. Runs once per
-     page load (IntersectionObserver, disconnected after first trigger) and is
-     skipped entirely under reduced motion. */
+     phased: step 1 appears, its direction chevron fades in, step 2 appears,
+     its chevron fades in, step 3 appears — nothing overlaps. Chevrons are
+     standalone absolutely-positioned elements (see .how-step__arrow), so they
+     never shift the grid. Runs once per page load (IntersectionObserver,
+     disconnected after first trigger) and is skipped under reduced motion. */
   function initStepsReveal() {
     const container = document.querySelector('[data-reveal="steps"]');
     if (!container) return;
@@ -272,7 +304,7 @@
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const activateAll = () => {
-      steps.forEach((step) => step.classList.add("is-active", "is-drawn"));
+      steps.forEach((step) => step.classList.add("is-in", "arrow-in"));
     };
 
     if (reduceMotion) {
@@ -283,31 +315,22 @@
     // Stacked layout runs a touch faster but the full cycle stays ~3s+.
     const isCompact = window.matchMedia("(max-width: 1024px)").matches;
     const STEP_MS = isCompact ? 440 : 500;
-    const SEG_MS = isCompact ? 560 : 680;
-    const PAUSE_MS = isCompact ? 170 : 200;
-    container.style.setProperty("--seg-duration", `${SEG_MS}ms`);
+    const ARROW_MS = isCompact ? 360 : 420;
+    const PAUSE_MS = isCompact ? 160 : 190;
 
     const runSequence = () => {
       container.classList.add("js-armed");
       let t = 0;
 
       steps.forEach((step, index) => {
-        // Phase A: step appears and takes the transient "current" spotlight.
-        window.setTimeout(() => step.classList.add("is-active", "is-current"), t);
+        // Phase A: the step fades/rises in.
+        window.setTimeout(() => step.classList.add("is-in"), t);
         t += STEP_MS + PAUSE_MS;
 
+        // Phase B: this step's chevron fades in before the next step appears.
         if (index < steps.length - 1) {
-          // Phase B: drop the spotlight and draw this step's connector segment
-          // toward the next circle. Only one step is ever "current".
-          window.setTimeout(() => {
-            step.classList.remove("is-current");
-            step.classList.add("is-drawn");
-          }, t);
-          t += SEG_MS + PAUSE_MS;
-        } else {
-          // Last step: let the spotlight settle, then rest in the calm
-          // "done" state (no lingering glow).
-          window.setTimeout(() => step.classList.remove("is-current"), t + 400);
+          window.setTimeout(() => step.classList.add("arrow-in"), t);
+          t += ARROW_MS + PAUSE_MS;
         }
       });
     };

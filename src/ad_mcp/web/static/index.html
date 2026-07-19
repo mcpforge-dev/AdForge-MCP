@@ -12,6 +12,17 @@
   <link rel="stylesheet" href="/assets/app.css">
 </head>
 <body>
+  <!-- Branded first-open loading scene. Hidden by app.js once the page is
+       ready (inline scripts are blocked by CSP); a CSS failsafe animation on
+       .app-loader also auto-clears it if app.js never loads. -->
+  <div id="app-loader" class="app-loader" role="presentation">
+    <div class="app-loader__brand">
+      <span class="app-loader__dot" aria-hidden="true"></span>
+      <span class="app-loader__name">HolyMedia MCP</span>
+    </div>
+    <div class="app-loader__bar" aria-hidden="true"><span></span></div>
+  </div>
+
   <div id="toast-root" class="toast-root" aria-live="polite" aria-atomic="true"></div>
 
   <!-- Public SaaS landing -->
@@ -58,7 +69,7 @@
         <ol class="how-steps" data-reveal="steps">
           <li class="how-step" data-step="1">
             <div class="how-step__num" aria-hidden="true">1</div>
-            <span class="how-step__seg" aria-hidden="true"></span>
+            <span class="how-step__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
             <div class="how-step__body">
               <h3><svg class="how-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 15l6-6"/><path d="M10 6.5l1.5-1.5a3.5 3.5 0 0 1 5 5L15 11.5"/><path d="M14 17.5L12.5 19a3.5 3.5 0 0 1-5-5L9 12.5"/></svg>Подключите рекламные кабинеты</h3>
               <p>Войдите в HolyMedia MCP и подключите Meta, Google, TikTok или Яндекс Директ через официальный вход платформы.</p>
@@ -66,7 +77,7 @@
           </li>
           <li class="how-step" data-step="2">
             <div class="how-step__num" aria-hidden="true">2</div>
-            <span class="how-step__seg" aria-hidden="true"></span>
+            <span class="how-step__arrow" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></span>
             <div class="how-step__body">
               <h3><svg class="how-step__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="8" cy="15" r="3.2"/><path d="M10.3 12.7L18 5"/><path d="M15.5 7.5l2 2"/><path d="M18 5l2 2"/></svg>Добавьте HolyMedia MCP в AI-клиент</h3>
               <p>Скопируйте адрес подключения и личный ключ доступа в Claude, ChatGPT или Codex по готовой инструкции.</p>
@@ -121,25 +132,40 @@
           </div>
         </div>
       </section>
-      <section class="safety" aria-label="Безопасность">
-        <h2>Вы контролируете изменения</h2>
-        <ul class="safety-list">
-          <li class="safety-list__primary">
-            <svg class="safety-list__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3.5l7 3v5c0 4.5-3 7.7-7 8.5-4-0.8-7-4-7-8.5v-5l7-3z"/><path d="M9.3 12l1.8 1.8 3.6-3.6"/></svg>
-            <h3>Ничего не меняется само</h3>
-            <p>AI готовит рекомендации, а изменения в кабинетах применяются только после вашего подтверждения. Ни одна кампания не остановится и не изменится без вашего явного «да».</p>
-          </li>
-          <li>
-            <svg class="safety-list__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="7.5" cy="16.5" r="3"/><path d="M9.6 14.4L18 6"/><path d="M14.5 9.5l2 2"/><path d="M17 7l2 2"/></svg>
-            <h3>Личный ключ доступа</h3>
-            <p>AI-клиент видит только ваши аккаунты. Ключ можно перевыпустить в один клик.</p>
-          </li>
-          <li>
-            <svg class="safety-list__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="10.5" width="12" height="9" rx="1.5"/><path d="M8.5 10.5V7.5a3.5 3.5 0 0 1 7 0"/><path d="M9.5 15l2 2 3-3.5"/></svg>
-            <h3>Подключение без паролей</h3>
-            <p>Платформы подключаются через их официальный вход. HolyMedia MCP не хранит пароли от кабинетов.</p>
-          </li>
-        </ul>
+      <section class="control" aria-label="Вы контролируете изменения">
+        <div class="control__panel">
+          <div class="control__lead">
+            <span class="control__eyebrow">Безопасность и контроль</span>
+            <h2>Ни одно изменение не уходит без вашего «да»</h2>
+            <p>AI читает кабинеты только на просмотр, готовит рекомендации и показывает их вам. Применяется лишь то, что вы подтвердили — вручную.</p>
+          </div>
+          <div class="control__demo" aria-hidden="true">
+            <div class="control__demo-head">
+              <span class="control__demo-icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2.5l7.5 3.2v5.1c0 4.7-3.2 8-7.5 9-4.3-1-7.5-4.3-7.5-9V5.7L12 2.5z"/><path d="M9 12l2 2 4-4.2"/></svg></span>
+              <span>Предложение AI</span>
+              <span class="control__demo-tag">ждёт решения</span>
+            </div>
+            <p class="control__demo-text">Увеличить дневной бюджет кампании «Лидогенерация · Meta Ads» на 15% — расход в пределах плана.</p>
+            <div class="control__demo-actions">
+              <span class="control__btn control__btn--apply">Применить</span>
+              <span class="control__btn control__btn--reject">Отклонить</span>
+            </div>
+          </div>
+          <ul class="control__points">
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>
+              <div><strong>Только просмотр</strong><span>AI видит данные, но не тратит бюджет сам.</span></div>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>
+              <div><strong>Личный ключ доступа</strong><span>Свои аккаунты, ключ — в один клик.</span></div>
+            </li>
+            <li>
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l5 5L20 6"/></svg>
+              <div><strong>Без паролей</strong><span>Официальный вход платформ, пароли не храним.</span></div>
+            </li>
+          </ul>
+        </div>
       </section>
       <section class="cta-band" aria-label="Регистрация">
         <h2>Подключите первый кабинет сегодня</h2>
