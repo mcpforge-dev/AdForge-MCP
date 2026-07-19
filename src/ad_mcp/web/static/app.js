@@ -289,22 +289,25 @@
     initStepsReveal();
   }
 
-  /* Sequential reveal for the "Три шага до первого ответа" block. Strictly
-     phased: step 1 appears, its direction chevron fades in, step 2 appears,
-     its chevron fades in, step 3 appears — nothing overlaps. Chevrons are
-     standalone absolutely-positioned elements (see .how-step__arrow), so they
-     never shift the grid. Runs once per page load (IntersectionObserver,
-     disconnected after first trigger) and is skipped under reduced motion. */
+  /* Sequential reveal for the "Три шага до первого ответа" block: step 1 card
+     appears, then arrow 1, then step 2 card, then arrow 2, then step 3 card —
+     strictly one at a time, nothing overlaps. Cards and arrows are separate
+     grid items (see .how-step / .how-arrow), each with its own reserved
+     track, so revealing them never shifts the layout. Runs once per page load
+     (IntersectionObserver, disconnected after first trigger) and is skipped
+     under reduced motion. */
   function initStepsReveal() {
     const container = document.querySelector('[data-reveal="steps"]');
     if (!container) return;
-    const steps = Array.from(container.querySelectorAll(".how-step"));
-    if (!steps.length) return;
+    const items = Array.from(container.children).filter(
+      (node) => node.classList.contains("how-step") || node.classList.contains("how-arrow"),
+    );
+    if (!items.length) return;
 
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
     const activateAll = () => {
-      steps.forEach((step) => step.classList.add("is-in", "arrow-in"));
+      items.forEach((item) => item.classList.add("is-in"));
     };
 
     if (reduceMotion) {
@@ -322,16 +325,10 @@
       container.classList.add("js-armed");
       let t = 0;
 
-      steps.forEach((step, index) => {
-        // Phase A: the step fades/rises in.
-        window.setTimeout(() => step.classList.add("is-in"), t);
-        t += STEP_MS + PAUSE_MS;
-
-        // Phase B: this step's chevron fades in before the next step appears.
-        if (index < steps.length - 1) {
-          window.setTimeout(() => step.classList.add("arrow-in"), t);
-          t += ARROW_MS + PAUSE_MS;
-        }
+      items.forEach((item) => {
+        const isArrow = item.classList.contains("how-arrow");
+        window.setTimeout(() => item.classList.add("is-in"), t);
+        t += (isArrow ? ARROW_MS : STEP_MS) + PAUSE_MS;
       });
     };
 
