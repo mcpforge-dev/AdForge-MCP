@@ -819,6 +819,27 @@ def test_registration_form_has_no_access_code_field(tmp_path) -> None:
     assert "access_code" not in script
 
 
+def test_connections_ui_only_lists_advertising_platforms(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        public_base_url="https://adforge.example",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        script_status, script = _get_text(base_url, "/assets/app.js")
+    finally:
+        close()
+
+    assert script_status == 200
+    assert 'const ADVERTISING_PROVIDERS = new Set([' in script
+    assert 'const platforms = advertisingPlatforms(connections);' in script
+    assert 'ADVERTISING_PROVIDERS.has(platform.provider)' in script
+
+
 def test_email_registration_creates_session_and_authorizes_dashboard_api(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,

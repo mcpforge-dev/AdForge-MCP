@@ -60,6 +60,13 @@
     yandex_direct: "Кабинеты, кампании и базовые данные из Yandex Direct после подключения.",
   };
 
+  const ADVERTISING_PROVIDERS = new Set([
+    "meta_ads",
+    "google_ads",
+    "tiktok_ads",
+    "yandex_direct",
+  ]);
+
   const TEST_MODE = new Set();
 
   const state = {
@@ -1268,7 +1275,7 @@
   }
 
   function renderOverview(capabilities, connections) {
-    const platforms = connections.platforms || [];
+    const platforms = advertisingPlatforms(connections);
     const connectedPlatforms = platforms.filter((p) => (p.accounts || []).length > 0);
     const connectedAccounts = connectedPlatforms.reduce((sum, p) => sum + (p.accounts || []).length, 0);
     const mcpUrl = capabilities?.mcp?.url || connections?.mcp?.url || "";
@@ -2600,7 +2607,7 @@
 
   function renderConnections(connections) {
     el.connectionsNotice.innerHTML = state.notice ? noticeMarkup(state.notice.text, state.notice.tone) : "";
-    const platforms = (connections && connections.platforms) || [];
+    const platforms = advertisingPlatforms(connections);
     syncActivePending(platforms);
     el.pendingPanel.innerHTML = "";
     el.connectionsList.innerHTML = platforms.length
@@ -2608,6 +2615,12 @@
       : emptyState("Пока нет подключенных рекламных аккаунтов. Начните с подключения рекламной платформы.");
     bindConnectionActions();
     syncPendingModal();
+  }
+
+  function advertisingPlatforms(connections) {
+    return ((connections && connections.platforms) || []).filter((platform) =>
+      ADVERTISING_PROVIDERS.has(platform.provider),
+    );
   }
 
   function syncActivePending(platforms) {
