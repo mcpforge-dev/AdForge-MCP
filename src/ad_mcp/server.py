@@ -20,6 +20,7 @@ from ad_mcp.providers.yandex_direct.client import YandexDirectProvider
 from ad_mcp.mcp_auth import build_mcp_auth
 from ad_mcp.settings import Settings
 from ad_mcp.tools.account_read import build_account_read_tools
+from ad_mcp.tools.ad_detailed_reports import build_ad_detailed_report_tools
 from ad_mcp.tools.analytics_read import build_analytics_read_tools
 from ad_mcp.tools.beta_read import build_beta_read_tools
 from ad_mcp.tools.billing import build_billing_tools
@@ -140,6 +141,7 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
         build_beta_read_tools(registry, policy_manager, settings),
         build_billing_tools(registry, policy_manager),
         build_account_read_tools(registry, policy_manager),
+        build_ad_detailed_report_tools(registry, policy_manager),
         build_analytics_read_tools(registry, policy_manager),
         build_reporting_tools(registry, policy_manager),
         build_object_tools(registry, policy_manager),

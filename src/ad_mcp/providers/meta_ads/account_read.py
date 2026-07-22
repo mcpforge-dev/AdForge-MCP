@@ -97,7 +97,11 @@ OBJECT_CONFIG: dict[str, dict[str, Any]] = {
     "creative": {
         "method": "get_ad_creatives",
         "class": lambda: AdCreative,
-        "fields": ["id", "name", "status", "body", "title", "object_type", "object_story_id", "object_story_spec", "thumbnail_url", "image_url", "video_id", "url_tags"],
+        "fields": [
+            "id", "name", "status", "body", "title", "object_type", "object_story_id",
+            "effective_object_story_id", "object_story_spec", "asset_feed_spec",
+            "call_to_action_type", "thumbnail_url", "image_url", "image_hash", "video_id", "url_tags",
+        ],
     },
     "audience": {
         "method": "get_custom_audiences",

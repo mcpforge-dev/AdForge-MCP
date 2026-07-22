@@ -252,25 +252,36 @@ def estimate_meta_budget_days_remaining(credentials: MetaAccountCredentials, end
 
 
 def fetch_meta_connected_assets(credentials: MetaAccountCredentials) -> dict[str, Any]:
-    pages = fetch_meta_objects(credentials, "page", limit=20)
-    insta = fetch_meta_objects(credentials, "instagram_account", limit=20)
-    pixels = fetch_meta_objects(credentials, "pixel", limit=20)
-    conversions = fetch_meta_objects(credentials, "custom_conversion", limit=20)
+    assets: dict[str, list[dict[str, Any]]] = {}
+    warnings: list[dict[str, str]] = []
+    for result_key, object_type in (
+        ("pages", "page"),
+        ("instagram_accounts", "instagram_account"),
+        ("pixels", "pixel"),
+        ("custom_conversions", "custom_conversion"),
+    ):
+        try:
+            assets[result_key] = fetch_meta_objects(credentials, object_type, limit=20)["rows"]
+        except Exception as exc:  # noqa: BLE001
+            assets[result_key] = []
+            message = str(exc)
+            for secret in (credentials.access_token, credentials.app_secret):
+                if secret:
+                    message = message.replace(secret, "[redacted]")
+            warnings.append(
+                {
+                    "asset_type": result_key,
+                    "status": "permission_or_api_unavailable",
+                    "message": message[:500],
+                }
+            )
     return {
         "provider": "meta_ads",
         "account_id": f"act_{credentials.account_id}",
-        "assets": {
-            "pages": pages["rows"],
-            "instagram_accounts": insta["rows"],
-            "pixels": pixels["rows"],
-            "custom_conversions": conversions["rows"],
-        },
-        "summary": {
-            "pages": pages["row_count"],
-            "instagram_accounts": insta["row_count"],
-            "pixels": pixels["row_count"],
-            "custom_conversions": conversions["row_count"],
-        },
+        "assets": assets,
+        "summary": {key: len(rows) for key, rows in assets.items()},
+        "warnings": warnings,
+        "partial": bool(warnings),
         "source_api": "meta_marketing_api",
         "preview": False,
     }

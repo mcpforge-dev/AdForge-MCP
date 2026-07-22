@@ -93,6 +93,13 @@ def fetch_google_report(
     service = client.get_service("GoogleAdsService")
 
     select_fields = ["segments.date"]
+    identity_fields = {
+        "campaign": ["campaign.id", "campaign.name"],
+        "ad_group": ["campaign.id", "campaign.name", "ad_group.id", "ad_group.name"],
+        "ad": ["campaign.id", "campaign.name", "ad_group.id", "ad_group.name", "ad_group_ad.ad.id", "ad_group_ad.ad.name"],
+        "keyword": ["campaign.id", "campaign.name", "ad_group.id", "ad_group.name", "ad_group_criterion.criterion_id", "ad_group_criterion.keyword.text"],
+    }
+    select_fields.extend(identity_fields.get(request.entity_level, []))
     for field in matched:
         api_field = FIELD_MAP.get(field)
         if api_field and api_field not in select_fields:
@@ -119,6 +126,17 @@ def fetch_google_report(
     for batch in service.search_stream(customer_id=credentials.customer_id, query=query):
         for result in batch.results:
             row: dict[str, Any] = {"date": str(result.segments.date)}
+            if request.entity_level in {"campaign", "ad_group", "ad", "keyword"}:
+                row.update({"campaign_id": result.campaign.id, "campaign_name": result.campaign.name})
+            if request.entity_level in {"ad_group", "ad", "keyword"}:
+                row.update({"ad_group_id": result.ad_group.id, "ad_group_name": result.ad_group.name})
+            if request.entity_level == "ad":
+                row.update({"ad_id": result.ad_group_ad.ad.id, "ad_name": result.ad_group_ad.ad.name})
+            if request.entity_level == "keyword":
+                row.update({
+                    "keyword_id": result.ad_group_criterion.criterion_id,
+                    "keyword_text": result.ad_group_criterion.keyword.text,
+                })
             for field in matched:
                 api_field = FIELD_MAP.get(field)
                 if not api_field:
