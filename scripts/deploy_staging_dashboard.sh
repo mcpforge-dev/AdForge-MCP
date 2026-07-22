@@ -27,6 +27,33 @@ fail() {
   exit 1
 }
 
+wait_for_url() {
+  local url="$1"
+  local output_file="${2:-/dev/null}"
+  local attempt
+  for attempt in {1..20}; do
+    if curl --connect-timeout 5 --max-time 15 -fsS "$url" -o "$output_file"; then
+      return 0
+    fi
+    sleep 2
+  done
+  fail "Endpoint did not become ready: ${url}"
+}
+
+wait_for_status() {
+  local url="$1"
+  local expected="$2"
+  local attempt status
+  for attempt in {1..20}; do
+    status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w "%{http_code}" "$url" || true)"
+    if [[ "$status" == "$expected" ]]; then
+      return 0
+    fi
+    sleep 2
+  done
+  fail "Expected ${url} to return ${expected}, got ${status:-no response}."
+}
+
 echo "HolyMedia MCP staging deploy"
 echo "Target ref: ${TARGET_REF}"
 
@@ -96,19 +123,16 @@ echo "Checking public staging endpoints at ${base_url}..."
 ready_file="$(mktemp)"
 trap 'rm -f "$ready_file"' EXIT
 
-curl -fsS "${base_url}/health" >/dev/null
-curl -fsS "${base_url}/ready" -o "$ready_file"
-curl -fsS "${base_url}/assets/app.js" >/dev/null
-curl -fsS "${base_url}/assets/app.css" >/dev/null
+wait_for_url "${base_url}/health"
+wait_for_url "${base_url}/ready" "$ready_file"
+wait_for_url "${base_url}/assets/app.js"
+wait_for_url "${base_url}/assets/app.css"
 
 if ! grep -q '"preview_only"' "$ready_file"; then
   fail "/ready response does not include preview_only diagnostics."
 fi
 
-mcp_status="$(curl -sS -o /dev/null -w "%{http_code}" "${base_url}/mcp")"
-if [[ "$mcp_status" != "401" ]]; then
-  fail "Expected ${base_url}/mcp without token to return 401, got ${mcp_status}."
-fi
+wait_for_status "${base_url}/mcp" "401"
 
 echo "Staging deploy check complete. Health, readiness, assets and protected MCP endpoint are reachable."
 echo "Note: this script does not print env values, does not touch live services and does not overwrite OAuth credentials."

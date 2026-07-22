@@ -25,6 +25,33 @@ fail() {
   exit 1
 }
 
+wait_for_url() {
+  local url="$1"
+  local output_file="${2:-/dev/null}"
+  local attempt
+  for attempt in {1..20}; do
+    if curl --connect-timeout 5 --max-time 15 -fsS "$url" -o "$output_file"; then
+      return 0
+    fi
+    sleep 2
+  done
+  fail "Endpoint did not become ready: ${url}"
+}
+
+wait_for_status() {
+  local url="$1"
+  local expected="$2"
+  local attempt status
+  for attempt in {1..20}; do
+    status="$(curl --connect-timeout 5 --max-time 15 -sS -o /dev/null -w "%{http_code}" "$url" || true)"
+    if [[ "$status" == "$expected" ]]; then
+      return 0
+    fi
+    sleep 2
+  done
+  fail "Expected ${url} to return ${expected}, got ${status:-no response}."
+}
+
 echo "HolyMedia MCP live dashboard deploy"
 
 if [[ "$(pwd -P)" != "$PROJECT_DIR" ]]; then
@@ -54,11 +81,13 @@ echo "Applying fast-forward pull..."
 git pull --ff-only origin main
 echo "Current commit: $(git rev-parse --short HEAD)"
 
-echo "Restarting ${WEB_SERVICE} only..."
-if ! sudo systemctl restart "$WEB_SERVICE"; then
-  show_journal_summary "$WEB_SERVICE"
-  fail "Restart failed for ${WEB_SERVICE}."
-fi
+echo "Restarting live services..."
+for service in "$WEB_SERVICE" "$MCP_SERVICE"; do
+  if ! sudo systemctl restart "$service"; then
+    show_journal_summary "$service"
+    fail "Restart failed for ${service}."
+  fi
+done
 
 for service in "$WEB_SERVICE" "$MCP_SERVICE" "$NGINX_SERVICE"; do
   if sudo systemctl is-active --quiet "$service"; then
@@ -84,10 +113,11 @@ fi
 base_url="${base_url%/}"
 
 echo "Checking public endpoints at ${base_url}..."
-curl -fsS "${base_url}/health" >/dev/null
-curl -fsS "${base_url}/ready" >/dev/null
-curl -fsS "${base_url}/assets/app.js" >/dev/null
-curl -fsS "${base_url}/assets/app.css" >/dev/null
+wait_for_url "${base_url}/health"
+wait_for_url "${base_url}/ready"
+wait_for_url "${base_url}/assets/app.js"
+wait_for_url "${base_url}/assets/app.css"
+wait_for_status "${base_url}/mcp" "401"
 
-echo "Deploy check complete. Dashboard assets and readiness endpoints are reachable."
+echo "Deploy check complete. Dashboard assets, readiness and protected MCP endpoint are reachable."
 echo "Note: this script does not print env values, does not touch tokens/connections.json and does not overwrite OAuth credentials."
