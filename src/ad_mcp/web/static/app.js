@@ -882,7 +882,7 @@
   }
 
   function isKnownSection(section) {
-    return el.navTabs.some((tab) => tab.dataset.nav === section);
+    return el.navTabs.some((tab) => tab.dataset.nav === section && !tab.disabled);
   }
 
   function setSection(section) {

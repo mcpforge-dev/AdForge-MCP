@@ -1290,6 +1290,12 @@ select option {
 
 .nav-tab:hover { color: var(--text); }
 .nav-tab.is-active { color: var(--text); background: var(--bg-elevated); }
+.nav-tab:disabled {
+  color: var(--text-faint);
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+.nav-tab:disabled:hover { color: var(--text-faint); }
 
 .topbar__side {
   display: flex;

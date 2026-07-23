@@ -840,6 +840,26 @@ def test_connections_ui_only_lists_advertising_platforms(tmp_path) -> None:
     assert 'ADVERTISING_PROVIDERS.has(platform.provider)' in script
 
 
+def test_dashboard_disables_seo_navigation(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        landing_status, landing = _get_text(base_url, "/")
+        script_status, script = _get_text(base_url, "/assets/app.js")
+    finally:
+        close()
+
+    assert landing_status == script_status == 200
+    assert 'data-nav="seo" disabled aria-disabled="true"' in landing
+    assert "tab.dataset.nav === section && !tab.disabled" in script
+
+
 def test_email_registration_creates_session_and_authorizes_dashboard_api(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
