@@ -1,10 +1,11 @@
 import json
 
 import pytest
+from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import TextContent
 
 from ad_mcp.core.connection_store import HostedConnectionStore
-from ad_mcp.runtime_context import workspace_scope
+from ad_mcp.runtime_context import McpAccessContext, mcp_access_scope, workspace_scope
 from ad_mcp.server import create_server
 from ad_mcp.settings import Settings
 
@@ -131,6 +132,61 @@ async def test_mcp_tools_are_scoped_to_current_workspace(tmp_path) -> None:
     assert accounts_b == [{"provider": "meta_ads", "name": "User B Meta", "account_id": "act_b", "status": "connected"}]
     assert next(item for item in platforms_b["platforms"] if item["platform"] == "meta_ads")["account_count"] == 1
     assert accounts_empty == []
+
+
+@pytest.mark.asyncio
+async def test_service_token_filters_accounts_and_blocks_other_providers_and_write_tools(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "google_ads",
+        {
+            "provider": "google_ads",
+            "accounts": [
+                {"name": "Allowed", "account_id": "1111111111", "customer_id": "1111111111", "status": "connected"},
+                {"name": "Hidden", "account_id": "2222222222", "customer_id": "2222222222", "status": "connected"},
+            ],
+        },
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+    store.save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": [{"name": "Hidden Meta", "account_id": "act_hidden", "status": "connected"}]},
+        workspace_id="workspace-a",
+        user_id="user-a",
+    )
+    access = McpAccessContext(
+        token_kind="service",
+        workspace_id="workspace-a",
+        scopes=frozenset({"adforge:mcp:read"}),
+        allowed_accounts={"google_ads": frozenset({"1111111111"})},
+        read_only=True,
+        principal_id="service-1",
+    )
+    mcp = create_server(settings)
+
+    with mcp_access_scope(access):
+        accounts = _json_tool_payload(await mcp.call_tool("list_ad_accounts", {"platform": "google_ads"}))
+        with pytest.raises(ToolError, match="cannot access the requested provider"):
+            await mcp.call_tool("list_ad_accounts", {"platform": "meta_ads"})
+        with pytest.raises(ToolError, match="cannot access the requested advertising account"):
+            await mcp.call_tool(
+                "get_account_summary",
+                {"provider": "google_ads", "account_id": "2222222222"},
+            )
+        with pytest.raises(ToolError, match="restricted to read-only"):
+            await mcp.call_tool(
+                "preview_pause_campaign",
+                {"platform": "google_ads", "account_id": "1111111111", "campaign_id": "campaign-1"},
+            )
+
+    assert accounts["account_count"] == 1
+    assert accounts["accounts"][0]["account_id"] == "1111111111"
 
 
 @pytest.mark.asyncio

@@ -1,7 +1,7 @@
 import pytest
 
-from ad_mcp.mcp_auth import StaticBearerTokenVerifier
-from ad_mcp.runtime_context import current_workspace_id, set_current_workspace_id
+from ad_mcp.mcp_auth import MCP_READ_SCOPE, StaticBearerTokenVerifier
+from ad_mcp.runtime_context import current_mcp_access, current_workspace_id, set_current_workspace_id
 from ad_mcp.settings import Settings
 from ad_mcp.web.auth_store import AuthStore
 
@@ -50,3 +50,34 @@ async def test_invalid_mcp_token_does_not_reuse_previous_workspace_context(tmp_p
 
     assert access is None
     assert current_workspace_id() is None
+
+
+@pytest.mark.asyncio
+async def test_service_mcp_token_sets_read_only_account_scope(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="beta-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+    )
+    store = AuthStore(settings)
+    store.ensure_schema()
+    user = store.create_user(email="owner@example.com", name="Owner", password="super-secret")
+    created = store.create_mcp_service_token(
+        workspace_id=str(user.workspace_id),
+        allowed_accounts={"google_ads": ["1234567890"]},
+        name="Hermes",
+    )
+    verifier = StaticBearerTokenVerifier("beta-token", settings=settings, auth_store=store)
+
+    access_token = await verifier.verify_token(created["raw_token"])
+    access = current_mcp_access()
+
+    assert access_token is not None
+    assert access_token.client_id.startswith("adforge-service:")
+    assert MCP_READ_SCOPE in access_token.scopes
+    assert access is not None
+    assert access.token_kind == "service"
+    assert access.workspace_id == user.workspace_id
+    assert access.read_only is True
+    assert access.allowed_accounts == {"google_ads": frozenset({"1234567890"})}

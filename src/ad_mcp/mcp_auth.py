@@ -6,11 +6,12 @@ from mcp.server.auth.provider import AccessToken
 from mcp.server.auth.settings import AuthSettings
 
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
-from ad_mcp.runtime_context import set_current_workspace_id
+from ad_mcp.runtime_context import McpAccessContext, clear_current_mcp_access, set_current_mcp_access, set_current_workspace_id
 from ad_mcp.web.auth_store import AuthDatabaseUnavailable, AuthStore
 
 
 MCP_SCOPE = "adforge:mcp"
+MCP_READ_SCOPE = "adforge:mcp:read"
 
 
 class StaticBearerTokenVerifier:
@@ -20,14 +21,40 @@ class StaticBearerTokenVerifier:
         self._auth_store = auth_store
 
     async def verify_token(self, token: str) -> AccessToken | None:
-        set_current_workspace_id(None)
+        clear_current_mcp_access()
         if self._token and secrets.compare_digest(token, self._token):
+            set_current_mcp_access(
+                McpAccessContext(
+                    token_kind="beta",
+                    workspace_id=None,
+                    scopes=frozenset({MCP_SCOPE}),
+                    allowed_accounts={},
+                )
+            )
             return AccessToken(token=token, client_id="adforge-beta-client", scopes=[MCP_SCOPE])
         if not self._settings:
             return None
         store = self._auth_store or AuthStore(self._settings)
         try:
             store.ensure_schema()
+            service = store.verify_mcp_service_token(token)
+            if service:
+                set_current_workspace_id(service.workspace_id)
+                set_current_mcp_access(
+                    McpAccessContext(
+                        token_kind="service",
+                        workspace_id=service.workspace_id,
+                        scopes=frozenset({service.scope}),
+                        allowed_accounts=service.allowed_accounts,
+                        read_only=True,
+                        principal_id=service.id,
+                    )
+                )
+                return AccessToken(
+                    token=token,
+                    client_id=f"adforge-service:{service.id}",
+                    scopes=[MCP_SCOPE, MCP_READ_SCOPE],
+                )
             user = store.verify_mcp_token(token)
             if not user:
                 user = store.verify_mcp_oauth_access_token(token)
@@ -36,6 +63,15 @@ class StaticBearerTokenVerifier:
         if not user:
             return None
         set_current_workspace_id(user.workspace_id)
+        set_current_mcp_access(
+            McpAccessContext(
+                token_kind="user",
+                workspace_id=user.workspace_id,
+                scopes=frozenset({MCP_SCOPE}),
+                allowed_accounts={},
+                principal_id=user.id,
+            )
+        )
         return AccessToken(token=token, client_id=f"adforge-user:{user.id}", scopes=[MCP_SCOPE])
 
 

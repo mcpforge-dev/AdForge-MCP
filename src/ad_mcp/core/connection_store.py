@@ -8,7 +8,7 @@ from uuid import uuid4
 
 from ad_mcp.core.config_loader import load_provider_from_connections
 from ad_mcp.core.secure_files import write_private_json
-from ad_mcp.runtime_context import current_workspace_id
+from ad_mcp.runtime_context import current_workspace_id, filter_provider_config_for_current_access
 
 if TYPE_CHECKING:
     from ad_mcp.settings import Settings
@@ -554,7 +554,7 @@ def load_runtime_provider_configs(
     for provider in PROVIDER_NAMES:
         hosted_config = store.provider_config(provider, workspace_id=scoped_workspace_id)
         if hosted_config.get("accounts"):
-            configs[provider] = hosted_config
+            configs[provider] = filter_provider_config_for_current_access(provider, hosted_config)
             sources[provider] = "hosted_connection_store_scoped" if scoped_workspace_id else "hosted_connection_store"
             continue
         if scoped_workspace_id:
@@ -563,12 +563,12 @@ def load_runtime_provider_configs(
             continue
         single_workspace_config = store.single_workspace_provider_config(provider)
         if single_workspace_config and single_workspace_config.get("accounts"):
-            configs[provider] = single_workspace_config
+            configs[provider] = filter_provider_config_for_current_access(provider, single_workspace_config)
             sources[provider] = "hosted_connection_store_single_workspace"
             continue
         if settings.connections_fallback_to_local:
             local_config = load_provider_from_connections(settings.connections_config_path, provider)
-            configs[provider] = local_config
+            configs[provider] = filter_provider_config_for_current_access(provider, local_config)
             if local_config.get("accounts"):
                 sources[provider] = "local_connections_config" if settings.connections_config_path.exists() else "local_connections_example"
             else:

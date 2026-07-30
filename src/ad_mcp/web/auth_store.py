@@ -78,6 +78,15 @@ class AuthUser:
         }
 
 
+@dataclass(frozen=True)
+class McpServicePrincipal:
+    id: str
+    name: str
+    workspace_id: str
+    scope: str
+    allowed_accounts: dict[str, frozenset[str]]
+
+
 def _now() -> str:
     return datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
@@ -751,6 +760,126 @@ class AuthStore:
             self._execute(connection, "UPDATE mcp_access_tokens SET last_used_at = ? WHERE token_hash = ?", (_now(), token_hash))
             return user
 
+    def create_mcp_service_token(
+        self,
+        *,
+        workspace_id: str,
+        allowed_accounts: dict[str, list[str] | tuple[str, ...] | set[str]],
+        name: str = "Service MCP token",
+        scope: str = "adforge:mcp:read",
+    ) -> dict[str, Any]:
+        clean_workspace_id = workspace_id.strip()
+        clean_name = name.strip() or "Service MCP token"
+        if scope.strip() != "adforge:mcp:read":
+            raise AuthValidationError("Service MCP tokens support only adforge:mcp:read.")
+        normalized_accounts: dict[str, list[str]] = {}
+        for provider, account_ids in allowed_accounts.items():
+            clean_provider = str(provider or "").strip()
+            clean_ids = sorted({str(item or "").strip() for item in account_ids if str(item or "").strip()})
+            if clean_provider and clean_ids:
+                normalized_accounts[clean_provider] = clean_ids
+        if not normalized_accounts:
+            raise AuthValidationError("Service MCP token requires at least one provider account.")
+        with self._connect() as connection:
+            workspace = self._query_one(
+                connection,
+                "SELECT id FROM workspaces WHERE id = ? AND status = 'active'",
+                (clean_workspace_id,),
+            )
+            if not workspace:
+                raise AuthValidationError("Active workspace was not found.")
+            raw_token = f"mcp_service_{secrets.token_urlsafe(32)}"
+            token_id = uuid.uuid4().hex
+            timestamp = _now()
+            self._execute(
+                connection,
+                """
+                INSERT INTO mcp_service_tokens
+                  (id, workspace_id, token_hash, token_prefix, name, scope, allowed_accounts_json,
+                   status, created_at, last_used_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, NULL, NULL)
+                """,
+                (
+                    token_id,
+                    clean_workspace_id,
+                    _hash_value(raw_token),
+                    raw_token[:22],
+                    clean_name,
+                    "adforge:mcp:read",
+                    json.dumps(normalized_accounts, separators=(",", ":"), sort_keys=True),
+                    timestamp,
+                ),
+            )
+        return {
+            "id": token_id,
+            "workspace_id": clean_workspace_id,
+            "name": clean_name,
+            "scope": "adforge:mcp:read",
+            "allowed_accounts": normalized_accounts,
+            "status": "active",
+            "created_at": timestamp,
+            "raw_token": raw_token,
+        }
+
+    def verify_mcp_service_token(self, token: str) -> McpServicePrincipal | None:
+        if not token:
+            return None
+        token_hash = _hash_value(token)
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT t.id, t.name, t.workspace_id, t.scope, t.allowed_accounts_json
+                FROM mcp_service_tokens t
+                JOIN workspaces w ON w.id = t.workspace_id
+                WHERE t.token_hash = ?
+                  AND t.status = 'active'
+                  AND t.revoked_at IS NULL
+                  AND w.status = 'active'
+                LIMIT 1
+                """,
+                (token_hash,),
+            )
+            if not row:
+                return None
+            try:
+                raw_allowed = json.loads(str(row.get("allowed_accounts_json") or "{}"))
+            except json.JSONDecodeError:
+                return None
+            if not isinstance(raw_allowed, dict):
+                return None
+            allowed_accounts = {
+                str(provider): frozenset(str(account_id) for account_id in account_ids if str(account_id).strip())
+                for provider, account_ids in raw_allowed.items()
+                if isinstance(account_ids, list)
+            }
+            if not allowed_accounts or str(row.get("scope") or "") != "adforge:mcp:read":
+                return None
+            self._execute(
+                connection,
+                "UPDATE mcp_service_tokens SET last_used_at = ? WHERE token_hash = ?",
+                (_now(), token_hash),
+            )
+        return McpServicePrincipal(
+            id=str(row["id"]),
+            name=str(row.get("name") or "Service MCP token"),
+            workspace_id=str(row["workspace_id"]),
+            scope="adforge:mcp:read",
+            allowed_accounts=allowed_accounts,
+        )
+
+    def revoke_mcp_service_token(self, token_id: str) -> None:
+        with self._connect() as connection:
+            self._execute(
+                connection,
+                """
+                UPDATE mcp_service_tokens
+                SET status = 'revoked', revoked_at = ?
+                WHERE id = ? AND status = 'active' AND revoked_at IS NULL
+                """,
+                (_now(), token_id),
+            )
+
     def register_mcp_oauth_client(self, payload: dict[str, Any]) -> dict[str, Any]:
         redirect_uris = payload.get("redirect_uris")
         if not isinstance(redirect_uris, list) or not redirect_uris:
@@ -1321,6 +1450,21 @@ _SCHEMA = [
       token_hash TEXT NOT NULL UNIQUE,
       token_prefix TEXT NOT NULL,
       name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL,
+      last_used_at TEXT,
+      revoked_at TEXT
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS mcp_service_tokens (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      token_prefix TEXT NOT NULL,
+      name TEXT NOT NULL,
+      scope TEXT NOT NULL,
+      allowed_accounts_json TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL,
       last_used_at TEXT,

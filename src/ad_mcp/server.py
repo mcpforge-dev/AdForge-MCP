@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import inspect
+from functools import wraps
 from typing import Any
 from urllib.parse import urlparse
 
@@ -18,6 +20,7 @@ from ad_mcp.providers.meta_ads.client import MetaAdsProvider
 from ad_mcp.providers.tiktok_ads.client import TikTokAdsProvider
 from ad_mcp.providers.yandex_direct.client import YandexDirectProvider
 from ad_mcp.mcp_auth import build_mcp_auth
+from ad_mcp.runtime_context import ensure_current_mcp_tool_access
 from ad_mcp.settings import Settings
 from ad_mcp.tools.account_read import build_account_read_tools
 from ad_mcp.tools.ad_detailed_reports import build_ad_detailed_report_tools
@@ -90,6 +93,22 @@ def _mcp_transport_security(settings: Settings) -> TransportSecuritySettings | N
     )
 
 
+def _guard_mcp_tool(func, *, service_read_allowed: bool):
+    @wraps(func)
+    def guarded(*args, **kwargs):
+        bound = inspect.signature(func).bind_partial(*args, **kwargs)
+        provider = bound.arguments.get("provider") or bound.arguments.get("platform")
+        account_id = bound.arguments.get("account_id")
+        ensure_current_mcp_tool_access(
+            provider=str(provider) if provider is not None else None,
+            account_id=str(account_id) if account_id is not None else None,
+            write=not service_read_allowed,
+        )
+        return func(*args, **kwargs)
+
+    return guarded
+
+
 def create_server(settings: Settings | None = None, *, hosted_http: bool = False) -> FastMCP:
     settings = settings or Settings()
     settings.audit_log_file.parent.mkdir(parents=True, exist_ok=True)
@@ -136,7 +155,8 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
         token_verifier=token_verifier,
         transport_security=_mcp_transport_security(settings) if hosted_http else None,
     )
-    toolsets = [
+    meta_specialist_tools = build_meta_specialist_tools(registry, preview_manager, policy_manager)
+    read_toolsets = [
         build_discovery_tools(registry),
         build_beta_read_tools(registry, policy_manager, settings),
         build_billing_tools(registry, policy_manager),
@@ -145,24 +165,29 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
         build_analytics_read_tools(registry, policy_manager),
         build_reporting_tools(registry, policy_manager),
         build_object_tools(registry, policy_manager),
-        build_write_preview_tools(registry, preview_manager, audit_logger, policy_manager),
-        build_dangerous_preview_tools(registry, preview_manager, audit_logger, policy_manager, settings),
-        build_write_commit_tools(registry, preview_manager, audit_logger, policy_manager),
-        build_intent_tools(registry, preview_manager, policy_manager),
-        build_meta_specialist_tools(registry, preview_manager, policy_manager),
         build_mcp_skill_preset_tools(registry, policy_manager),
         build_site_analysis_tools(),
         build_diagnostics_tools(settings),
     ]
+    write_toolsets = [
+        build_write_preview_tools(registry, preview_manager, audit_logger, policy_manager),
+        build_dangerous_preview_tools(registry, preview_manager, audit_logger, policy_manager, settings),
+        build_write_commit_tools(registry, preview_manager, audit_logger, policy_manager),
+        build_intent_tools(registry, preview_manager, policy_manager),
+    ]
+    service_read_tool_names = {name for toolset in read_toolsets for name in toolset}
+    service_read_tool_names.update(name for name in meta_specialist_tools if not name.endswith("_preview"))
+    toolsets = [*read_toolsets, *write_toolsets, meta_specialist_tools]
     for toolset in toolsets:
         for name, func in toolset.items():
-            mcp.tool(name=name)(func)
+            mcp.tool(name=name)(_guard_mcp_tool(func, service_read_allowed=name in service_read_tool_names))
 
-    @mcp.tool(name="describe_auth_strategy")
     def describe_auth_strategy(provider: str) -> dict:
         return auth_manager.describe_auth_strategy(provider)
+    mcp.tool(name="describe_auth_strategy")(
+        _guard_mcp_tool(describe_auth_strategy, service_read_allowed=True)
+    )
 
-    @mcp.tool(name="get_beta_diagnostics")
     def get_beta_diagnostics() -> dict:
         refresh_runtime_provider_configs()
         return {
@@ -200,6 +225,9 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
                 "live_writes_enabled": not policy_manager.preview_only_enabled,
             },
         }
+    mcp.tool(name="get_beta_diagnostics")(
+        _guard_mcp_tool(get_beta_diagnostics, service_read_allowed=True)
+    )
 
     return mcp
 
