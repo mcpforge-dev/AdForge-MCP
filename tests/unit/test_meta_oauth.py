@@ -42,12 +42,41 @@ class _FakeMetaHTTP:
                             "account_status": 1,
                             "currency": "USD",
                             "timezone_name": "UTC",
+                            "business": {"id": "biz_1", "name": "Business One"},
                         },
                         {
                             "id": "act_222",
                             "account_id": "222",
                             "name": "Client Meta 2",
                         },
+                    ]
+                }
+            )
+        if url.endswith("/me/permissions"):
+            assert headers == {"Authorization": "Bearer long-token"}
+            return _FakeResponse(
+                {
+                    "data": [
+                        {"permission": "ads_read", "status": "granted"},
+                        {"permission": "business_management", "status": "granted"},
+                        {"permission": "pages_read_engagement", "status": "granted"},
+                    ]
+                }
+            )
+        if url.endswith("/me/businesses"):
+            assert headers == {"Authorization": "Bearer long-token"}
+            return _FakeResponse({"data": [{"id": "biz_1", "name": "Business One"}]})
+        if url.endswith("/me/accounts"):
+            assert headers == {"Authorization": "Bearer long-token"}
+            return _FakeResponse(
+                {
+                    "data": [
+                        {
+                            "id": "page_1",
+                            "name": "Page One",
+                            "access_token": "page-token",
+                            "instagram_business_account": {"id": "ig_1", "username": "brand"},
+                        }
                     ]
                 }
             )
@@ -74,7 +103,10 @@ def test_meta_oauth_authorization_url_contains_signed_state(tmp_path) -> None:
     assert url.startswith("https://www.facebook.com/v20.0/dialog/oauth?")
     assert query["client_id"] == ["meta-app-id"]
     assert query["redirect_uri"] == ["https://mcp.adforge.dev/oauth/meta/callback"]
-    assert query["scope"] == ["ads_read,business_management"]
+    assert query["scope"] == [
+        ("ads_read,ads_management,business_management,pages_show_list,"
+         "pages_read_engagement,read_insights,instagram_basic")
+    ]
     assert query["state"][0].count(".") == 1
 
 
@@ -85,26 +117,30 @@ def test_meta_oauth_callback_discovers_accounts_and_select_saves_credentials(tmp
 
     pending = service.handle_callback({"code": "callback-code", "state": state})
     selected = service.select_accounts(pending["pending_id"], ["act_111"])
-    stored_config = service._store.provider_config("meta_ads")  # noqa: SLF001
+    stored_config = service._store.provider_config("meta_ads")
 
     assert pending["status"] == "pending_account_selection"
     assert pending["account_count"] == 2
     assert pending["accounts"][0]["account_id"] == "act_111"
     assert "long-token" not in str(pending)
     assert selected["status"] == "connected"
-    assert selected["accounts"] == [
-        {
-            "name": "Client Meta 1",
-            "account_id": "act_111",
-            "app_id": "meta-app-id",
-            "currency": "USD",
-            "timezone_name": "UTC",
-            "status": "connected",
-            "credentials_present": True,
-        }
-    ]
+    assert len(selected["accounts"]) == 1
+    assert selected["accounts"][0] | {
+        "name": "Client Meta 1",
+        "account_id": "act_111",
+        "app_id": "meta-app-id",
+        "currency": "USD",
+        "timezone_name": "UTC",
+        "status": "connected",
+        "credentials_present": True,
+    } == selected["accounts"][0]
     assert stored_config["accounts"][0]["access_token"] == "long-token"
     assert stored_config["accounts"][0]["app_secret"] == "meta-app-secret"
+    assert stored_config["accounts"][0]["business_id"] == "biz_1"
+    assert stored_config["accounts"][0]["page_id"] == "page_1"
+    assert stored_config["accounts"][0]["instagram_account_id"] == "ig_1"
+    assert stored_config["accounts"][0]["page_access_tokens"] == {"page_1": "page-token"}
+    assert "page-token" not in str(selected)
 
 
 def test_meta_oauth_rejects_tampered_state(tmp_path) -> None:
@@ -126,7 +162,7 @@ def test_meta_oauth_state_is_single_use(tmp_path) -> None:
 
 
 def test_meta_oauth_rejects_expired_state(tmp_path, monkeypatch) -> None:
-    import ad_mcp.web.meta_oauth as meta_oauth
+    from ad_mcp.web import meta_oauth
 
     settings = _settings(tmp_path)
     service = MetaOAuthService(settings, _FakeMetaHTTP())

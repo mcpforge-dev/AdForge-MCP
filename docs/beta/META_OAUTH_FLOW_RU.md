@@ -10,7 +10,7 @@ AD_MCP_META_OAUTH_REDIRECT_PATH=/oauth/meta/callback
 AD_MCP_META_OAUTH_APP_ID=your-meta-oauth-app-id
 AD_MCP_META_OAUTH_APP_SECRET=your-meta-oauth-app-secret
 AD_MCP_META_OAUTH_API_VERSION=v20.0
-AD_MCP_META_OAUTH_SCOPES=ads_read,business_management
+AD_MCP_META_OAUTH_SCOPES=ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,read_insights,instagram_basic
 AD_MCP_META_OAUTH_STATE_TTL_SECONDS=900
 ```
 

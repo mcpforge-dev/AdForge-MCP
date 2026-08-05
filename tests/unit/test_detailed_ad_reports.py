@@ -53,11 +53,15 @@ def test_meta_connected_assets_returns_partial_data_and_redacts_secrets(monkeypa
 
     def fake_fetch(_credentials, object_type, limit):
         assert limit == 20
-        if object_type == "instagram_account":
-            raise RuntimeError("unsupported access-token very-secret")
         return {"rows": [{"id": object_type}], "row_count": 1}
 
     monkeypatch.setattr(analysis, "fetch_meta_objects", fake_fetch)
+    monkeypatch.setattr(analysis, "list_meta_pages", lambda *_args, **_kwargs: {"pages": [{"id": "page"}]})
+
+    def fake_instagram(*_args, **_kwargs):
+        raise RuntimeError("unsupported access-token very-secret")
+
+    monkeypatch.setattr(analysis, "get_page_instagram_account", fake_instagram)
 
     payload = analysis.fetch_meta_connected_assets(credentials)
 

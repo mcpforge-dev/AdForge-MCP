@@ -23,6 +23,7 @@ SECRET_KEYS = {
     "client_secret",
     "developer_token",
     "oauth_client_secret",
+    "page_access_tokens",
     "refresh_token",
     "secret",
 }
@@ -43,6 +44,12 @@ SAFE_ACCOUNT_KEYS = (
     "app_name",
     "app_id",
     "verification_status",
+    "business_id",
+    "business_name",
+    "page_id",
+    "page_name",
+    "instagram_account_id",
+    "instagram_username",
     "api_access_status",
     "api_points",
     "scope",
@@ -57,7 +64,7 @@ SAFE_ACCOUNT_KEYS = (
     "property_type",
 )
 
-SAFE_ACCOUNT_LIST_KEYS = ("requested_permissions",)
+SAFE_ACCOUNT_LIST_KEYS = ("requested_permissions", "granted_permissions", "declined_permissions")
 
 
 def safe_account_summary(account: dict[str, Any]) -> dict[str, Any]:

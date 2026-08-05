@@ -17,7 +17,6 @@ from ad_mcp.core.errors import OAuthError
 from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings
 
-
 META_PROVIDER = "meta_ads"
 
 
@@ -96,6 +95,50 @@ class MetaOAuthService:
         accounts = self._fetch_ad_accounts(token)
         if not accounts:
             raise MetaOAuthError("Meta OAuth succeeded, but no ad accounts were returned.")
+        permissions = self._fetch_permissions(token)
+        businesses, business_warning = self._discover_optional(self._fetch_businesses, token)
+        pages, pages_warning = self._discover_optional(self._fetch_pages, token)
+        requested_permissions = [item.strip() for item in self._settings.meta_oauth_scopes.split(",") if item.strip()]
+        granted_permissions = sorted(
+            str(item.get("permission"))
+            for item in permissions
+            if item.get("status") == "granted" and item.get("permission")
+        )
+        declined_permissions = sorted(
+            str(item.get("permission"))
+            for item in permissions
+            if item.get("status") != "granted" and item.get("permission")
+        )
+        safe_pages: list[dict[str, Any]] = []
+        page_access_tokens: dict[str, str] = {}
+        for page in pages:
+            page_id = str(page.get("id") or "").strip()
+            page_token = str(page.get("access_token") or "").strip()
+            safe_page = {key: value for key, value in page.items() if key != "access_token"}
+            safe_pages.append(safe_page)
+            if page_id and page_token:
+                page_access_tokens[page_id] = page_token
+        for account in accounts:
+            account["requested_permissions"] = requested_permissions
+            account["granted_permissions"] = granted_permissions
+            account["declined_permissions"] = declined_permissions
+            account["businesses"] = businesses
+            account["pages"] = safe_pages
+            business = account.get("business") if isinstance(account.get("business"), dict) else {}
+            if business.get("id"):
+                account["business_id"] = str(business["id"])
+                account["business_name"] = business.get("name")
+            elif len(businesses) == 1:
+                account["business_id"] = str(businesses[0].get("id") or "")
+                account["business_name"] = businesses[0].get("name")
+            if len(safe_pages) == 1:
+                account["page_id"] = str(safe_pages[0].get("id") or "")
+                account["page_name"] = safe_pages[0].get("name")
+                instagram = safe_pages[0].get("instagram_business_account")
+                if isinstance(instagram, dict):
+                    account["instagram_account_id"] = str(instagram.get("id") or "")
+                    account["instagram_username"] = instagram.get("username")
+        discovery_warnings = [warning for warning in (business_warning, pages_warning) if warning]
         pending = self._store.save_oauth_pending(
             META_PROVIDER,
             accounts,
@@ -104,11 +147,18 @@ class MetaOAuthService:
                 "app_secret": self._settings.meta_oauth_app_secret.strip(),
                 "access_token": token,
                 "api_version": self._api_version(),
+                "page_access_tokens": page_access_tokens,
             },
             ttl_seconds=self._settings.meta_oauth_state_ttl_seconds,
             source="meta_oauth",
             workspace_id=str(state_payload.get("workspace_id") or "") or None,
             user_id=str(state_payload.get("user_id") or "") or None,
+            metadata={
+                "requested_permissions": requested_permissions,
+                "granted_permissions": granted_permissions,
+                "declined_permissions": declined_permissions,
+                "discovery_warnings": discovery_warnings,
+            },
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
 
@@ -213,7 +263,7 @@ class MetaOAuthService:
         accounts: list[dict[str, Any]] = []
         path_or_url = "/me/adaccounts"
         params: dict[str, Any] | None = {
-            "fields": "id,account_id,name,account_status,currency,timezone_name",
+            "fields": "id,account_id,name,account_status,currency,timezone_name,business{id,name}",
             "limit": 500,
         }
         for _ in range(10):
@@ -232,6 +282,7 @@ class MetaOAuthService:
                         "meta_account_status": item.get("account_status"),
                         "currency": item.get("currency"),
                         "timezone_name": item.get("timezone_name"),
+                        "business": item.get("business"),
                     }
                 )
             next_url = ((payload.get("paging") or {}).get("next") if isinstance(payload.get("paging"), dict) else None)
@@ -240,6 +291,52 @@ class MetaOAuthService:
             path_or_url = str(next_url)
             params = None
         return accounts
+
+    def _fetch_permissions(self, access_token: str) -> list[dict[str, Any]]:
+        payload = self._graph_get(
+            "/me/permissions",
+            {"fields": "permission,status", "limit": 200},
+            access_token=access_token,
+        )
+        return [item for item in payload.get("data", []) if isinstance(item, dict)]
+
+    def _fetch_businesses(self, access_token: str) -> list[dict[str, Any]]:
+        return self._fetch_paged(
+            "/me/businesses",
+            {"fields": "id,name,verification_status", "limit": 100},
+            access_token,
+        )
+
+    def _fetch_pages(self, access_token: str) -> list[dict[str, Any]]:
+        return self._fetch_paged(
+            "/me/accounts",
+            {
+                "fields": "id,name,category,tasks,access_token,instagram_business_account{id,username,name}",
+                "limit": 100,
+            },
+            access_token,
+        )
+
+    def _fetch_paged(self, path: str, params: dict[str, Any], access_token: str) -> list[dict[str, Any]]:
+        rows: list[dict[str, Any]] = []
+        path_or_url = path
+        request_params: dict[str, Any] | None = params
+        for _ in range(10):
+            payload = self._graph_get(path_or_url, request_params, access_token=access_token)
+            rows.extend(item for item in payload.get("data", []) if isinstance(item, dict))
+            paging = payload.get("paging") if isinstance(payload.get("paging"), dict) else {}
+            next_url = paging.get("next")
+            if not next_url:
+                break
+            path_or_url = str(next_url)
+            request_params = None
+        return rows
+
+    def _discover_optional(self, fetcher, access_token: str) -> tuple[list[dict[str, Any]], str | None]:
+        try:
+            return fetcher(access_token), None
+        except MetaOAuthError as exc:
+            return [], _redact_oauth_error(str(exc))[:500]
 
     def _graph_get(self, path_or_url: str, params: dict[str, Any] | None, access_token: str | None = None) -> dict[str, Any]:
         url = path_or_url if path_or_url.startswith("https://") else f"https://graph.facebook.com/{self._api_version()}{path_or_url}"

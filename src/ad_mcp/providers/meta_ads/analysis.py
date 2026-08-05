@@ -4,16 +4,24 @@ from collections import defaultdict
 from datetime import date, timedelta
 from typing import Any
 
-from ad_mcp.providers.meta_ads.account_read import fetch_meta_flexible_insights, fetch_meta_objects
+from ad_mcp.providers.meta_ads.account_read import (
+    fetch_meta_flexible_insights,
+    fetch_meta_objects,
+)
 from ad_mcp.providers.meta_ads.auth import MetaAccountCredentials
 from ad_mcp.providers.meta_ads.billing import fetch_meta_billing_summary
+from ad_mcp.providers.meta_ads.graph_read import (
+    get_page_instagram_account,
+    list_meta_pages,
+)
+from ad_mcp.providers.meta_ads.provenance import live_meta_payload
 
 try:
-    from facebook_business.exceptions import FacebookRequestError
     from facebook_business.adobjects.adaccount import AdAccount
     from facebook_business.adobjects.adcreative import AdCreative
     from facebook_business.adobjects.page import Page
     from facebook_business.api import FacebookAdsApi
+    from facebook_business.exceptions import FacebookRequestError
 except ImportError:  # pragma: no cover
     FacebookRequestError = None
     AdAccount = None
@@ -252,14 +260,36 @@ def estimate_meta_budget_days_remaining(credentials: MetaAccountCredentials, end
 
 
 def fetch_meta_connected_assets(credentials: MetaAccountCredentials) -> dict[str, Any]:
-    assets: dict[str, list[dict[str, Any]]] = {}
+    assets: dict[str, list[dict[str, Any]]] = {
+        "pages": [],
+        "instagram_accounts": [],
+        "pixels": [],
+        "custom_conversions": [],
+    }
     warnings: list[dict[str, str]] = []
-    for result_key, object_type in (
-        ("pages", "page"),
-        ("instagram_accounts", "instagram_account"),
-        ("pixels", "pixel"),
-        ("custom_conversions", "custom_conversion"),
-    ):
+    try:
+        assets["pages"] = list_meta_pages(credentials, limit=20)["pages"]
+        for page in assets["pages"]:
+            page_id = str(page.get("id") or "")
+            if not page_id:
+                continue
+            linked = get_page_instagram_account(credentials, page_id)
+            instagram = linked.get("instagram_account")
+            if isinstance(instagram, dict):
+                assets["instagram_accounts"].append({**instagram, "facebook_page_id": page_id})
+    except Exception as exc:  # noqa: BLE001
+        message = str(exc)
+        for secret in (credentials.access_token, credentials.app_secret):
+            if secret:
+                message = message.replace(secret, "[redacted]")
+        warnings.append(
+            {
+                "asset_type": "pages_and_instagram",
+                "status": "permission_or_api_unavailable",
+                "message": message[:500],
+            }
+        )
+    for result_key, object_type in (("pixels", "pixel"), ("custom_conversions", "custom_conversion")):
         try:
             assets[result_key] = fetch_meta_objects(credentials, object_type, limit=20)["rows"]
         except Exception as exc:  # noqa: BLE001
@@ -275,16 +305,14 @@ def fetch_meta_connected_assets(credentials: MetaAccountCredentials) -> dict[str
                     "message": message[:500],
                 }
             )
-    return {
+    return live_meta_payload({
         "provider": "meta_ads",
         "account_id": f"act_{credentials.account_id}",
         "assets": assets,
         "summary": {key: len(rows) for key, rows in assets.items()},
         "warnings": warnings,
         "partial": bool(warnings),
-        "source_api": "meta_marketing_api",
-        "preview": False,
-    }
+    }, source_api="meta_graph_api+meta_marketing_api")
 
 
 def fetch_meta_delivery_issues(credentials: MetaAccountCredentials, limit: int = 100) -> dict[str, Any]:
@@ -402,8 +430,7 @@ def compare_meta_periods(
 
 
 def detect_meta_anomalies(credentials: MetaAccountCredentials, entity_level: str, end_date: str, lookback_days: int = 7) -> dict[str, Any]:
-    if lookback_days < 6:
-        lookback_days = 6
+    lookback_days = max(lookback_days, 6)
     end = date.fromisoformat(end_date)
     recent_start = (end - timedelta(days=2)).isoformat()
     previous_start = (end - timedelta(days=5)).isoformat()

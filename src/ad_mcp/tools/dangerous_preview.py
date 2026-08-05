@@ -12,7 +12,6 @@ from ad_mcp.core.preview_manager import PreviewManager
 from ad_mcp.settings import Settings
 from ad_mcp.tools._shared import validate_provider_account
 
-
 PREVIEW_ONLY_REASON = "Beta MVP работает в preview-only mode. Реальные изменения отключены."
 PREVIEW_ONLY_NOTE = "Реальное изменение не выполнено."
 
@@ -189,6 +188,9 @@ def build_dangerous_preview_tools(
             object_type=object_type,
             payload=mutation_payload,
         )
+        preview.operation = action
+        preview.object_id = object_id
+        preview.current_snapshot = dict(current)
         preview_manager.create(preview)
         mutation_response = ObjectMutationResponse(
             status="preview",
@@ -201,6 +203,22 @@ def build_dangerous_preview_tools(
             risk_flags=preview.risk_flags,
             provider_payload=preview.provider_payload,
         ).model_dump()
+        allowed_objects = {
+            item.strip() for item in settings.meta_app_review_allowed_object_ids.split(",") if item.strip()
+        }
+        allowed_actions = {
+            item.strip() for item in settings.meta_app_review_allowed_actions.split(",") if item.strip()
+        }
+        review_commit_available = (
+            settings.env.strip().lower() == "staging"
+            and settings.preview_only
+            and settings.meta_app_review_commit_enabled
+            and platform == "meta_ads"
+            and account_id == settings.meta_app_review_allowed_account_id.strip()
+            and object_id in allowed_objects
+            and action in allowed_actions
+            and object_type == "campaign"
+        )
         response = {
             "status": "preview",
             "mode": "preview_only",
@@ -221,6 +239,8 @@ def build_dangerous_preview_tools(
             "provider_payload": mutation_response["provider_payload"],
             "diff": mutation_response["diff"],
             "risk_flags": sorted(set(mutation_response["risk_flags"] + ([risk_level] if risk_level == "high" else []))),
+            "app_review_commit_available": review_commit_available,
+            "explicit_confirmation": f"CONFIRM {preview.token}" if review_commit_available else None,
         }
         audit_logger.log(f"preview_only_{action}", response)
         return response
@@ -257,8 +277,8 @@ def build_dangerous_preview_tools(
         object_type: str,
         object_id: str,
         action: str,
-        daily_budget: float | int | None = None,
-        lifetime_budget: float | int | None = None,
+        daily_budget: float | None = None,
+        lifetime_budget: float | None = None,
     ) -> dict:
         requested_budget = daily_budget if daily_budget is not None else lifetime_budget
         budget_field = "daily_budget" if daily_budget is not None else "lifetime_budget"
@@ -310,8 +330,8 @@ def build_dangerous_preview_tools(
         platform: str,
         account_id: str,
         campaign_id: str,
-        daily_budget: float | int | None = None,
-        lifetime_budget: float | int | None = None,
+        daily_budget: float | None = None,
+        lifetime_budget: float | None = None,
     ) -> dict:
         return _budget_preview(platform, account_id, "campaign", campaign_id, "change_budget", daily_budget, lifetime_budget)
 
@@ -351,8 +371,8 @@ def build_dangerous_preview_tools(
         platform: str,
         account_id: str,
         adset_or_group_id: str,
-        daily_budget: float | int | None = None,
-        lifetime_budget: float | int | None = None,
+        daily_budget: float | None = None,
+        lifetime_budget: float | None = None,
     ) -> dict:
         object_type = _ad_group_object_type(platform)
         return _budget_preview(platform, account_id, object_type, adset_or_group_id, "change_adset_or_group_budget", daily_budget, lifetime_budget)

@@ -32,6 +32,7 @@ from ad_mcp.tools.diagnostics import build_diagnostics_tools
 from ad_mcp.tools.discovery import build_discovery_tools
 from ad_mcp.tools.intents import build_intent_tools
 from ad_mcp.tools.meta_specialist import build_meta_specialist_tools
+from ad_mcp.tools.meta_graph_read import build_meta_graph_read_tools
 from ad_mcp.tools.mcp_skill_presets import build_mcp_skill_preset_tools
 from ad_mcp.tools.objects import build_object_tools
 from ad_mcp.tools.reporting import build_reporting_tools
@@ -165,6 +166,7 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
         build_analytics_read_tools(registry, policy_manager),
         build_reporting_tools(registry, policy_manager),
         build_object_tools(registry, policy_manager),
+        build_meta_graph_read_tools(registry, policy_manager),
         build_mcp_skill_preset_tools(registry, policy_manager),
         build_site_analysis_tools(),
         build_diagnostics_tools(settings),
@@ -172,7 +174,7 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
     write_toolsets = [
         build_write_preview_tools(registry, preview_manager, audit_logger, policy_manager),
         build_dangerous_preview_tools(registry, preview_manager, audit_logger, policy_manager, settings),
-        build_write_commit_tools(registry, preview_manager, audit_logger, policy_manager),
+        build_write_commit_tools(registry, preview_manager, audit_logger, policy_manager, settings),
         build_intent_tools(registry, preview_manager, policy_manager),
     ]
     service_read_tool_names = {name for toolset in read_toolsets for name in toolset}

@@ -78,6 +78,9 @@ class PreviewRecord(BaseModel):
     provider_payload: dict[str, Any] = Field(default_factory=dict)
     diff: dict[str, Any] = Field(default_factory=dict)
     risk_flags: list[str] = Field(default_factory=list)
+    operation: str | None = None
+    object_id: str | None = None
+    current_snapshot: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     expires_in_seconds: int = 900
 

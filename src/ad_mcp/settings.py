@@ -68,8 +68,15 @@ class Settings(BaseSettings):
     meta_oauth_app_id: str = ""
     meta_oauth_app_secret: str = ""
     meta_oauth_api_version: str = "v20.0"
-    meta_oauth_scopes: str = "ads_read,business_management"
+    meta_oauth_scopes: str = (
+        "ads_read,ads_management,business_management,pages_show_list,"
+        "pages_read_engagement,read_insights,instagram_basic"
+    )
     meta_oauth_state_ttl_seconds: int = 900
+    meta_app_review_commit_enabled: bool = False
+    meta_app_review_allowed_account_id: str = ""
+    meta_app_review_allowed_object_ids: str = ""
+    meta_app_review_allowed_actions: str = "change_name"
     google_oauth_client_id: str = ""
     google_oauth_client_secret: str = ""
     google_ads_developer_token: str = ""

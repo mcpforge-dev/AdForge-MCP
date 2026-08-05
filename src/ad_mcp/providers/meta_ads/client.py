@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-from ad_mcp.core.models import ReportRequest, ReportResponse
-from ad_mcp.core.models import CapabilityMap
+from ad_mcp.core.models import CapabilityMap, ReportRequest, ReportResponse
 from ad_mcp.providers.base.client import BaseAdsProvider
 from ad_mcp.providers.meta_ads.account_read import (
     fetch_meta_account_summary,
+    fetch_meta_flexible_insights,
     fetch_meta_object,
     fetch_meta_objects,
-    fetch_meta_flexible_insights,
     search_meta_targeting,
 )
 from ad_mcp.providers.meta_ads.analysis import (
@@ -30,9 +29,45 @@ from ad_mcp.providers.meta_ads.analysis import (
     list_meta_lead_forms,
     rank_meta_entities,
 )
-from ad_mcp.providers.meta_ads.auth import credentials_from_config
-from ad_mcp.providers.meta_ads.auth import normalize_meta_account_id
+from ad_mcp.providers.meta_ads.auth import (
+    credentials_from_config,
+    normalize_meta_account_id,
+)
 from ad_mcp.providers.meta_ads.billing import fetch_meta_billing_summary
+from ad_mcp.providers.meta_ads.graph_read import (
+    get_meta_business as graph_get_meta_business,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    get_meta_page as graph_get_meta_page,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    get_page_instagram_account as graph_get_page_instagram_account,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    get_page_post as graph_get_page_post,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    get_page_post_engagement as graph_get_page_post_engagement,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    list_business_ad_accounts as graph_list_business_ad_accounts,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    list_business_pages as graph_list_business_pages,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    list_meta_businesses as graph_list_meta_businesses,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    list_meta_pages as graph_list_meta_pages,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    list_meta_permissions as graph_list_meta_permissions,
+)
+from ad_mcp.providers.meta_ads.graph_read import (
+    list_page_posts as graph_list_page_posts,
+)
+from ad_mcp.providers.meta_ads.mutations import commit_meta_app_review_preview
 from ad_mcp.providers.meta_ads.payloads import build_meta_ads_payload
 from ad_mcp.providers.meta_ads.reporting import fetch_meta_report
 
@@ -92,6 +127,48 @@ class MetaAdsProvider(BaseAdsProvider):
             if normalize_meta_account_id(configured_id) == normalized_requested_id:
                 return item
         return {}
+
+    def _credentials(self, account_id: str):
+        account_config = self.get_account_config(account_id)
+        if not account_config:
+            raise ValueError("Meta account is not configured in the current workspace.")
+        return credentials_from_config(account_config)
+
+    def list_meta_permissions(self, account_id: str) -> dict:
+        return graph_list_meta_permissions(self._credentials(account_id))
+
+    def list_meta_businesses(self, account_id: str, limit: int = 100) -> dict:
+        return graph_list_meta_businesses(self._credentials(account_id), limit)
+
+    def get_meta_business(self, account_id: str, business_id: str) -> dict:
+        return graph_get_meta_business(self._credentials(account_id), business_id)
+
+    def list_business_ad_accounts(self, account_id: str, business_id: str, limit: int = 100) -> dict:
+        return graph_list_business_ad_accounts(self._credentials(account_id), business_id, limit)
+
+    def list_business_pages(self, account_id: str, business_id: str, limit: int = 100) -> dict:
+        return graph_list_business_pages(self._credentials(account_id), business_id, limit)
+
+    def list_meta_pages(self, account_id: str, limit: int = 100) -> dict:
+        return graph_list_meta_pages(self._credentials(account_id), limit)
+
+    def get_meta_page(self, account_id: str, page_id: str) -> dict:
+        return graph_get_meta_page(self._credentials(account_id), page_id)
+
+    def list_page_posts(self, account_id: str, page_id: str, limit: int = 25) -> dict:
+        return graph_list_page_posts(self._credentials(account_id), page_id, limit)
+
+    def get_page_post(self, account_id: str, page_id: str, post_id: str) -> dict:
+        return graph_get_page_post(self._credentials(account_id), page_id, post_id)
+
+    def get_page_post_engagement(self, account_id: str, page_id: str, post_id: str) -> dict:
+        return graph_get_page_post_engagement(self._credentials(account_id), page_id, post_id)
+
+    def get_page_instagram_account(self, account_id: str, page_id: str) -> dict:
+        return graph_get_page_instagram_account(self._credentials(account_id), page_id)
+
+    def commit_app_review_preview(self, preview):
+        return commit_meta_app_review_preview(self._credentials(preview.account_id), preview)
 
     def get_report(self, request: ReportRequest) -> ReportResponse:
         account_config = self.get_account_config(request.account_id)

@@ -25,7 +25,7 @@ Env:
 AD_MCP_META_OAUTH_APP_ID=
 AD_MCP_META_OAUTH_APP_SECRET=
 AD_MCP_META_OAUTH_API_VERSION=v20.0
-AD_MCP_META_OAUTH_SCOPES=ads_read,business_management
+AD_MCP_META_OAUTH_SCOPES=ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,read_insights,instagram_basic
 ```
 
 Redirect URL в Meta app:

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from ad_mcp.providers.meta_ads.auth import MetaAccountCredentials
+from ad_mcp.providers.meta_ads.provenance import live_meta_payload
 
 try:
     from facebook_business.adobjects.ad import Ad
@@ -236,15 +238,13 @@ def _node_class(config: dict[str, Any]) -> Callable | None:
 def fetch_meta_account_summary(credentials: MetaAccountCredentials, fields: list[str] | None = None) -> dict[str, Any]:
     requested_fields = fields or ACCOUNT_SUMMARY_FIELDS
     account = _account(credentials).api_get(fields=requested_fields)
-    return {
+    return live_meta_payload({
         "provider": "meta_ads",
         "account_id": f"act_{credentials.account_id}",
         "object_type": "account",
         "fields": requested_fields,
         "data": _export_value(dict(account)),
-        "source_api": "meta_marketing_api",
-        "preview": False,
-    }
+    }, source_api="meta_marketing_api")
 
 
 def fetch_meta_objects(
@@ -263,7 +263,7 @@ def fetch_meta_objects(
     request_params = dict(params or {})
     cursor = method(fields=requested_fields, params=request_params)
     rows = _rows(cursor, limit)
-    return {
+    return live_meta_payload({
         "provider": "meta_ads",
         "account_id": f"act_{credentials.account_id}",
         "object_type": canonical_type,
@@ -272,9 +272,7 @@ def fetch_meta_objects(
         "limit": max(1, min(int(limit or 100), 1000)),
         "rows": rows,
         "row_count": len(rows),
-        "source_api": "meta_marketing_api",
-        "preview": False,
-    }
+    }, source_api="meta_marketing_api")
 
 
 def fetch_meta_object(
@@ -291,16 +289,14 @@ def fetch_meta_object(
     requested_fields = fields or config["fields"]
     _init(credentials)
     node = node_class(object_id).api_get(fields=requested_fields)
-    return {
+    return live_meta_payload({
         "provider": "meta_ads",
         "account_id": f"act_{credentials.account_id}",
         "object_type": canonical_type,
         "object_id": object_id,
         "fields": requested_fields,
         "data": _export_value(dict(node)),
-        "source_api": "meta_marketing_api",
-        "preview": False,
-    }
+    }, source_api="meta_marketing_api")
 
 
 def fetch_meta_flexible_insights(
@@ -327,7 +323,7 @@ def fetch_meta_flexible_insights(
         request_params["time_increment"] = 1
     cursor = _account(credentials).get_insights(fields=requested_fields, params=request_params)
     rows = _rows(cursor, limit)
-    return {
+    return live_meta_payload({
         "provider": "meta_ads",
         "account_id": f"act_{credentials.account_id}",
         "level": level,
@@ -338,9 +334,7 @@ def fetch_meta_flexible_insights(
         "limit": max(1, min(int(limit or 500), 1000)),
         "rows": rows,
         "row_count": len(rows),
-        "source_api": "meta_marketing_api",
-        "preview": False,
-    }
+    }, source_api="meta_marketing_api")
 
 
 def search_meta_targeting(
@@ -359,13 +353,11 @@ def search_meta_targeting(
     }
     cursor = _account(credentials).get_targeting_search(params=params)
     rows = _rows(cursor, params["limit"])
-    return {
+    return live_meta_payload({
         "provider": "meta_ads",
         "account_id": f"act_{credentials.account_id}",
         "query": query,
         "targeting_type": targeting_type,
         "rows": rows,
         "row_count": len(rows),
-        "source_api": "meta_marketing_api",
-        "preview": False,
-    }
+    }, source_api="meta_marketing_api")
