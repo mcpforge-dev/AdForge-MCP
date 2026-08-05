@@ -311,7 +311,7 @@ class MetaOAuthService:
         return self._fetch_paged(
             "/me/accounts",
             {
-                "fields": "id,name,category,tasks,access_token,instagram_business_account{id,username,name}",
+                "fields": "id,name,category,tasks,access_token",
                 "limit": 100,
             },
             access_token,

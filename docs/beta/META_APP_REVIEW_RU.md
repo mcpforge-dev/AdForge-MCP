@@ -4,19 +4,16 @@
 
 ## OAuth permissions
 
-Для staging OAuth после выкладки нужно переподключить Meta:
+Для первой очереди App Review live и staging OAuth запрашивают только четыре read-only permission:
 
 ```text
 ads_read
-ads_management
 business_management
 pages_show_list
 pages_read_engagement
-read_insights
-instagram_basic
 ```
 
-`pages_show_list` используется для `/me/accounts`, `pages_read_engagement` для Page и публикаций, `read_insights` для доступных engagement insights, `business_management` для `/me/businesses` и Business asset edges. `ads_management` нужен только для отдельного подтверждённого App Review test commit. `instagram_basic` нужен для чтения связанного Instagram Professional Account через Page.
+`public_profile` является базовым permission Meta Login и добавляется Meta автоматически. `pages_show_list` используется для `/me/accounts`, `pages_read_engagement` для Page, публикаций и доступных базовых engagement-полей, `business_management` для `/me/businesses` и Business asset edges. `read_insights`, `instagram_basic` и `ads_management` не входят в эту подачу и не добавляются в OAuth URL.
 
 После OAuth выберите нужный рекламный кабинет. Сервис сохраняет связь workspace → Meta account, а также безопасные идентификаторы найденных Business/Page/Instagram. Page Access Token сохраняется только в закрытом server-side storage и никогда не возвращается MCP-клиенту.
 
@@ -24,7 +21,7 @@ instagram_basic
 
 1. Откройте staging dashboard: `https://staging-mcp.holymedia.kz`.
 2. В рабочем пространстве откройте «Подключения» → Meta Ads → «Переподключить».
-3. В окне Meta подтвердите все семь permissions из списка выше.
+3. В окне Meta подтвердите четыре permissions из списка выше; сообщения `Invalid Scopes` быть не должно.
 4. Выберите Business Portfolio и подтвердите доступ к Page «Личное страхование», если Meta показывает выбор объектов.
 5. Выберите рекламный аккаунт Saqta Market и завершите OAuth.
 6. Обновите страницу подключений. В безопасной сводке должны быть только account name/id, permissions и `credentials_present`; токены в UI не показываются.
@@ -50,11 +47,11 @@ get_page_post_engagement
 get_page_instagram_account
 ```
 
-Каждый затронутый ответ содержит `source_api`, `real_data`, `data_status`, `fetched_at`. Page и Instagram больше не читаются через `/act_{account_id}/instagram_accounts`: сначала `/me/accounts`, затем Page Access Token и `/{page_id}?fields=instagram_business_account{...}`.
+Каждый затронутый ответ содержит `source_api`, `real_data`, `data_status`, `fetched_at`. Page больше не зависит от Instagram-полей: сначала выполняется `/me/accounts`, затем используются разрешённые Page read-запросы с Page Access Token. Связанный Instagram запрашивается отдельно только в объёме ID; если Meta требует `instagram_basic`, возвращается `additional_permission_required` без падения Page-сценария. Page Insights не запрашиваются автоматически и аналогично помечаются как требующие `read_insights`.
 
-## Safe ads_management workflow
+## Отложенный ads_management workflow
 
-Глобальный preview-only не отключается. Staging может включить отдельный флаг только после создания приостановленной тестовой кампании:
+`ads_management` не входит в первую очередь App Review. Глобальный preview-only не отключается, production-флаг commit остаётся `false`. Механизм можно проверять отдельным этапом только после добавления permission в Meta App Dashboard и создания приостановленной тестовой кампании:
 
 ```text
 AD_MCP_META_APP_REVIEW_COMMIT_ENABLED=true
@@ -75,7 +72,8 @@ AD_MCP_META_APP_REVIEW_ALLOWED_ACTIONS=change_name
 2. `business_management`: `list_meta_businesses` → `get_meta_business` → Business name и Business ID.
 3. Business assets: `list_business_ad_accounts` и `list_business_pages` → реальные связанные объекты.
 4. `pages_read_engagement`: `list_meta_pages` → `get_meta_page` → `list_page_posts` → `get_page_post_engagement`.
-5. Instagram linkage: `get_page_instagram_account` → связанный Instagram ID и username.
-6. `ads_management`: только paused test campaign → preview diff → попытка commit без confirmation (blocked) → новый preview → exact confirmation → commit → reread с фактическим новым названием.
+5. Допустимая Instagram linkage: `get_page_instagram_account` → связанный Instagram ID либо честный `additional_permission_required`; username и профиль в текущем ролике не показывать.
+
+Ролик `ads_management` пока не записывать: permission не входит в текущую подачу.
 
 В каждом ролике оставьте видимыми название инструмента, объект, безопасный ID, ответ Meta и поля `source_api`, `real_data`, `data_status`, `fetched_at`. Не показывайте tokens, app secret, env, cookies или полные server logs.

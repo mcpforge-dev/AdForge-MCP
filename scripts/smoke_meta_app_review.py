@@ -42,7 +42,18 @@ def payload(result: Any) -> Any:
 def summary(data: dict[str, Any]) -> dict[str, Any]:
     allowed = {
         key: data[key]
-        for key in ("source_api", "real_data", "data_status", "fetched_at", "row_count", "linked", "partial")
+        for key in (
+            "source_api",
+            "real_data",
+            "data_status",
+            "fetched_at",
+            "row_count",
+            "linked",
+            "partial",
+            "status",
+            "insights_status",
+            "additional_permission_required",
+        )
         if key in data
     }
     for key in ("businesses", "ad_accounts", "pages", "posts", "permissions", "instagram_account"):

@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-
 ROOT_DIR = Path(__file__).resolve().parents[2]
 load_dotenv(ROOT_DIR / ".env")
 
@@ -68,10 +67,7 @@ class Settings(BaseSettings):
     meta_oauth_app_id: str = ""
     meta_oauth_app_secret: str = ""
     meta_oauth_api_version: str = "v20.0"
-    meta_oauth_scopes: str = (
-        "ads_read,ads_management,business_management,pages_show_list,"
-        "pages_read_engagement,read_insights,instagram_basic"
-    )
+    meta_oauth_scopes: str = "ads_read,business_management,pages_show_list,pages_read_engagement"
     meta_oauth_state_ttl_seconds: int = 900
     meta_app_review_commit_enabled: bool = False
     meta_app_review_allowed_account_id: str = ""

@@ -42,7 +42,6 @@ class MetaGraphClient:
         try:
             response = client.get(url, params=params, headers={"Authorization": f"Bearer {token}"})
             payload = response.json()
-            response.raise_for_status()
         except (httpx.HTTPError, ValueError) as exc:
             raise MetaGraphAPIError(redact_secret_text(f"Meta Graph request failed: {exc}")) from exc
         finally:
@@ -58,6 +57,10 @@ class MetaGraphClient:
             suffix = f" code={code}" if code is not None else ""
             suffix += f" subcode={subcode}" if subcode is not None else ""
             raise MetaGraphAPIError(f"Meta Graph error:{suffix} {message}")
+        try:
+            response.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise MetaGraphAPIError(redact_secret_text(f"Meta Graph request failed: {exc}")) from exc
         return payload
 
     def post(
@@ -206,7 +209,7 @@ def list_business_pages(
         credentials,
         business_id,
         ("owned_pages", "client_pages"),
-        "id,name,category,link,instagram_business_account{id,username,name}",
+        "id,name,category,link",
         limit,
         http_client,
     )
@@ -216,7 +219,7 @@ def list_business_pages(
 def list_meta_pages(credentials: MetaAccountCredentials, limit: int = 100, http_client: httpx.Client | None = None) -> dict[str, Any]:
     rows = _client(credentials, http_client).list_edge(
         "/me/accounts",
-        {"fields": "id,name,category,link,tasks,instagram_business_account{id,username,name,profile_picture_url}"},
+        {"fields": "id,name,category,link,tasks"},
         limit=limit,
     )
     return live_meta_payload({"pages": rows, "row_count": len(rows)})
@@ -227,7 +230,7 @@ def get_meta_page(credentials: MetaAccountCredentials, page_id: str, http_client
     token = graph.page_access_token(page_id)
     data = graph.get(
         f"/{page_id}",
-        {"fields": "id,name,category,link,about,fan_count,followers_count,instagram_business_account{id,username,name,profile_picture_url}"},
+        {"fields": "id,name,category,link,about,fan_count,followers_count"},
         access_token=token,
     )
     return live_meta_payload({"page": data})
@@ -279,17 +282,6 @@ def get_page_post_engagement(
         {"fields": "id,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true)"},
         access_token=token,
     )
-    warnings: list[dict[str, str]] = []
-    insights: list[dict[str, Any]] = []
-    try:
-        insights = graph.list_edge(
-            f"/{post_id}/insights",
-            {"metric": "post_engaged_users,post_clicks"},
-            access_token=token,
-            limit=50,
-        )
-    except MetaGraphAPIError as exc:
-        warnings.append({"status": "insights_unavailable", "message": str(exc)[:500]})
     comments = ((post.get("comments") or {}).get("summary") or {}).get("total_count", 0)
     reactions = ((post.get("reactions") or {}).get("summary") or {}).get("total_count", 0)
     shares = (post.get("shares") or {}).get("count", 0)
@@ -298,9 +290,17 @@ def get_page_post_engagement(
             "page_id": page_id,
             "post_id": post_id,
             "engagement": {"comments": comments, "reactions": reactions, "shares": shares},
-            "insights": insights,
-            "partial": bool(warnings),
-            "warnings": warnings,
+            "insights": [],
+            "insights_status": "additional_permission_required",
+            "additional_permission_required": ["read_insights"],
+            "partial": True,
+            "warnings": [
+                {
+                    "status": "additional_permission_required",
+                    "permission": "read_insights",
+                    "message": "Page Insights are outside the current App Review permission set.",
+                }
+            ],
         }
     )
 
@@ -312,11 +312,27 @@ def get_page_instagram_account(
 ) -> dict[str, Any]:
     graph = _client(credentials, http_client)
     token = graph.page_access_token(page_id)
-    page = graph.get(
-        f"/{page_id}",
-        {"fields": "id,name,instagram_business_account{id,username,name,profile_picture_url,followers_count,media_count}"},
-        access_token=token,
-    )
+    try:
+        page = graph.get(
+            f"/{page_id}",
+            {"fields": "id,name,instagram_business_account{id}"},
+            access_token=token,
+        )
+    except MetaGraphAPIError as exc:
+        if not str(exc).startswith("Meta Graph error:"):
+            raise
+        return live_meta_payload(
+            {
+                "page": {"id": page_id, "name": None},
+                "instagram_account": None,
+                "linked": None,
+                "status": "additional_permission_required",
+                "additional_permission_required": ["instagram_basic"],
+                "message": "Meta did not expose the linked Instagram account with the current Page permissions.",
+            },
+            real_data=False,
+            data_status="additional_permission_required",
+        )
     instagram = page.get("instagram_business_account")
     return live_meta_payload(
         {

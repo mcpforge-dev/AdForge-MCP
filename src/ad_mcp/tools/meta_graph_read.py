@@ -50,11 +50,11 @@ def build_meta_graph_read_tools(
         return _provider(account_id).get_page_post(account_id, page_id, post_id)
 
     def get_page_post_engagement(account_id: str, page_id: str, post_id: str) -> dict:
-        """Read engagement summaries and available insights for a Page post."""
+        """Read Page post engagement; report separately when Page Insights need another permission."""
         return _provider(account_id).get_page_post_engagement(account_id, page_id, post_id)
 
     def get_page_instagram_account(account_id: str, page_id: str) -> dict:
-        """Resolve the Instagram professional account linked to a Facebook Page."""
+        """Resolve a linked Instagram ID when current Page permissions expose it."""
         return _provider(account_id).get_page_instagram_account(account_id, page_id)
 
     return {

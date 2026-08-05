@@ -277,6 +277,14 @@ def fetch_meta_connected_assets(credentials: MetaAccountCredentials) -> dict[str
             instagram = linked.get("instagram_account")
             if isinstance(instagram, dict):
                 assets["instagram_accounts"].append({**instagram, "facebook_page_id": page_id})
+            elif linked.get("data_status") == "additional_permission_required":
+                warnings.append(
+                    {
+                        "asset_type": "instagram_accounts",
+                        "status": "additional_permission_required",
+                        "message": "instagram_basic is required for Instagram profile data.",
+                    }
+                )
     except Exception as exc:  # noqa: BLE001
         message = str(exc)
         for secret in (credentials.access_token, credentials.app_secret):

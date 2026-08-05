@@ -59,6 +59,7 @@ class _FakeMetaHTTP:
                     "data": [
                         {"permission": "ads_read", "status": "granted"},
                         {"permission": "business_management", "status": "granted"},
+                        {"permission": "pages_show_list", "status": "granted"},
                         {"permission": "pages_read_engagement", "status": "granted"},
                     ]
                 }
@@ -75,7 +76,6 @@ class _FakeMetaHTTP:
                             "id": "page_1",
                             "name": "Page One",
                             "access_token": "page-token",
-                            "instagram_business_account": {"id": "ig_1", "username": "brand"},
                         }
                     ]
                 }
@@ -103,10 +103,10 @@ def test_meta_oauth_authorization_url_contains_signed_state(tmp_path) -> None:
     assert url.startswith("https://www.facebook.com/v20.0/dialog/oauth?")
     assert query["client_id"] == ["meta-app-id"]
     assert query["redirect_uri"] == ["https://mcp.adforge.dev/oauth/meta/callback"]
-    assert query["scope"] == [
-        ("ads_read,ads_management,business_management,pages_show_list,"
-         "pages_read_engagement,read_insights,instagram_basic")
-    ]
+    assert query["scope"] == ["ads_read,business_management,pages_show_list,pages_read_engagement"]
+    assert "read_insights" not in query["scope"][0]
+    assert "instagram_basic" not in query["scope"][0]
+    assert "ads_management" not in query["scope"][0]
     assert query["state"][0].count(".") == 1
 
 
@@ -138,7 +138,6 @@ def test_meta_oauth_callback_discovers_accounts_and_select_saves_credentials(tmp
     assert stored_config["accounts"][0]["app_secret"] == "meta-app-secret"
     assert stored_config["accounts"][0]["business_id"] == "biz_1"
     assert stored_config["accounts"][0]["page_id"] == "page_1"
-    assert stored_config["accounts"][0]["instagram_account_id"] == "ig_1"
     assert stored_config["accounts"][0]["page_access_tokens"] == {"page_1": "page-token"}
     assert "page-token" not in str(selected)
 

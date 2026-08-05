@@ -59,7 +59,7 @@ sudo chmod 750 /var/lib/adforge-mcp/uploads
 | `AD_MCP_META_OAUTH_APP_ID` | Да для Meta | Meta app id. |
 | `AD_MCP_META_OAUTH_APP_SECRET` | Да для Meta | Meta app secret. |
 | `AD_MCP_META_OAUTH_API_VERSION` | Нет | Например `v20.0`. |
-| `AD_MCP_META_OAUTH_SCOPES` | Да для Meta | `ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,read_insights,instagram_basic`. |
+| `AD_MCP_META_OAUTH_SCOPES` | Да для Meta | Первая очередь App Review: `ads_read,business_management,pages_show_list,pages_read_engagement`. Базовый `public_profile` Meta добавляет к входу автоматически. |
 | `AD_MCP_META_OAUTH_REDIRECT_PATH` | Да для Meta | Обычно `/oauth/meta/callback`. |
 | `AD_MCP_META_OAUTH_STATE_TTL_SECONDS` | Нет | OAuth state TTL. |
 

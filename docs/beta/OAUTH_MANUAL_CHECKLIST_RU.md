@@ -25,8 +25,10 @@ Env:
 AD_MCP_META_OAUTH_APP_ID=
 AD_MCP_META_OAUTH_APP_SECRET=
 AD_MCP_META_OAUTH_API_VERSION=v20.0
-AD_MCP_META_OAUTH_SCOPES=ads_read,ads_management,business_management,pages_show_list,pages_read_engagement,read_insights,instagram_basic
+AD_MCP_META_OAUTH_SCOPES=ads_read,business_management,pages_show_list,pages_read_engagement
 ```
+
+Meta автоматически включает базовый `public_profile`. Для первой подачи не добавляйте `read_insights`, `instagram_basic` или `ads_management`.
 
 Redirect URL в Meta app:
 

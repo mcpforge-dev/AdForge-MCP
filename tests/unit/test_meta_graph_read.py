@@ -3,6 +3,7 @@ from __future__ import annotations
 from ad_mcp.providers.meta_ads.auth import MetaAccountCredentials
 from ad_mcp.providers.meta_ads.graph_read import (
     get_page_instagram_account,
+    get_page_post_engagement,
     list_business_ad_accounts,
     list_meta_businesses,
     list_page_posts,
@@ -43,10 +44,34 @@ class _HTTP:
                 {
                     "id": "page_1",
                     "name": "Page",
-                    "instagram_business_account": {"id": "ig_1", "username": "brand"},
+                    "instagram_business_account": {"id": "ig_1"},
+                }
+            )
+        if url.endswith("/page_1_post_1"):
+            assert headers == {"Authorization": "Bearer page-token"}
+            return _Response(
+                {
+                    "id": "page_1_post_1",
+                    "shares": {"count": 2},
+                    "comments": {"summary": {"total_count": 3}},
+                    "reactions": {"summary": {"total_count": 4}},
                 }
             )
         raise AssertionError(f"Unexpected Meta Graph call: {url}")
+
+
+class _PermissionHTTP(_HTTP):
+    def get(self, url: str, params: dict | None = None, headers: dict | None = None) -> _Response:
+        if url.endswith("/page_1"):
+            return _Response(
+                {
+                    "error": {
+                        "code": 10,
+                        "message": "Application does not have permission for this action.",
+                    }
+                }
+            )
+        return super().get(url, params, headers)
 
 
 def _credentials() -> MetaAccountCredentials:
@@ -86,5 +111,30 @@ def test_instagram_is_resolved_through_connected_facebook_page() -> None:
     payload = get_page_instagram_account(_credentials(), "page_1", http_client=_HTTP())
 
     assert payload["linked"] is True
-    assert payload["instagram_account"] == {"id": "ig_1", "username": "brand"}
+    assert payload["instagram_account"] == {"id": "ig_1"}
     assert payload["page"] == {"id": "page_1", "name": "Page"}
+
+
+def test_instagram_permission_error_is_reported_without_failing_page_oauth() -> None:
+    payload = get_page_instagram_account(_credentials(), "page_1", http_client=_PermissionHTTP())
+
+    assert payload["status"] == "additional_permission_required"
+    assert payload["additional_permission_required"] == ["instagram_basic"]
+    assert payload["data_status"] == "additional_permission_required"
+    assert payload["real_data"] is False
+
+
+def test_page_engagement_does_not_request_unreviewed_insights_scope() -> None:
+    http = _HTTP()
+    payload = get_page_post_engagement(
+        _credentials(),
+        "page_1",
+        "page_1_post_1",
+        http_client=http,
+    )
+
+    assert payload["engagement"] == {"comments": 3, "reactions": 4, "shares": 2}
+    assert payload["insights"] == []
+    assert payload["insights_status"] == "additional_permission_required"
+    assert payload["additional_permission_required"] == ["read_insights"]
+    assert not any("/insights" in url for url, _params, _headers in http.calls)
