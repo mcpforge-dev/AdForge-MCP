@@ -184,6 +184,11 @@ async def test_service_token_filters_accounts_and_blocks_other_providers_and_wri
                 "preview_pause_campaign",
                 {"platform": "google_ads", "account_id": "1111111111", "campaign_id": "campaign-1"},
             )
+        with pytest.raises(ToolError, match="restricted to read-only"):
+            await mcp.call_tool(
+                "commit_meta_confirmed_write",
+                {"preview_token": "not-a-real-preview", "confirmation": "CONFIRM META WRITE not-a-real-preview"},
+            )
 
     assert accounts["account_count"] == 1
     assert accounts["accounts"][0]["account_id"] == "1111111111"

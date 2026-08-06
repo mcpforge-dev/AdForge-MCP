@@ -42,7 +42,7 @@ def build_meta_graph_read_tools(
         return _provider(account_id).get_meta_page(account_id, page_id)
 
     def list_page_posts(account_id: str, page_id: str, limit: int = 25) -> dict:
-        """List real published posts for a connected Facebook Page."""
+        """List posts created by a connected Facebook Page without reading user comments."""
         return _provider(account_id).list_page_posts(account_id, page_id, limit)
 
     def get_page_post(account_id: str, page_id: str, post_id: str) -> dict:
@@ -50,7 +50,7 @@ def build_meta_graph_read_tools(
         return _provider(account_id).get_page_post(account_id, page_id, post_id)
 
     def get_page_post_engagement(account_id: str, page_id: str, post_id: str) -> dict:
-        """Read Page post engagement; report separately when Page Insights need another permission."""
+        """Read allowed Page engagement and report fields that require additional permissions."""
         return _provider(account_id).get_page_post_engagement(account_id, page_id, post_id)
 
     def get_page_instagram_account(account_id: str, page_id: str) -> dict:

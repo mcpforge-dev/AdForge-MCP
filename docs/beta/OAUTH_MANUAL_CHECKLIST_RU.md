@@ -30,6 +30,8 @@ AD_MCP_META_OAUTH_SCOPES=ads_read,business_management,pages_show_list,pages_read
 
 Meta автоматически включает базовый `public_profile`. Для первой подачи не добавляйте `read_insights`, `instagram_basic` или `ads_management`.
 
+Для отдельной подачи `ads_management` сначала добавьте permission в Meta App Dashboard, затем включите `AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED=true` и переподключите Meta. Сам OAuth-флаг не разрешает commit: write feature flag и account allowlist настраиваются отдельно по `META_ADS_MANAGEMENT_RU.md`.
+
 Redirect URL в Meta app:
 
 ```text

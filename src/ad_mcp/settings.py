@@ -68,11 +68,19 @@ class Settings(BaseSettings):
     meta_oauth_app_secret: str = ""
     meta_oauth_api_version: str = "v20.0"
     meta_oauth_scopes: str = "ads_read,business_management,pages_show_list,pages_read_engagement"
+    meta_ads_management_oauth_enabled: bool = False
     meta_oauth_state_ttl_seconds: int = 900
     meta_app_review_commit_enabled: bool = False
     meta_app_review_allowed_account_id: str = ""
     meta_app_review_allowed_object_ids: str = ""
     meta_app_review_allowed_actions: str = "change_name"
+    meta_confirmed_write_enabled: bool = False
+    meta_confirmed_write_allowed_account_ids: str = ""
+    meta_confirmed_write_allowed_actions: str = (
+        "create_campaign,create_adset,create_creative,create_ad,"
+        "update_campaign,update_adset,update_ad"
+    )
+    meta_confirmed_write_require_paused_objects: bool = True
     google_oauth_client_id: str = ""
     google_oauth_client_secret: str = ""
     google_ads_developer_token: str = ""

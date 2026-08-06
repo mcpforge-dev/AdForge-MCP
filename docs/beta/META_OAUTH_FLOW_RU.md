@@ -16,6 +16,14 @@ AD_MCP_META_OAUTH_STATE_TTL_SECONDS=900
 
 `public_profile` является базовым permission Meta Login и добавляется Meta автоматически. `read_insights`, `instagram_basic` и `ads_management` не входят в первую очередь App Review и не должны добавляться в OAuth URL до отдельной настройки и подачи.
 
+После добавления `ads_management` в Meta App Dashboard и подготовки отдельного App Review сценария включите только OAuth-запрос:
+
+```env
+AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED=true
+```
+
+Это ещё не включает реальные изменения. Для commit отдельно нужны `AD_MCP_META_CONFIRMED_WRITE_ENABLED=true`, allowlist кабинета и повторное OAuth-подключение, в котором `get_meta_oauth_permissions` подтверждает `ads_management=granted`.
+
 В Meta App нужно добавить Valid OAuth Redirect URI:
 
 ```text

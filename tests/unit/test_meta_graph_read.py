@@ -35,8 +35,9 @@ class _HTTP:
             return _Response({"data": [{"id": "act_2", "name": "Client"}]})
         if url.endswith("/me/accounts"):
             return _Response({"data": [{"id": "page_1", "name": "Page", "access_token": "page-token"}]})
-        if url.endswith("/page_1/published_posts"):
+        if url.endswith("/page_1/posts"):
             assert headers == {"Authorization": "Bearer page-token"}
+            assert "comments" not in (params or {}).get("fields", "")
             return _Response({"data": [{"id": "page_1_post_1", "message": "Hello"}]})
         if url.endswith("/page_1"):
             assert headers == {"Authorization": "Bearer page-token"}
@@ -53,7 +54,6 @@ class _HTTP:
                 {
                     "id": "page_1_post_1",
                     "shares": {"count": 2},
-                    "comments": {"summary": {"total_count": 3}},
                     "reactions": {"summary": {"total_count": 4}},
                 }
             )
@@ -68,6 +68,20 @@ class _PermissionHTTP(_HTTP):
                     "error": {
                         "code": 10,
                         "message": "Application does not have permission for this action.",
+                    }
+                }
+            )
+        return super().get(url, params, headers)
+
+
+class _PostsPermissionHTTP(_HTTP):
+    def get(self, url: str, params: dict | None = None, headers: dict | None = None) -> _Response:
+        if url.endswith("/page_1/posts"):
+            return _Response(
+                {
+                    "error": {
+                        "code": 10,
+                        "message": "This endpoint requires pages_read_user_content.",
                     }
                 }
             )
@@ -107,6 +121,16 @@ def test_page_posts_use_page_access_token_and_never_return_it() -> None:
     assert payload["real_data"] is True
 
 
+def test_page_posts_permission_error_is_structured_without_adding_scope() -> None:
+    payload = list_page_posts(_credentials(), "page_1", http_client=_PostsPermissionHTTP())
+
+    assert payload["status"] == "additional_permission_required"
+    assert payload["additional_permission_required"] == ["pages_read_user_content"]
+    assert payload["meta_error"] == {"code": 10, "subcode": None}
+    assert payload["posts"] == []
+    assert payload["real_data"] is False
+
+
 def test_instagram_is_resolved_through_connected_facebook_page() -> None:
     payload = get_page_instagram_account(_credentials(), "page_1", http_client=_HTTP())
 
@@ -133,8 +157,9 @@ def test_page_engagement_does_not_request_unreviewed_insights_scope() -> None:
         http_client=http,
     )
 
-    assert payload["engagement"] == {"comments": 3, "reactions": 4, "shares": 2}
+    assert payload["engagement"] == {"comments": None, "reactions": 4, "shares": 2}
     assert payload["insights"] == []
     assert payload["insights_status"] == "additional_permission_required"
-    assert payload["additional_permission_required"] == ["read_insights"]
+    assert payload["additional_permission_required"] == ["pages_read_user_content", "read_insights"]
     assert not any("/insights" in url for url, _params, _headers in http.calls)
+    assert not any("comments" in params.get("fields", "") for _url, params, _headers in http.calls)

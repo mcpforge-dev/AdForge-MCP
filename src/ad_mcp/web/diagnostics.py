@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 import re
-from datetime import date, datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from ad_mcp.core.capability_registry import CapabilityRegistry
@@ -20,14 +19,13 @@ from ad_mcp.providers.tiktok_ads.client import TikTokAdsProvider
 from ad_mcp.providers.yandex_direct.client import YandexDirectProvider
 from ad_mcp.settings import Settings, is_network_exposed_host, is_strict_auth_env
 from ad_mcp.web.hosted import (
+    ENV_TO_SETTING,
     OAUTH_OPTIONAL_ENV,
     OAUTH_PROVIDER_SLUGS,
     OAUTH_REQUIRED_ENV,
     PLATFORMS,
-    ENV_TO_SETTING,
     HostedConnectionService,
 )
-
 
 CORE_MCP_TOOLS = (
     "list_connected_platforms",
@@ -53,7 +51,7 @@ SECRET_PATTERN = re.compile(
 
 
 def _now_iso() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()
 
 
 def _redact(text: Any) -> str:
@@ -101,7 +99,7 @@ def _token_status(account: dict[str, Any]) -> dict[str, Any]:
     except ValueError:
         return {"status": "error", "expires_at": str(expires_at), "message": "Invalid expires_at format."}
     return {
-        "status": "expired" if datetime.now(timezone.utc) > expires else "active",
+        "status": "expired" if datetime.now(UTC) > expires else "active",
         "expires_at": expires.isoformat(),
     }
 
@@ -417,8 +415,18 @@ class DiagnosticsService:
             },
             "preview_only": {
                 "enabled": self.settings.preview_only,
-                "live_writes_enabled": False,
-                "write_actions": "preview_only",
+                "live_writes_enabled": (
+                    self.settings.meta_ads_management_oauth_enabled
+                    and self.settings.meta_confirmed_write_enabled
+                ),
+                "write_actions": (
+                    "meta_preview_confirm"
+                    if self.settings.meta_ads_management_oauth_enabled
+                    and self.settings.meta_confirmed_write_enabled
+                    else "preview_only"
+                ),
+                "meta_ads_management_oauth_enabled": self.settings.meta_ads_management_oauth_enabled,
+                "meta_confirmed_write_enabled": self.settings.meta_confirmed_write_enabled,
             },
             "security": {
                 "beta_token_required": security["api_auth_required"],
@@ -501,7 +509,7 @@ class DiagnosticsService:
         except Exception as exc:  # noqa: BLE001
             checks["campaigns"] = self._error_check(exc)
         try:
-            yesterday = date.today() - timedelta(days=1)
+            yesterday = datetime.now(UTC).date() - timedelta(days=1)
             response = provider_client.get_report(
                 ReportRequest(
                     provider=provider,  # type: ignore[arg-type]

@@ -10,7 +10,10 @@ from ad_mcp.providers.meta_ads.provenance import live_meta_payload
 
 
 class MetaGraphAPIError(RuntimeError):
-    pass
+    def __init__(self, message: str, *, code: int | None = None, subcode: int | None = None) -> None:
+        super().__init__(message)
+        self.code = code
+        self.subcode = subcode
 
 
 class MetaGraphClient:
@@ -56,7 +59,7 @@ class MetaGraphClient:
             message = redact_secret_text(str(error.get("message") or "Unknown Meta Graph error"))
             suffix = f" code={code}" if code is not None else ""
             suffix += f" subcode={subcode}" if subcode is not None else ""
-            raise MetaGraphAPIError(f"Meta Graph error:{suffix} {message}")
+            raise MetaGraphAPIError(f"Meta Graph error:{suffix} {message}", code=code, subcode=subcode)
         try:
             response.raise_for_status()
         except httpx.HTTPError as exc:
@@ -244,12 +247,34 @@ def list_page_posts(
 ) -> dict[str, Any]:
     graph = _client(credentials, http_client)
     token = graph.page_access_token(page_id)
-    rows = graph.list_edge(
-        f"/{page_id}/published_posts",
-        {"fields": "id,message,created_time,permalink_url,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true)"},
-        access_token=token,
-        limit=limit,
-    )
+    try:
+        rows = graph.list_edge(
+            f"/{page_id}/posts",
+            {
+                "fields": (
+                    "id,message,created_time,permalink_url,full_picture,attachments,"
+                    "shares,reactions.limit(0).summary(true)"
+                )
+            },
+            access_token=token,
+            limit=limit,
+        )
+    except MetaGraphAPIError as exc:
+        if exc.code not in {10, 200}:
+            raise
+        return live_meta_payload(
+            {
+                "page_id": page_id,
+                "posts": [],
+                "row_count": 0,
+                "status": "additional_permission_required",
+                "additional_permission_required": ["pages_read_user_content"],
+                "meta_error": {"code": exc.code, "subcode": exc.subcode},
+                "message": "Meta did not expose Page posts with the currently granted Page permissions.",
+            },
+            real_data=False,
+            data_status="additional_permission_required",
+        )
     return live_meta_payload({"page_id": page_id, "posts": rows, "row_count": len(rows)})
 
 
@@ -263,7 +288,12 @@ def get_page_post(
     token = graph.page_access_token(page_id)
     data = graph.get(
         f"/{post_id}",
-        {"fields": "id,message,created_time,updated_time,permalink_url,full_picture,attachments,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true)"},
+        {
+            "fields": (
+                "id,message,created_time,updated_time,permalink_url,full_picture,attachments,"
+                "shares,reactions.limit(0).summary(true)"
+            )
+        },
         access_token=token,
     )
     return live_meta_payload({"page_id": page_id, "post": data})
@@ -279,22 +309,26 @@ def get_page_post_engagement(
     token = graph.page_access_token(page_id)
     post = graph.get(
         f"/{post_id}",
-        {"fields": "id,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true)"},
+        {"fields": "id,shares,reactions.limit(0).summary(true)"},
         access_token=token,
     )
-    comments = ((post.get("comments") or {}).get("summary") or {}).get("total_count", 0)
     reactions = ((post.get("reactions") or {}).get("summary") or {}).get("total_count", 0)
     shares = (post.get("shares") or {}).get("count", 0)
     return live_meta_payload(
         {
             "page_id": page_id,
             "post_id": post_id,
-            "engagement": {"comments": comments, "reactions": reactions, "shares": shares},
+            "engagement": {"comments": None, "reactions": reactions, "shares": shares},
             "insights": [],
             "insights_status": "additional_permission_required",
-            "additional_permission_required": ["read_insights"],
+            "additional_permission_required": ["pages_read_user_content", "read_insights"],
             "partial": True,
             "warnings": [
+                {
+                    "status": "additional_permission_required",
+                    "permission": "pages_read_user_content",
+                    "message": "User comments are outside the current App Review permission set.",
+                },
                 {
                     "status": "additional_permission_required",
                     "permission": "read_insights",

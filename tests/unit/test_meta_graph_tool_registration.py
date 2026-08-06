@@ -28,4 +28,12 @@ async def test_meta_app_review_tools_are_registered_for_mcp_clients(tmp_path) ->
         "get_page_post_engagement",
         "get_page_instagram_account",
         "commit_meta_app_review_preview",
+        "preview_meta_create_campaign",
+        "preview_meta_create_adset",
+        "preview_meta_create_creative",
+        "preview_meta_create_ad",
+        "preview_meta_update_campaign",
+        "preview_meta_update_adset",
+        "preview_meta_update_ad",
+        "commit_meta_confirmed_write",
     } <= names

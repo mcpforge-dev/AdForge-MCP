@@ -83,15 +83,17 @@ class _FakeMetaHTTP:
         raise AssertionError(f"Unexpected Meta call: {url} {params}")
 
 
-def _settings(tmp_path):
-    return Settings(
-        project_root=tmp_path,
-        public_base_url="https://mcp.adforge.dev",
-        web_api_token="state-secret",
-        meta_oauth_app_id="meta-app-id",
-        meta_oauth_app_secret="meta-app-secret",
-        connection_store_path="tokens/connections.json",
-    )
+def _settings(tmp_path, **overrides):
+    values = {
+        "project_root": tmp_path,
+        "public_base_url": "https://mcp.adforge.dev",
+        "web_api_token": "state-secret",
+        "meta_oauth_app_id": "meta-app-id",
+        "meta_oauth_app_secret": "meta-app-secret",
+        "connection_store_path": "tokens/connections.json",
+    }
+    values.update(overrides)
+    return Settings(**values)
 
 
 def test_meta_oauth_authorization_url_contains_signed_state(tmp_path) -> None:
@@ -108,6 +110,19 @@ def test_meta_oauth_authorization_url_contains_signed_state(tmp_path) -> None:
     assert "instagram_basic" not in query["scope"][0]
     assert "ads_management" not in query["scope"][0]
     assert query["state"][0].count(".") == 1
+
+
+def test_meta_oauth_ads_management_is_added_only_by_explicit_feature_flag(tmp_path) -> None:
+    service = MetaOAuthService(
+        _settings(tmp_path, meta_ads_management_oauth_enabled=True),
+        _FakeMetaHTTP(),
+    )
+
+    query = parse_qs(urlparse(service.authorization_url()).query)
+
+    assert query["scope"] == [
+        "ads_read,business_management,pages_show_list,pages_read_engagement,ads_management"
+    ]
 
 
 def test_meta_oauth_callback_discovers_accounts_and_select_saves_credentials(tmp_path) -> None:

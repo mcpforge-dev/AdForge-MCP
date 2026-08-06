@@ -60,6 +60,11 @@ sudo chmod 750 /var/lib/adforge-mcp/uploads
 | `AD_MCP_META_OAUTH_APP_SECRET` | Да для Meta | Meta app secret. |
 | `AD_MCP_META_OAUTH_API_VERSION` | Нет | Например `v20.0`. |
 | `AD_MCP_META_OAUTH_SCOPES` | Да для Meta | Первая очередь App Review: `ads_read,business_management,pages_show_list,pages_read_engagement`. Базовый `public_profile` Meta добавляет к входу автоматически. |
+| `AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED` | Нет | Добавляет `ads_management` к OAuth только после настройки permission в Meta App Dashboard. По умолчанию `false`. |
+| `AD_MCP_META_CONFIRMED_WRITE_ENABLED` | Нет | Разрешает отдельный подтверждённый Meta write workflow. По умолчанию `false`; глобальный `preview_only` остаётся включённым. |
+| `AD_MCP_META_CONFIRMED_WRITE_ALLOWED_ACCOUNT_IDS` | Для Meta write | Явный allowlist рекламных кабинетов, которым разрешён commit. |
+| `AD_MCP_META_CONFIRMED_WRITE_ALLOWED_ACTIONS` | Нет | Allowlist операций `create_*`/`update_*`. |
+| `AD_MCP_META_CONFIRMED_WRITE_REQUIRE_PAUSED_OBJECTS` | Нет | Требует PAUSED для обновляемых объектов; по умолчанию `true`. |
 | `AD_MCP_META_OAUTH_REDIRECT_PATH` | Да для Meta | Обычно `/oauth/meta/callback`. |
 | `AD_MCP_META_OAUTH_STATE_TTL_SECONDS` | Нет | OAuth state TTL. |
 

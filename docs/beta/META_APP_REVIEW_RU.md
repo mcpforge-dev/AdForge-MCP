@@ -51,7 +51,9 @@ get_page_instagram_account
 
 ## Отложенный ads_management workflow
 
-`ads_management` не входит в первую очередь App Review. Глобальный preview-only не отключается, production-флаг commit остаётся `false`. Механизм можно проверять отдельным этапом только после добавления permission в Meta App Dashboard и создания приостановленной тестовой кампании:
+`ads_management` не входит в первую очередь App Review. Глобальный preview-only не отключается, production-флаг commit остаётся `false`. Полный безопасный workflow следующего этапа описан в `META_ADS_MANAGEMENT_RU.md`. Его можно проверять только после добавления permission в Meta App Dashboard и создания приостановленной тестовой кампании.
+
+Для текущей Page-проверки `list_page_posts` использует `/{page_id}/posts` и не запрашивает пользовательские комментарии. Если Meta всё равно отвечает permission error, инструмент возвращает `additional_permission_required` и оригинальный код Meta, не добавляя `pages_read_user_content` в OAuth автоматически.
 
 ```text
 AD_MCP_META_APP_REVIEW_COMMIT_ENABLED=true

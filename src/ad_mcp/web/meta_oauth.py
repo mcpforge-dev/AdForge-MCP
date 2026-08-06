@@ -46,6 +46,16 @@ class MetaOAuthService:
     def configured(self) -> bool:
         return bool(self._settings.meta_oauth_app_id.strip() and self._settings.meta_oauth_app_secret.strip())
 
+    def requested_permissions(self) -> list[str]:
+        permissions: list[str] = []
+        for item in self._settings.meta_oauth_scopes.split(","):
+            permission = item.strip()
+            if permission and permission not in permissions:
+                permissions.append(permission)
+        if self._settings.meta_ads_management_oauth_enabled and "ads_management" not in permissions:
+            permissions.append("ads_management")
+        return permissions
+
     def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
         self._ensure_configured()
         redirect_uri = self.redirect_uri()
@@ -72,7 +82,7 @@ class MetaOAuthService:
                 "client_id": self._settings.meta_oauth_app_id.strip(),
                 "redirect_uri": redirect_uri,
                 "state": state,
-                "scope": self._settings.meta_oauth_scopes,
+                "scope": ",".join(self.requested_permissions()),
                 "response_type": "code",
             }
         )
@@ -98,7 +108,7 @@ class MetaOAuthService:
         permissions = self._fetch_permissions(token)
         businesses, business_warning = self._discover_optional(self._fetch_businesses, token)
         pages, pages_warning = self._discover_optional(self._fetch_pages, token)
-        requested_permissions = [item.strip() for item in self._settings.meta_oauth_scopes.split(",") if item.strip()]
+        requested_permissions = self.requested_permissions()
         granted_permissions = sorted(
             str(item.get("permission"))
             for item in permissions

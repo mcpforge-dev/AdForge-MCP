@@ -67,7 +67,10 @@ from ad_mcp.providers.meta_ads.graph_read import (
 from ad_mcp.providers.meta_ads.graph_read import (
     list_page_posts as graph_list_page_posts,
 )
-from ad_mcp.providers.meta_ads.mutations import commit_meta_app_review_preview
+from ad_mcp.providers.meta_ads.mutations import (
+    commit_meta_app_review_preview,
+    commit_meta_confirmed_write,
+)
 from ad_mcp.providers.meta_ads.payloads import build_meta_ads_payload
 from ad_mcp.providers.meta_ads.reporting import fetch_meta_report
 
@@ -169,6 +172,13 @@ class MetaAdsProvider(BaseAdsProvider):
 
     def commit_app_review_preview(self, preview):
         return commit_meta_app_review_preview(self._credentials(preview.account_id), preview)
+
+    def commit_confirmed_write(self, preview, *, require_paused_objects: bool = True):
+        return commit_meta_confirmed_write(
+            self._credentials(preview.account_id),
+            preview,
+            require_paused_objects=require_paused_objects,
+        )
 
     def get_report(self, request: ReportRequest) -> ReportResponse:
         account_config = self.get_account_config(request.account_id)

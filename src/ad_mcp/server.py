@@ -8,18 +8,18 @@ from urllib.parse import urlparse
 from mcp.server.fastmcp import FastMCP
 from mcp.server.transport_security import TransportSecuritySettings
 
-from ad_mcp.core.auth_manager import AuthManager
 from ad_mcp.core.audit_logger import AuditLogger
+from ad_mcp.core.auth_manager import AuthManager
 from ad_mcp.core.capability_registry import CapabilityRegistry
 from ad_mcp.core.config_loader import load_safety_policy
 from ad_mcp.core.connection_store import load_runtime_provider_configs
 from ad_mcp.core.policy import PolicyManager
 from ad_mcp.core.preview_manager import PreviewManager
+from ad_mcp.mcp_auth import build_mcp_auth
 from ad_mcp.providers.google_ads.client import GoogleAdsProvider
 from ad_mcp.providers.meta_ads.client import MetaAdsProvider
 from ad_mcp.providers.tiktok_ads.client import TikTokAdsProvider
 from ad_mcp.providers.yandex_direct.client import YandexDirectProvider
-from ad_mcp.mcp_auth import build_mcp_auth
 from ad_mcp.runtime_context import ensure_current_mcp_tool_access
 from ad_mcp.settings import Settings
 from ad_mcp.tools.account_read import build_account_read_tools
@@ -31,9 +31,10 @@ from ad_mcp.tools.dangerous_preview import build_dangerous_preview_tools
 from ad_mcp.tools.diagnostics import build_diagnostics_tools
 from ad_mcp.tools.discovery import build_discovery_tools
 from ad_mcp.tools.intents import build_intent_tools
-from ad_mcp.tools.meta_specialist import build_meta_specialist_tools
-from ad_mcp.tools.meta_graph_read import build_meta_graph_read_tools
 from ad_mcp.tools.mcp_skill_presets import build_mcp_skill_preset_tools
+from ad_mcp.tools.meta_graph_read import build_meta_graph_read_tools
+from ad_mcp.tools.meta_specialist import build_meta_specialist_tools
+from ad_mcp.tools.meta_write import build_meta_write_tools
 from ad_mcp.tools.objects import build_object_tools
 from ad_mcp.tools.reporting import build_reporting_tools
 from ad_mcp.tools.site_analysis import build_site_analysis_tools
@@ -174,6 +175,7 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
     write_toolsets = [
         build_write_preview_tools(registry, preview_manager, audit_logger, policy_manager),
         build_dangerous_preview_tools(registry, preview_manager, audit_logger, policy_manager, settings),
+        build_meta_write_tools(registry, preview_manager, audit_logger, policy_manager, settings),
         build_write_commit_tools(registry, preview_manager, audit_logger, policy_manager, settings),
         build_intent_tools(registry, preview_manager, policy_manager),
     ]
@@ -216,6 +218,8 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
                 "write_mode": policy_manager.policy.write_mode,
                 "execution_mode": policy_manager.policy.execution_mode,
                 "preview_only": policy_manager.preview_only_enabled,
+                "meta_ads_management_oauth_enabled": settings.meta_ads_management_oauth_enabled,
+                "meta_confirmed_write_enabled": settings.meta_confirmed_write_enabled,
                 "allow_unknown_accounts": policy_manager.policy.allow_unknown_accounts,
                 "require_confirm_for": policy_manager.policy.require_confirm_for,
             },
@@ -224,7 +228,10 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
                 "server_imports": True,
                 "tools_register": True,
                 "diagnostics_available": True,
-                "live_writes_enabled": not policy_manager.preview_only_enabled,
+                "live_writes_enabled": (
+                    settings.meta_ads_management_oauth_enabled
+                    and settings.meta_confirmed_write_enabled
+                ),
             },
         }
     mcp.tool(name="get_beta_diagnostics")(
