@@ -63,6 +63,7 @@ sudo chmod 750 /var/lib/adforge-mcp/uploads
 | `AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED` | Нет | Добавляет `ads_management` к OAuth только после настройки permission в Meta App Dashboard. По умолчанию `false`. |
 | `AD_MCP_META_CONFIRMED_WRITE_ENABLED` | Нет | Разрешает отдельный подтверждённый Meta write workflow. По умолчанию `false`; глобальный `preview_only` остаётся включённым. |
 | `AD_MCP_META_CONFIRMED_WRITE_ALLOWED_ACCOUNT_IDS` | Для Meta write | Явный allowlist рекламных кабинетов, которым разрешён commit. |
+| `AD_MCP_META_CONFIRMED_WRITE_ALLOWED_OBJECT_IDS` | Для Meta update | Явный allowlist campaign/adset/ad ID. Update commit для других объектов блокируется. |
 | `AD_MCP_META_CONFIRMED_WRITE_ALLOWED_ACTIONS` | Нет | Allowlist операций `create_*`/`update_*`. |
 | `AD_MCP_META_CONFIRMED_WRITE_REQUIRE_PAUSED_OBJECTS` | Нет | Требует PAUSED для обновляемых объектов; по умолчанию `true`. |
 | `AD_MCP_META_OAUTH_REDIRECT_PATH` | Да для Meta | Обычно `/oauth/meta/callback`. |

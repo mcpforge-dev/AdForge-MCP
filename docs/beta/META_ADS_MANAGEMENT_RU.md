@@ -34,7 +34,8 @@ commit_meta_confirmed_write
 AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED=true
 AD_MCP_META_CONFIRMED_WRITE_ENABLED=true
 AD_MCP_META_CONFIRMED_WRITE_ALLOWED_ACCOUNT_IDS=act_<test_account_id>
-AD_MCP_META_CONFIRMED_WRITE_ALLOWED_ACTIONS=create_campaign,create_adset,create_creative,create_ad,update_campaign,update_adset,update_ad
+AD_MCP_META_CONFIRMED_WRITE_ALLOWED_OBJECT_IDS=<paused_test_campaign_id>
+AD_MCP_META_CONFIRMED_WRITE_ALLOWED_ACTIONS=change_name
 AD_MCP_META_CONFIRMED_WRITE_REQUIRE_PAUSED_OBJECTS=true
 AD_MCP_PREVIEW_ONLY=true
 ```
@@ -47,7 +48,7 @@ AD_MCP_PREVIEW_ONLY=true
 2. Проверить account ID, object type, endpoint, body, before/requested diff, статус и бюджет.
 3. Получить строку `CONFIRM META WRITE <preview_token>`.
 4. Передать её без изменений в `commit_meta_confirmed_write`.
-5. Сервер повторно проверяет env, allowlist, operation allowlist, account binding и `ads_management`.
+5. Сервер повторно проверяет env, account/object/operation allowlist, account binding и `ads_management`.
 6. Preview token потребляется один раз, выполняется один POST в Meta API.
 7. Созданный или изменённый объект перечитывается; ответ содержит `verified_by_reread`, `verified_fields` и `unverified_fields`.
 

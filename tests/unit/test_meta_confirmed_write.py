@@ -67,6 +67,11 @@ def _settings(tmp_path, **overrides) -> Settings:
         "meta_ads_management_oauth_enabled": True,
         "meta_confirmed_write_enabled": True,
         "meta_confirmed_write_allowed_account_ids": "act_1",
+        "meta_confirmed_write_allowed_object_ids": "campaign_1",
+        "meta_confirmed_write_allowed_actions": (
+            "create_campaign,create_adset,create_creative,create_ad,"
+            "change_name,pause_campaign,resume_campaign,update_campaign,update_adset,update_ad"
+        ),
     }
     values.update(overrides)
     return Settings(**values)
@@ -171,6 +176,37 @@ def test_meta_preview_does_not_offer_commit_when_write_feature_is_disabled(tmp_p
     assert result["status"] == "preview"
     assert result["confirmed_write_available"] is False
     assert result["explicit_confirmation"] is None
+
+
+def test_meta_update_requires_object_allowlist_and_narrow_operation(tmp_path) -> None:
+    settings = _settings(
+        tmp_path,
+        meta_confirmed_write_allowed_object_ids="campaign_other",
+        meta_confirmed_write_allowed_actions="change_name",
+    )
+    previews, commits, _manager = _tools(tmp_path, _MetaProvider(), settings)
+
+    preview = previews["preview_meta_update_campaign"]("act_1", "campaign_1", "After")
+    result = commits["commit_meta_confirmed_write"](
+        preview["preview_token"],
+        "CONFIRM META WRITE " + preview["preview_token"],
+    )
+
+    assert preview["operation"] == "change_name"
+    assert preview["confirmed_write_available"] is False
+    assert result["status"] == "blocked"
+
+
+@pytest.mark.parametrize(
+    ("status", "operation"),
+    [("PAUSED", "pause_campaign"), ("ACTIVE", "resume_campaign")],
+)
+def test_meta_campaign_status_preview_uses_narrow_operation(tmp_path, status, operation) -> None:
+    previews, _commits, _manager = _tools(tmp_path, _MetaProvider(), _settings(tmp_path))
+
+    preview = previews["preview_meta_update_campaign"]("act_1", "campaign_1", status=status)
+
+    assert preview["operation"] == operation
 
 
 def test_confirmed_write_requires_exact_confirmation_and_ads_management(tmp_path) -> None:

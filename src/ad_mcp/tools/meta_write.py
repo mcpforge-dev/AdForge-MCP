@@ -64,6 +64,15 @@ def _required(payload: dict[str, Any], fields: tuple[str, ...]) -> None:
         raise ValueError(f"Missing required Meta write fields: {', '.join(missing)}.")
 
 
+def _operation_name(action: str, object_type: str, body: dict[str, Any]) -> str:
+    if action == "update" and object_type == "campaign":
+        if set(body) == {"name"}:
+            return "change_name"
+        if set(body) == {"status"}:
+            return "pause_campaign" if str(body["status"]).upper() == "PAUSED" else "resume_campaign"
+    return f"{action}_{object_type}"
+
+
 def build_meta_write_tools(
     registry: CapabilityRegistry,
     preview_manager: PreviewManager,
@@ -86,6 +95,16 @@ def build_meta_write_tools(
             if item.strip()
         }
         return operation in allowed
+
+    def _object_allowed(action: str, object_id: str | None) -> bool:
+        if action == "create":
+            return True
+        allowed = {
+            item.strip()
+            for item in settings.meta_confirmed_write_allowed_object_ids.split(",")
+            if item.strip()
+        }
+        return bool(object_id and object_id in allowed)
 
     def _preview(
         action: str,
@@ -117,7 +136,7 @@ def build_meta_write_tools(
                 policy_manager.policy.max_budget_delta_percent,
             )
         request = build_meta_write_request(account_id, action, object_type, cleaned, object_id)
-        operation = f"{action}_{object_type}"
+        operation = _operation_name(action, object_type, request["body"])
         risk_flags: list[str] = []
         if action == "create":
             risk_flags.append("creates_paused_object")
@@ -145,6 +164,7 @@ def build_meta_write_tools(
             and settings.meta_ads_management_oauth_enabled
             and settings.meta_confirmed_write_enabled
             and _account_allowed(account_id)
+            and _object_allowed(action, object_id)
             and _operation_allowed(operation)
         )
         result = ObjectMutationResponse(

@@ -76,9 +76,10 @@ class Settings(BaseSettings):
     meta_app_review_allowed_actions: str = "change_name"
     meta_confirmed_write_enabled: bool = False
     meta_confirmed_write_allowed_account_ids: str = ""
+    meta_confirmed_write_allowed_object_ids: str = ""
     meta_confirmed_write_allowed_actions: str = (
         "create_campaign,create_adset,create_creative,create_ad,"
-        "update_campaign,update_adset,update_ad"
+        "change_name,pause_campaign,resume_campaign,update_campaign,update_adset,update_ad"
     )
     meta_confirmed_write_require_paused_objects: bool = True
     google_oauth_client_id: str = ""

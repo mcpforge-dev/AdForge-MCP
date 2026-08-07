@@ -108,6 +108,12 @@ def build_write_commit_tools(
             for item in settings.meta_confirmed_write_allowed_actions.split(",")
             if item.strip()
         }
+        allowed_objects = {
+            item.strip()
+            for item in settings.meta_confirmed_write_allowed_object_ids.split(",")
+            if item.strip()
+        }
+        object_allowed = preview.action == "create" or str(preview.object_id or "") in allowed_objects
         policy_allows = (
             settings.env.strip().lower() in {"staging", "beta", "production"}
             and settings.preview_only
@@ -115,6 +121,7 @@ def build_write_commit_tools(
             and settings.meta_confirmed_write_enabled
             and preview.provider == "meta_ads"
             and normalize_meta_account_id(preview.account_id) in allowed_accounts
+            and object_allowed
             and str(preview.operation or "") in allowed_actions
             and preview.action in {"create", "update"}
             and preview.object_type in {"campaign", "adset", "creative", "ad"}
