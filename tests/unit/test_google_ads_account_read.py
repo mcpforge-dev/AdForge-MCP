@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+from ad_mcp.core.models import ReportResponse
 from ad_mcp.providers.google_ads import account_read
 from ad_mcp.providers.google_ads.auth import GoogleAdsCredentials
 from ad_mcp.providers.google_ads.client import GoogleAdsProvider
@@ -48,6 +49,41 @@ def test_campaign_query_uses_v23_date_time_fields(monkeypatch) -> None:
     assert "campaign.start_date," not in queries[0]
     assert payload["rows"][0]["start_date"] == "2026-01-02"
     assert payload["rows"][0]["end_date"] == "2026-12-31"
+
+
+def test_google_spend_overview_reads_real_report_rows(monkeypatch) -> None:
+    provider = GoogleAdsProvider(
+        {
+            "accounts": [
+                {
+                    "account_id": "2497974272",
+                    "name": "Google account",
+                    "currency": "USD",
+                }
+            ]
+        }
+    )
+    calls = []
+
+    def fake_get_report(request):
+        calls.append(request)
+        return ReportResponse(
+            provider="google_ads",
+            entity_level="account",
+            date_range=request.date_range,
+            rows=[{"spend": 965.33, "impressions": 1000, "clicks": 20, "conversions": 2}],
+            normalized_metrics=["spend", "impressions", "clicks", "conversions", "ctr"],
+            source_api="google_ads_api",
+        )
+
+    monkeypatch.setattr(provider, "get_report", fake_get_report)
+
+    payload = provider.get_spend_overview("2497974272", "2026-07-01")
+
+    assert len(calls) == 3
+    assert payload["data_status"] == "live"
+    assert payload["currency"] == "USD"
+    assert payload["periods"][-1]["spend"] == 965.33
 
 
 def test_manager_account_requires_client_account() -> None:

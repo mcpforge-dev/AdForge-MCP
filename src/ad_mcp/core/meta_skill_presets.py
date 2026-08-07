@@ -141,7 +141,11 @@ def build_clickhouse_contract(settings: Settings | None = None) -> dict[str, Any
     }
 
 
-def build_skill_catalog(account_id: str, end_date: str | None = None) -> list[dict[str, Any]]:
+def build_skill_catalog(
+    account_id: str,
+    end_date: str | None = None,
+    provider: str = "meta_ads",
+) -> list[dict[str, Any]]:
     resolved_end_date = end_date or date.today().isoformat()
     return [
         {
@@ -151,7 +155,7 @@ def build_skill_catalog(account_id: str, end_date: str | None = None) -> list[di
             "mcp_tool": "collect_report_skill",
             "web_path": "/api/meta/skills/collect-report",
             "prompt": (
-                "Используй MCP server ads и вызови collect_report_skill для проверенного отчёта по provider meta_ads, "
+                f"Используй MCP server ads и вызови collect_report_skill для проверенного отчёта по provider {provider}, "
                 f"account_id {account_id}, end_date {resolved_end_date}."
             ),
         },
@@ -162,7 +166,7 @@ def build_skill_catalog(account_id: str, end_date: str | None = None) -> list[di
             "mcp_tool": "summarize_budget_skill",
             "web_path": "/api/meta/skills/budget-summary",
             "prompt": (
-                "Используй MCP server ads и вызови summarize_budget_skill для provider meta_ads, "
+                f"Используй MCP server ads и вызови summarize_budget_skill для provider {provider}, "
                 f"account_id {account_id}, end_date {resolved_end_date}."
             ),
         },
@@ -173,7 +177,7 @@ def build_skill_catalog(account_id: str, end_date: str | None = None) -> list[di
             "mcp_tool": "disable_candidates_skill",
             "web_path": "/api/meta/skills/disable-candidates",
             "prompt": (
-                "Используй MCP server ads и вызови disable_candidates_skill для provider meta_ads, "
+                f"Используй MCP server ads и вызови disable_candidates_skill для provider {provider}, "
                 f"account_id {account_id}, end_date {resolved_end_date}."
             ),
         },
@@ -184,7 +188,7 @@ def build_skill_catalog(account_id: str, end_date: str | None = None) -> list[di
             "mcp_tool": "scale_candidates_skill",
             "web_path": "/api/meta/skills/scale-candidates",
             "prompt": (
-                "Используй MCP server ads и вызови scale_candidates_skill для provider meta_ads, "
+                f"Используй MCP server ads и вызови scale_candidates_skill для provider {provider}, "
                 f"account_id {account_id}, end_date {resolved_end_date}."
             ),
         },
@@ -204,9 +208,17 @@ def build_budget_skill_summary(
     billing_payload = billing.get("billing", {})
     account_name = billing.get("account_name") or spend.get("account_name") or account_id
 
+    currency = str(billing_payload.get("currency") or spend.get("currency") or "USD")
+
+    def _spend_label(period: dict[str, Any]) -> str:
+        value = period.get("spend")
+        if value is None or value == "":
+            return "данные не предоставлены"
+        return f"{float(value):.2f} {currency}"
+
     summary = (
-        f"Аккаунт {account_name}: сегодня {today.get('spend', 0):.2f} USD, "
-        f"за 7 дней {week.get('spend', 0):.2f} USD, за 30 дней {month.get('spend', 0):.2f} USD."
+        f"Аккаунт {account_name}: сегодня {_spend_label(today)}, "
+        f"за 7 дней {_spend_label(week)}, за 30 дней {_spend_label(month)}."
     )
     if _safe_float(billing_payload.get("balance_due")) > 0:
         summary += f" Задолженность по кабинету: {billing_payload.get('balance_due', 0):.2f} USD."
@@ -344,9 +356,13 @@ def build_report_skill(
     disable_count = len(disable_candidates.get("candidates", []))
     scale_count = len(scale_candidates.get("candidates", []))
     issue_count = len(issues.get("issues", []))
+    last_30_days = _first_period(budget_summary.get("periods", []), "last_30_days")
+    spend = last_30_days.get("spend")
+    currency = str(last_30_days.get("currency") or budget_summary.get("currency") or "USD")
+    spend_label = "данные не предоставлены" if spend in (None, "") else f"{float(spend):.2f} {currency}"
     summary = (
         f"По аккаунту {account_id}: расход за 30 дней "
-        f"{(_first_period(budget_summary.get('periods', []), 'last_30_days').get('spend') or 0):.2f} USD, "
+        f"{spend_label}, "
         f"кандидатов на отключение {disable_count}, кандидатов на масштабирование {scale_count}, "
         f"активных delivery issues {issue_count}."
     )

@@ -32,7 +32,7 @@ def build_mcp_skill_preset_tools(
         return {
             "provider": provider,
             "account_id": account_id,
-            "skills": build_skill_catalog(account_id, end_date),
+            "skills": build_skill_catalog(account_id, end_date, provider=provider),
             "preview": False,
         }
 

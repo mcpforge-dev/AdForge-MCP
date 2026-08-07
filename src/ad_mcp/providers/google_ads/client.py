@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from ad_mcp.core.models import ReportRequest, ReportResponse
+from datetime import date, timedelta
+
+from ad_mcp.core.models import DateRange, ReportRequest, ReportResponse
 from ad_mcp.core.models import CapabilityMap
 from ad_mcp.providers.base.client import BaseAdsProvider
 from ad_mcp.providers.google_ads.account_read import fetch_google_campaign, fetch_google_campaigns
@@ -50,6 +52,71 @@ class GoogleAdsProvider(BaseAdsProvider):
             return super().get_report(request)
         credentials = credentials_from_config(account_config)
         return fetch_google_report(credentials, request, self.capabilities.supported_metrics)
+
+    def get_spend_overview(self, account_id: str, end_date: str) -> dict:
+        """Return spend periods from Google Ads reporting, never from a seeded zero."""
+        account_config = self.get_account_config(account_id)
+        if not account_config:
+            return super().get_spend_overview(account_id, end_date)
+        if str(account_config.get("google_ads_account_type") or "").strip().lower() == "manager":
+            return {
+                "provider": "google_ads",
+                "account_id": account_id,
+                "status": "requires_client_account",
+                "periods": [],
+                "source_api": "google_ads_api",
+                "data_status": "requires_client_account",
+            }
+        resolved_end = date.fromisoformat(end_date)
+        periods: list[dict] = []
+        for label, days in (("today", 1), ("last_7_days", 7), ("last_30_days", 30)):
+            resolved_start = resolved_end - timedelta(days=days - 1)
+            response = self.get_report(
+                ReportRequest(
+                    provider="google_ads",
+                    account_id=account_id,
+                    entity_level="account",
+                    date_range=DateRange(start_date=resolved_start.isoformat(), end_date=resolved_end.isoformat()),
+                    fields=["spend", "impressions", "clicks", "conversions", "ctr"],
+                )
+            )
+            rows = response.rows
+            spend_values = [float(row["spend"]) for row in rows if row.get("spend") is not None]
+            periods.append(
+                {
+                    "period": label,
+                    "spend": sum(spend_values) if spend_values else None,
+                    "impressions": sum(
+                        float(row["impressions"])
+                        for row in rows
+                        if row.get("impressions") is not None
+                    )
+                    or None,
+                    "clicks": sum(
+                        float(row["clicks"])
+                        for row in rows
+                        if row.get("clicks") is not None
+                    )
+                    or None,
+                    "conversions": sum(
+                        float(row["conversions"])
+                        for row in rows
+                        if row.get("conversions") is not None
+                    )
+                    or None,
+                    "currency": account_config.get("currency") or account_config.get("currency_code") or "USD",
+                    "source_api": response.source_api,
+                    "data_status": "live" if rows and not response.preview else "empty",
+                }
+            )
+        return {
+            "provider": "google_ads",
+            "account_id": account_id,
+            "periods": periods,
+            "currency": account_config.get("currency") or account_config.get("currency_code") or "USD",
+            "source_api": "google_ads_api",
+            "data_status": "live" if any(item.get("spend") is not None for item in periods) else "empty",
+        }
 
     def list_account_objects(
         self,

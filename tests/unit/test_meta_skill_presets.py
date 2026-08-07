@@ -41,6 +41,13 @@ def test_build_skill_catalog_returns_mcp_native_presets() -> None:
     assert all(skill["web_path"].startswith("/api/meta/skills/") for skill in skills)
 
 
+def test_build_skill_catalog_uses_requested_provider() -> None:
+    skills = build_skill_catalog("2497974272", "2026-07-01", provider="google_ads")
+
+    assert all("provider google_ads" in skill["prompt"] for skill in skills)
+    assert all("provider meta_ads" not in skill["prompt"] for skill in skills)
+
+
 def test_build_budget_skill_summary_builds_human_readable_summary() -> None:
     payload = build_budget_skill_summary(
         "act_123",
@@ -59,6 +66,18 @@ def test_build_budget_skill_summary_builds_human_readable_summary() -> None:
     assert "сегодня 10.00 USD" in payload["summary"]
     assert "за 7 дней 77.50 USD" in payload["summary"]
     assert "Задолженность" in payload["summary"]
+
+
+def test_build_budget_skill_summary_does_not_turn_missing_spend_into_zero() -> None:
+    payload = build_budget_skill_summary(
+        "2497974272",
+        "2026-07-01",
+        {"periods": []},
+        {"billing": {}},
+    )
+
+    assert "0.00 USD" not in payload["summary"]
+    assert "данные не предоставлены" in payload["summary"]
 
 
 def test_build_disable_candidates_skill_merges_no_result_and_issue_sources() -> None:
