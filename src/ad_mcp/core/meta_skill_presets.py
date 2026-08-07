@@ -147,11 +147,11 @@ def build_skill_catalog(account_id: str, end_date: str | None = None) -> list[di
         {
             "id": "collect_report",
             "title": "Собери отчет",
-            "description": "Собирает короткий операторский отчет: бюджет, проблемы, кандидаты на отключение и масштабирование.",
+            "description": "Собирает проверенный отчёт по рекламному кабинету: KPI, сравнение периодов, кампании, подтверждённые выводы, ограничения и вопросы клиенту.",
             "mcp_tool": "collect_report_skill",
             "web_path": "/api/meta/skills/collect-report",
             "prompt": (
-                "Используй MCP server ads и вызови collect_report_skill для provider meta_ads, "
+                "Используй MCP server ads и вызови collect_report_skill для проверенного отчёта по provider meta_ads, "
                 f"account_id {account_id}, end_date {resolved_end_date}."
             ),
         },

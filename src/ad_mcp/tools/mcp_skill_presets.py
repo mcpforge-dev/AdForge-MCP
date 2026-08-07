@@ -10,6 +10,7 @@ from ad_mcp.core.meta_skill_presets import (
     build_scale_candidates_skill,
     build_skill_catalog,
 )
+from ad_mcp.reporting.monthly_ads import collect_monthly_ads_report
 from ad_mcp.core.policy import PolicyManager
 from ad_mcp.tools._shared import validate_provider_account
 
@@ -27,7 +28,7 @@ def build_mcp_skill_preset_tools(
         return start_date, end_date_iso
 
     def list_operator_skills(provider: str, account_id: str, end_date: str | None = None) -> dict:
-        validate_provider_account(registry, policy_manager, provider, account_id)
+        account = validate_provider_account(registry, policy_manager, provider, account_id)
         return {
             "provider": provider,
             "account_id": account_id,
@@ -110,12 +111,12 @@ def build_mcp_skill_preset_tools(
         provider: str,
         account_id: str,
         end_date: str,
-        lookback_days: int = 7,
+        lookback_days: int = 30,
         entity_level: str = "campaign",
         min_spend: float = 20.0,
         max_cost_per_result: float = 20.0,
     ) -> dict:
-        validate_provider_account(registry, policy_manager, provider, account_id)
+        account = validate_provider_account(registry, policy_manager, provider, account_id)
         provider_client = registry.get_provider(provider)
         start_date, end_date_iso = _date_window(end_date, lookback_days)
         budget = summarize_budget_skill(provider, account_id, end_date_iso)
@@ -140,6 +141,16 @@ def build_mcp_skill_preset_tools(
         )
         issues = provider_client.get_delivery_issues(account_id, 20)
         result = build_report_skill(account_id, end_date_iso, budget, disable, scale, issues)
+        result["monthly_report"] = collect_monthly_ads_report(
+            provider_client,
+            provider=provider,
+            account_id=account_id,
+            start_date=start_date,
+            end_date=end_date_iso,
+            timezone_name=str(account.get("timezone") or "UTC"),
+            account_name=str(account.get("name") or account_id),
+            currency=str(account.get("currency") or account.get("currency_code") or "USD"),
+        )
         result["provider"] = provider
         result["preview"] = False
         result["period"] = {"start_date": start_date, "end_date": end_date_iso}

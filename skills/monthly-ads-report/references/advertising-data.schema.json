@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Normalized advertising fact",
+  "type": "object",
+  "required": ["fact_id", "name", "value", "period", "provenance"],
+  "properties": {
+    "fact_id": {"type": "string", "minLength": 1},
+    "name": {"type": "string", "minLength": 1},
+    "value": {},
+    "unit": {"type": ["string", "null"]},
+    "period": {
+      "type": "object",
+      "required": ["start", "end", "timezone"],
+      "properties": {
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"},
+        "timezone": {"type": "string", "minLength": 1}
+      }
+    },
+    "dimensions": {"type": "object"},
+    "attribution_window": {"type": ["string", "null"]},
+    "definition": {"type": ["string", "null"]},
+    "provenance": {
+      "type": "object",
+      "required": ["status"],
+      "properties": {
+        "status": {"enum": ["SOURCE_FACT", "USER_CONFIRMED", "CALCULATED", "UNKNOWN"]},
+        "source_type": {"type": ["string", "null"]},
+        "source_ref": {"type": ["string", "null"]},
+        "retrieved_at": {"type": ["string", "null"], "format": "date-time"},
+        "formula": {"type": ["string", "null"]},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}},
+        "unknown_reason": {"type": ["string", "null"]}
+      }
+    }
+  },
+  "additionalProperties": true
+}

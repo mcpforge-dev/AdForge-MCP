@@ -1,0 +1,4 @@
+interface:
+  display_name: "Monthly Ads Report"
+  short_description: "Build verified monthly advertising reports"
+  default_prompt: "Use $monthly-ads-report to assemble a verified monthly advertising report and ask for every missing fact."

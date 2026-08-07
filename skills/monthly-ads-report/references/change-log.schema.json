@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Advertising change log entry",
+  "type": "object",
+  "required": ["change_id", "platform", "account_id", "entity_type", "entity_id", "changed_at", "change_type", "field", "reason_status"],
+  "properties": {
+    "change_id": {"type": "string", "minLength": 1},
+    "platform": {"type": "string", "minLength": 1},
+    "account_id": {"type": "string", "minLength": 1},
+    "entity_type": {"enum": ["account", "campaign", "ad_set", "ad_group", "ad", "creative", "keyword", "conversion", "tracking", "other"]},
+    "entity_id": {"type": "string", "minLength": 1},
+    "entity_name": {"type": ["string", "null"]},
+    "changed_at": {"type": "string", "format": "date-time"},
+    "change_type": {"type": "string", "minLength": 1},
+    "field": {"type": "string", "minLength": 1},
+    "old_value": {},
+    "new_value": {},
+    "reason_status": {"enum": ["CONFIRMED", "UNKNOWN", "MISSING"]},
+    "reason": {"type": ["string", "null"]},
+    "initiator": {"type": ["string", "null"]},
+    "confirmed_by": {"type": ["string", "null"]},
+    "source_ref": {"type": ["string", "null"]},
+    "expected_effect": {"type": ["string", "null"]}
+  },
+  "additionalProperties": true
+}

@@ -34,6 +34,7 @@ from ad_mcp.web.seo import SearchConsoleReportService
 from ad_mcp.web.service import MetaDashboardService
 from ad_mcp.web.site_analysis_history import SiteAnalysisHistoryStore
 from ad_mcp.web.site_analysis_report import build_site_analysis_docx
+from ad_mcp.web.monthly_ads_report import build_monthly_ads_report_docx
 
 
 WEB_ROOT = Path(__file__).resolve().parent
@@ -870,7 +871,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     self.service.collect_report_skill(
                         account_id=account_id,
                         end_date=end_date,
-                        lookback_days=int(query.get("lookback_days", "7")),
+                        lookback_days=int(query.get("lookback_days", "30")),
                         entity_level=query.get("entity_level", "campaign"),
                         min_spend=float(query.get("min_spend", "20")),
                         max_cost_per_result=float(query.get("max_cost_per_result", "20")),
@@ -987,6 +988,28 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     report,
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     "HolyMedia-MCP-site-audit.docx",
+                )
+            if route == "/api/meta/skills/collect-report.docx":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                payload = self._json_body()
+                report_data = self.service.build_monthly_ads_report_for_user(
+                    user,
+                    account_id=str(payload.get("account_id") or "").strip() or None,
+                    end_date=str(payload.get("end_date") or "").strip() or None,
+                    lookback_days=int(payload.get("lookback_days", 30)),
+                )
+                try:
+                    report = build_monthly_ads_report_docx(report_data)
+                except RuntimeError:
+                    return self._error("Генератор DOCX временно недоступен.", HTTPStatus.SERVICE_UNAVAILABLE, "docx_unavailable")
+                return self._send_download(
+                    report,
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    "HolyMedia-MCP-monthly-ads-report.docx",
                 )
             if route == "/api/auth/forgot-password":
                 payload = self._json_body()

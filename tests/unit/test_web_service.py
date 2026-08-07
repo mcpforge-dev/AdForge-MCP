@@ -53,6 +53,43 @@ def test_config_diagnostics_uses_hosted_connection_store(tmp_path) -> None:
     assert payload["runtime"]["accounts"][0]["account_id"] == "hosted_123"
 
 
+def test_monthly_report_reads_only_signed_in_workspace(tmp_path, monkeypatch) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    store = HostedConnectionStore(settings.connection_store_file)
+    store.save_provider_config(
+        "meta_ads",
+        {
+            "provider": "meta_ads",
+            "accounts": [
+                {
+                    "name": "Workspace A account",
+                    "account_id": "act_workspace_a",
+                    "app_id": "app-id",
+                    "app_secret": "real-secret",
+                    "access_token": "real-token",
+                }
+            ],
+        },
+        workspace_id="workspace-a",
+    )
+    service = MetaDashboardService(settings)
+    monkeypatch.setattr(
+        "ad_mcp.web.service.collect_monthly_ads_report",
+        lambda _provider, **kwargs: {"account_id": kwargs["account_id"], "provider": kwargs["provider"]},
+    )
+
+    class User:
+        workspace_id = "workspace-a"
+
+    report = service.build_monthly_ads_report_for_user(User(), account_id="act_workspace_a", end_date="2026-06-07", lookback_days=7)
+
+    assert report == {"account_id": "act_workspace_a", "provider": "meta_ads"}
+
+
 class _FakeMetaProvider:
     def __init__(self) -> None:
         self.config = {"accounts": [{"account_id": "act_123", "name": "Demo account", "status": "configured", "app_id": "app_1"}]}

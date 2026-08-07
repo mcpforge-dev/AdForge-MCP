@@ -35,6 +35,7 @@ from ad_mcp.tools.mcp_skill_presets import build_mcp_skill_preset_tools
 from ad_mcp.tools.meta_graph_read import build_meta_graph_read_tools
 from ad_mcp.tools.meta_specialist import build_meta_specialist_tools
 from ad_mcp.tools.meta_write import build_meta_write_tools
+from ad_mcp.tools.monthly_ads_report import build_monthly_ads_report_tools
 from ad_mcp.tools.objects import build_object_tools
 from ad_mcp.tools.reporting import build_reporting_tools
 from ad_mcp.tools.site_analysis import build_site_analysis_tools
@@ -166,6 +167,7 @@ def create_server(settings: Settings | None = None, *, hosted_http: bool = False
         build_ad_detailed_report_tools(registry, policy_manager),
         build_analytics_read_tools(registry, policy_manager),
         build_reporting_tools(registry, policy_manager),
+        build_monthly_ads_report_tools(registry, policy_manager),
         build_object_tools(registry, policy_manager),
         build_meta_graph_read_tools(registry, policy_manager),
         build_mcp_skill_preset_tools(registry, policy_manager),

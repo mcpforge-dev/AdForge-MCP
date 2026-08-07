@@ -14,7 +14,7 @@ from ad_mcp.core.config_loader import (
     load_provider_from_connections,
     load_safety_policy,
 )
-from ad_mcp.core.connection_store import load_runtime_provider_configs
+from ad_mcp.core.connection_store import HostedConnectionStore, load_runtime_provider_configs
 from ad_mcp.core.meta_skill_presets import (
     build_budget_skill_summary,
     build_clickhouse_contract,
@@ -28,6 +28,7 @@ from ad_mcp.core.models import ObjectMutationResponse
 from ad_mcp.core.policy import PolicyManager
 from ad_mcp.core.preview_manager import PreviewManager
 from ad_mcp.providers.meta_ads.client import MetaAdsProvider
+from ad_mcp.reporting.monthly_ads import collect_monthly_ads_report
 from ad_mcp.settings import Settings
 from ad_mcp.storage.clickhouse import ClickHousePersistence
 
@@ -478,7 +479,7 @@ class MetaDashboardService:
         self,
         account_id: str | None = None,
         end_date: str | None = None,
-        lookback_days: int = 7,
+        lookback_days: int = 30,
         entity_level: str = "campaign",
         min_spend: float = 20.0,
         max_cost_per_result: float = 20.0,
@@ -504,13 +505,75 @@ class MetaDashboardService:
             limit=10,
         )
         issues = self._provider.get_delivery_issues(resolved_account_id, 20)
-        return build_report_skill(
+        result = build_report_skill(
             resolved_account_id,
             resolved_end_date,
             budget_summary,
             disable_candidates,
             scale_candidates,
             issues,
+        )
+        result["monthly_report"] = self.build_monthly_ads_report(
+            account_id=resolved_account_id,
+            end_date=resolved_end_date,
+            lookback_days=lookback_days,
+        )
+        return result
+
+    def build_monthly_ads_report(
+        self,
+        account_id: str | None = None,
+        end_date: str | None = None,
+        lookback_days: int = 30,
+    ) -> dict[str, Any]:
+        resolved_account_id = self._resolve_account_id(account_id)
+        self._ensure_account_is_usable(resolved_account_id)
+        resolved_end_date = end_date or date.today().isoformat()
+        start_date, _, end_date_iso = self._date_window(end_date=resolved_end_date, lookback_days=lookback_days)
+        account = self._provider.get_account_config(resolved_account_id)
+        return collect_monthly_ads_report(
+            self._provider,
+            provider="meta_ads",
+            account_id=resolved_account_id,
+            start_date=start_date,
+            end_date=end_date_iso,
+            timezone_name=str(account.get("timezone") or "UTC"),
+            account_name=str(account.get("name") or resolved_account_id),
+            currency=str(account.get("currency") or account.get("currency_code") or "USD"),
+        )
+
+    def build_monthly_ads_report_for_user(
+        self,
+        user: Any,
+        account_id: str | None = None,
+        end_date: str | None = None,
+        lookback_days: int = 30,
+    ) -> dict[str, Any]:
+        """Build a browser report from the signed-in user's workspace only."""
+        store = HostedConnectionStore(self._settings.connection_store_file)
+        workspace_id = str(getattr(user, "workspace_id", "") or "").strip() or None
+        config = store.provider_config("meta_ads", workspace_id=workspace_id)
+        provider = MetaAdsProvider(config=config)
+        resolved_account_id = str(account_id or "").strip()
+        if not resolved_account_id:
+            accounts = config.get("accounts", []) if isinstance(config.get("accounts"), list) else []
+            resolved_account_id = str(accounts[0].get("account_id", "") or "").strip() if accounts else ""
+        account = provider.get_account_config(resolved_account_id)
+        if not account:
+            raise ValueError("Рекламный аккаунт не найден в рабочем пространстве пользователя.")
+        if self._has_placeholder_credentials(account):
+            raise ValueError("Для выбранного аккаунта не настроено рабочее подключение Meta.")
+        resolved_end_date = end_date or date.today().isoformat()
+        start_date, _, end_date_iso = self._date_window(end_date=resolved_end_date, lookback_days=lookback_days)
+        return collect_monthly_ads_report(
+            provider,
+            provider="meta_ads",
+            account_id=resolved_account_id,
+            start_date=start_date,
+            end_date=end_date_iso,
+            timezone_name=str(account.get("timezone") or account.get("timezone_name") or "UTC"),
+            account_name=str(account.get("name") or resolved_account_id),
+            currency=str(account.get("currency") or account.get("currency_code") or "USD"),
         )
 
     def workspace(self, account_id: str | None = None, end_date: str | None = None) -> dict[str, Any]:

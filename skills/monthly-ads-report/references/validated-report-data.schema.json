@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Validated monthly advertising report dataset",
+  "type": "object",
+  "required": ["report_run_id", "mode", "period", "facts", "changes", "questions", "assertions"],
+  "properties": {
+    "report_run_id": {"type": "string", "minLength": 1},
+    "mode": {"enum": ["draft_with_gaps", "final"]},
+    "period": {
+      "type": "object",
+      "required": ["start", "end", "timezone"],
+      "properties": {
+        "start": {"type": "string", "format": "date"},
+        "end": {"type": "string", "format": "date"},
+        "timezone": {"type": "string", "minLength": 1}
+      }
+    },
+    "facts": {"type": "array", "items": {"$ref": "advertising-data.schema.json"}},
+    "changes": {"type": "array", "items": {"$ref": "change-log.schema.json"}},
+    "questions": {"type": "array", "items": {"$ref": "client-context.schema.json"}},
+    "assertions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["assertion_id", "text", "type", "evidence_ids"],
+        "properties": {
+          "assertion_id": {"type": "string", "minLength": 1},
+          "text": {"type": "string", "minLength": 1},
+          "type": {"enum": ["descriptive", "calculated", "causal", "hypothesis", "recommendation"]},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}},
+          "limitations": {"type": "array", "items": {"type": "string"}}
+        }
+      }
+    }
+  },
+  "additionalProperties": true
+}
