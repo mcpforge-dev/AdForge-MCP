@@ -192,6 +192,7 @@ def commit_meta_confirmed_write(
     )
     graph = MetaGraphClient(credentials)
     before: dict[str, Any] = {}
+    current_status = ""
     if preview.action == "update":
         before_payload = fetch_meta_object(credentials, preview.object_type, str(preview.object_id or ""))
         before = before_payload.get("data") if isinstance(before_payload.get("data"), dict) else {}
@@ -228,7 +229,13 @@ def commit_meta_confirmed_write(
         reread_warning = str(exc)[:500]
 
     verified_fields, unverified_fields = _verify_requested(after, request["body"]) if after else ([], sorted(request["body"]))
-    verified_by_reread = bool(after) and not unverified_fields
+    status_after = str(after.get("effective_status") or after.get("status") or "").upper()
+    status_preserved = (
+        True
+        if preview.action != "update" or "status" in request["body"]
+        else bool(current_status and status_after and current_status == status_after)
+    )
+    verified_by_reread = bool(after) and not unverified_fields and status_preserved
     return ObjectMutationResponse(
         status="committed",
         provider="meta_ads",
@@ -246,6 +253,9 @@ def commit_meta_confirmed_write(
                 "verified_by_reread": verified_by_reread,
                 "verified_fields": verified_fields,
                 "unverified_fields": unverified_fields,
+                "status_before": current_status or None,
+                "status_after": status_after or None,
+                "status_preserved": status_preserved,
                 "reread_warning": reread_warning,
             },
             source_api="meta_marketing_api",

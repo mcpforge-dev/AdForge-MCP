@@ -239,6 +239,91 @@ def get_meta_page(credentials: MetaAccountCredentials, page_id: str, http_client
     return live_meta_payload({"page": data})
 
 
+def _summary_count(value: Any) -> int | None:
+    if not isinstance(value, dict):
+        return None
+    summary = value.get("summary")
+    if not isinstance(summary, dict) or "total_count" not in summary:
+        return None
+    try:
+        return int(summary["total_count"])
+    except (TypeError, ValueError):
+        return None
+
+
+def _share_count(value: Any) -> int | None:
+    if not isinstance(value, dict) or "count" not in value:
+        return None
+    try:
+        return int(value["count"])
+    except (TypeError, ValueError):
+        return None
+
+
+def _attachment_description(post: dict[str, Any]) -> str | None:
+    attachments = post.get("attachments")
+    rows = attachments.get("data") if isinstance(attachments, dict) else None
+    if not isinstance(rows, list):
+        return None
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        description = str(row.get("description") or row.get("title") or "").strip()
+        if description:
+            return description
+    return None
+
+
+def _normalize_page_post(post: dict[str, Any]) -> dict[str, Any]:
+    description = _attachment_description(post)
+    text = str(post.get("message") or post.get("story") or description or "").strip() or None
+    return {
+        **post,
+        "post_id": str(post.get("id") or ""),
+        "text": text,
+        "description": description,
+        "permalink": post.get("permalink_url"),
+        "engagement": {
+            "comments": _summary_count(post.get("comments")),
+            "reactions": _summary_count(post.get("reactions")),
+            "shares": _share_count(post.get("shares")),
+        },
+    }
+
+
+PAGE_POST_BASE_FIELDS = (
+    "id,message,story,created_time,permalink_url,full_picture,"
+    "attachments{description,title,type,url},shares,reactions.limit(0).summary(true)"
+)
+PAGE_POST_FIELDS = f"{PAGE_POST_BASE_FIELDS},comments.limit(0).summary(true)"
+
+
+def _list_published_posts(
+    graph: MetaGraphClient,
+    page_id: str,
+    token: str,
+    limit: int,
+) -> tuple[list[dict[str, Any]], list[str]]:
+    try:
+        rows = graph.list_edge(
+            f"/{page_id}/published_posts",
+            {"fields": PAGE_POST_FIELDS},
+            access_token=token,
+            limit=limit,
+        )
+        return rows, []
+    except MetaGraphAPIError as exc:
+        if exc.code not in {10, 100, 200}:
+            raise
+    rows = graph.list_edge(
+        f"/{page_id}/published_posts",
+        {"fields": PAGE_POST_BASE_FIELDS},
+        access_token=token,
+        limit=limit,
+    )
+    return rows, ["comments"]
+
+
 def list_page_posts(
     credentials: MetaAccountCredentials,
     page_id: str,
@@ -247,35 +332,18 @@ def list_page_posts(
 ) -> dict[str, Any]:
     graph = _client(credentials, http_client)
     token = graph.page_access_token(page_id)
-    try:
-        rows = graph.list_edge(
-            f"/{page_id}/posts",
-            {
-                "fields": (
-                    "id,message,created_time,permalink_url,full_picture,attachments,"
-                    "shares,reactions.limit(0).summary(true)"
-                )
-            },
-            access_token=token,
-            limit=limit,
-        )
-    except MetaGraphAPIError as exc:
-        if exc.code not in {10, 200}:
-            raise
-        return live_meta_payload(
-            {
-                "page_id": page_id,
-                "posts": [],
-                "row_count": 0,
-                "status": "additional_permission_required",
-                "additional_permission_required": ["pages_read_user_content"],
-                "meta_error": {"code": exc.code, "subcode": exc.subcode},
-                "message": "Meta did not expose Page posts with the currently granted Page permissions.",
-            },
-            real_data=False,
-            data_status="additional_permission_required",
-        )
-    return live_meta_payload({"page_id": page_id, "posts": rows, "row_count": len(rows)})
+    rows, unavailable_fields = _list_published_posts(graph, page_id, token, limit)
+    posts = [_normalize_page_post(row) for row in rows]
+    return live_meta_payload(
+        {
+            "page_id": page_id,
+            "post_source": "page_published_posts",
+            "posts": posts,
+            "row_count": len(posts),
+            "unavailable_engagement_fields": unavailable_fields,
+            "partial": bool(unavailable_fields),
+        }
+    )
 
 
 def get_page_post(
@@ -286,17 +354,30 @@ def get_page_post(
 ) -> dict[str, Any]:
     graph = _client(credentials, http_client)
     token = graph.page_access_token(page_id)
-    data = graph.get(
-        f"/{post_id}",
+    unavailable_fields: list[str] = []
+    try:
+        data = graph.get(
+            f"/{post_id}",
+            {"fields": f"{PAGE_POST_FIELDS},updated_time"},
+            access_token=token,
+        )
+    except MetaGraphAPIError as exc:
+        if exc.code not in {10, 100, 200}:
+            raise
+        data = graph.get(
+            f"/{post_id}",
+            {"fields": f"{PAGE_POST_BASE_FIELDS},updated_time"},
+            access_token=token,
+        )
+        unavailable_fields.append("comments")
+    return live_meta_payload(
         {
-            "fields": (
-                "id,message,created_time,updated_time,permalink_url,full_picture,attachments,"
-                "shares,reactions.limit(0).summary(true)"
-            )
-        },
-        access_token=token,
+            "page_id": page_id,
+            "post": _normalize_page_post(data),
+            "unavailable_engagement_fields": unavailable_fields,
+            "partial": bool(unavailable_fields),
+        }
     )
-    return live_meta_payload({"page_id": page_id, "post": data})
 
 
 def get_page_post_engagement(
@@ -307,34 +388,36 @@ def get_page_post_engagement(
 ) -> dict[str, Any]:
     graph = _client(credentials, http_client)
     token = graph.page_access_token(page_id)
-    post = graph.get(
-        f"/{post_id}",
-        {"fields": "id,shares,reactions.limit(0).summary(true)"},
-        access_token=token,
-    )
-    reactions = ((post.get("reactions") or {}).get("summary") or {}).get("total_count", 0)
-    shares = (post.get("shares") or {}).get("count", 0)
+    unavailable_fields: list[str] = []
+    try:
+        post = graph.get(
+            f"/{post_id}",
+            {"fields": "id,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true)"},
+            access_token=token,
+        )
+    except MetaGraphAPIError as exc:
+        if exc.code not in {10, 100, 200}:
+            raise
+        post = graph.get(
+            f"/{post_id}",
+            {"fields": "id,shares,reactions.limit(0).summary(true)"},
+            access_token=token,
+        )
+        unavailable_fields.append("comments")
     return live_meta_payload(
         {
             "page_id": page_id,
             "post_id": post_id,
-            "engagement": {"comments": None, "reactions": reactions, "shares": shares},
+            "engagement": {
+                "comments": _summary_count(post.get("comments")),
+                "reactions": _summary_count(post.get("reactions")),
+                "shares": _share_count(post.get("shares")),
+            },
             "insights": [],
-            "insights_status": "additional_permission_required",
-            "additional_permission_required": ["pages_read_user_content", "read_insights"],
-            "partial": True,
-            "warnings": [
-                {
-                    "status": "additional_permission_required",
-                    "permission": "pages_read_user_content",
-                    "message": "User comments are outside the current App Review permission set.",
-                },
-                {
-                    "status": "additional_permission_required",
-                    "permission": "read_insights",
-                    "message": "Page Insights are outside the current App Review permission set.",
-                }
-            ],
+            "insights_status": "not_requested",
+            "partial": bool(unavailable_fields),
+            "unavailable_engagement_fields": unavailable_fields,
+            "warnings": [],
         }
     )
 

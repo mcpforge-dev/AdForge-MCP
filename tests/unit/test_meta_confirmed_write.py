@@ -325,3 +325,44 @@ def test_provider_blocks_non_pause_update_on_active_object(monkeypatch) -> None:
             MetaAccountCredentials("1", "app", "secret", "token"),
             preview,
         )
+
+
+def test_provider_rename_posts_only_name_and_verifies_paused_status(monkeypatch) -> None:
+    reads = iter(
+        [
+            {"data": {"id": "campaign_1", "name": "Before", "status": "PAUSED"}},
+            {"data": {"id": "campaign_1", "name": "After", "status": "PAUSED"}},
+        ]
+    )
+    monkeypatch.setattr(mutations, "fetch_meta_object", lambda *_args, **_kwargs: next(reads))
+
+    class _Graph:
+        def __init__(self, _credentials) -> None:
+            pass
+
+        def post(self, path, data):
+            assert path == "/campaign_1"
+            assert data == {"name": "After"}
+            return {"success": True}
+
+    monkeypatch.setattr(mutations, "MetaGraphClient", _Graph)
+    preview = PreviewRecord(
+        provider="meta_ads",
+        account_id="act_1",
+        object_type="campaign",
+        object_id="campaign_1",
+        operation="change_name",
+        action="update",
+        payload={"name": "After"},
+    )
+
+    result = mutations.commit_meta_confirmed_write(
+        MetaAccountCredentials("1", "app", "secret", "token"),
+        preview,
+    ).model_dump()
+
+    assert result["provider_payload"]["body"] == {"name": "After"}
+    assert result["provider_response"]["verified_by_reread"] is True
+    assert result["provider_response"]["status_before"] == "PAUSED"
+    assert result["provider_response"]["status_after"] == "PAUSED"
+    assert result["provider_response"]["status_preserved"] is True

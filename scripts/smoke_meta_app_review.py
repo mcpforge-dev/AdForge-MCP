@@ -24,7 +24,9 @@ REQUIRED_TOOLS = {
     "get_page_post",
     "get_page_post_engagement",
     "get_page_instagram_account",
-    "commit_meta_app_review_preview",
+    "get_campaign",
+    "preview_meta_update_campaign",
+    "commit_meta_confirmed_write",
 }
 
 
@@ -56,7 +58,22 @@ def summary(data: dict[str, Any]) -> dict[str, Any]:
         )
         if key in data
     }
-    for key in ("businesses", "ad_accounts", "pages", "posts", "permissions", "instagram_account"):
+    for key in (
+        "businesses",
+        "ad_accounts",
+        "pages",
+        "posts",
+        "permissions",
+        "instagram_account",
+        "page",
+        "post",
+        "engagement",
+        "data",
+        "diff",
+        "provider_response",
+        "operation",
+        "confirmed_write_available",
+    ):
         value = data.get(key)
         if isinstance(value, list):
             allowed[key] = [{k: v for k, v in item.items() if k not in {"access_token", "page_access_token"}} for item in value]
@@ -65,7 +82,14 @@ def summary(data: dict[str, Any]) -> dict[str, Any]:
     return allowed
 
 
-async def run(account_id: str, business_id: str | None, page_id: str | None, test_campaign_id: str | None, do_commit: bool) -> dict[str, Any]:
+async def run(
+    account_id: str,
+    business_id: str | None,
+    page_id: str | None,
+    test_campaign_id: str | None,
+    target_name: str,
+    confirmation: str | None,
+) -> dict[str, Any]:
     settings = Settings()
     mcp = create_server(settings)
     names = {tool.name for tool in await mcp.list_tools()}
@@ -104,14 +128,49 @@ async def run(account_id: str, business_id: str | None, page_id: str | None, tes
     campaigns = payload(await mcp.call_tool("list_account_objects", {"provider": "meta_ads", "account_id": account_id, "object_type": "campaign", "limit": 100}))
     result["ads_read"] = summary(campaigns)
     if test_campaign_id:
-        new_name = "HolyMedia App Review Test"
-        preview = payload(await mcp.call_tool("preview_change_campaign_name", {"platform": "meta_ads", "account_id": account_id, "campaign_id": test_campaign_id, "new_name": new_name}))
+        current = payload(
+            await mcp.call_tool(
+                "get_campaign",
+                {"platform": "meta_ads", "account_id": account_id, "campaign_id": test_campaign_id},
+            )
+        )
+        result["campaign_before"] = summary(current)
+        preview = payload(
+            await mcp.call_tool(
+                "preview_meta_update_campaign",
+                {
+                    "account_id": account_id,
+                    "campaign_id": test_campaign_id,
+                    "name": target_name,
+                },
+            )
+        )
         result["preview"] = summary(preview)
-        blocked = payload(await mcp.call_tool("commit_meta_app_review_preview", {"preview_token": preview.get("preview_token"), "confirmation": "CONFIRM"}))
+        blocked = payload(
+            await mcp.call_tool(
+                "commit_meta_confirmed_write",
+                {"preview_token": preview.get("preview_token"), "confirmation": "CONFIRM"},
+            )
+        )
         result["commit_without_confirmation"] = {"status": blocked.get("status"), "mode": blocked.get("provider_response", {}).get("mode")}
-        if do_commit:
-            confirmed = payload(await mcp.call_tool("commit_meta_app_review_preview", {"preview_token": preview.get("preview_token"), "confirmation": preview.get("explicit_confirmation")}))
+        if confirmation:
+            if confirmation != preview.get("explicit_confirmation"):
+                raise RuntimeError("Confirmation does not match the exact phrase issued by the current preview.")
+            confirmed = payload(
+                await mcp.call_tool(
+                    "commit_meta_confirmed_write",
+                    {"preview_token": preview.get("preview_token"), "confirmation": confirmation},
+                )
+            )
             result["commit"] = summary(confirmed)
+            result["campaign_after"] = summary(
+                payload(
+                    await mcp.call_tool(
+                        "get_campaign",
+                        {"platform": "meta_ads", "account_id": account_id, "campaign_id": test_campaign_id},
+                    )
+                )
+            )
     return result
 
 
@@ -121,9 +180,28 @@ def main() -> None:
     parser.add_argument("--business-id")
     parser.add_argument("--page-id")
     parser.add_argument("--test-campaign-id")
-    parser.add_argument("--commit", action="store_true", help="Commit only the configured staging allowlisted test campaign.")
+    parser.add_argument("--target-name", default="hm_saqta_traffic_site_review_test")
+    parser.add_argument(
+        "--confirmation",
+        help="Exact one-time confirmation from preview. Omit to guarantee a read/preview-only smoke run.",
+    )
     args = parser.parse_args()
-    print(json.dumps(asyncio.run(run(args.account_id, args.business_id, args.page_id, args.test_campaign_id, args.commit)), ensure_ascii=False, indent=2))
+    print(
+        json.dumps(
+            asyncio.run(
+                run(
+                    args.account_id,
+                    args.business_id,
+                    args.page_id,
+                    args.test_campaign_id,
+                    args.target_name,
+                    args.confirmation,
+                )
+            ),
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
 
 
 if __name__ == "__main__":
