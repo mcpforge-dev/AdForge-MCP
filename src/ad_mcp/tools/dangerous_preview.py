@@ -9,6 +9,8 @@ from ad_mcp.core.connection_store import load_runtime_provider_configs
 from ad_mcp.core.models import ObjectMutationResponse
 from ad_mcp.core.policy import PolicyManager
 from ad_mcp.core.preview_manager import PreviewManager
+from ad_mcp.providers.meta_ads.auth import normalize_meta_account_id
+from ad_mcp.providers.meta_ads.mutations import build_meta_write_request
 from ad_mcp.settings import Settings
 from ad_mcp.tools._shared import validate_provider_account
 
@@ -191,6 +193,22 @@ def build_dangerous_preview_tools(
         preview.operation = action
         preview.object_id = object_id
         preview.current_snapshot = dict(current)
+        is_meta_campaign_rename = (
+            platform == "meta_ads"
+            and object_type == "campaign"
+            and action == "change_name"
+        )
+        if is_meta_campaign_rename:
+            request = build_meta_write_request(
+                account_id,
+                "update",
+                "campaign",
+                {"name": requested_value},
+                object_id,
+            )
+            preview.payload = dict(request["body"])
+            preview.provider_payload = request
+            preview.diff = {"before": dict(current), "requested": dict(request["body"])}
         preview_manager.create(preview)
         mutation_response = ObjectMutationResponse(
             status="preview",
@@ -219,9 +237,56 @@ def build_dangerous_preview_tools(
             and action in allowed_actions
             and object_type == "campaign"
         )
+        confirmed_accounts = {
+            normalize_meta_account_id(item)
+            for item in settings.meta_confirmed_write_allowed_account_ids.split(",")
+            if item.strip()
+        }
+        confirmed_objects = {
+            item.strip()
+            for item in settings.meta_confirmed_write_allowed_object_ids.split(",")
+            if item.strip()
+        }
+        confirmed_actions = {
+            item.strip()
+            for item in settings.meta_confirmed_write_allowed_actions.split(",")
+            if item.strip()
+        }
+        confirmed_write_available = (
+            is_meta_campaign_rename
+            and settings.env.strip().lower() in {"staging", "beta", "production"}
+            and settings.preview_only
+            and settings.meta_ads_management_oauth_enabled
+            and settings.meta_confirmed_write_enabled
+            and normalize_meta_account_id(account_id) in confirmed_accounts
+            and object_id in confirmed_objects
+            and action in confirmed_actions
+        )
+        if confirmed_write_available:
+            mode = "preview_confirm"
+            reason = (
+                "Preview prepared. This allowlisted Meta App Review change is available "
+                "only after the user's separate explicit confirmation."
+            )
+            note = "No change has been made yet. Use commit_meta_confirmed_write after confirmation."
+            explicit_confirmation = f"CONFIRM META WRITE {preview.token}"
+            commit_tool = "commit_meta_confirmed_write"
+        elif review_commit_available:
+            mode = "preview_confirm"
+            reason = "Preview prepared. The staging App Review change requires separate explicit confirmation."
+            note = "No change has been made yet. Use commit_meta_app_review_preview after confirmation."
+            explicit_confirmation = f"CONFIRM {preview.token}"
+            commit_tool = "commit_meta_app_review_preview"
+        else:
+            mode = "preview_only"
+            reason = PREVIEW_ONLY_REASON
+            note = PREVIEW_ONLY_NOTE
+            explicit_confirmation = None
+            commit_tool = None
+        commit_available = confirmed_write_available or review_commit_available
         response = {
             "status": "preview",
-            "mode": "preview_only",
+            "mode": mode,
             "will_apply": False,
             "platform": platform,
             "account_id": account_id,
@@ -233,14 +298,19 @@ def build_dangerous_preview_tools(
             "requested_value": requested_value,
             "expected_result": expected_result,
             "risk_level": risk_level,
-            "reason": PREVIEW_ONLY_REASON,
-            "note": PREVIEW_ONLY_NOTE,
+            "reason": reason,
+            "note": note,
             "preview_token": preview.token,
             "provider_payload": mutation_response["provider_payload"],
+            "provider_request": mutation_response["provider_payload"],
             "diff": mutation_response["diff"],
             "risk_flags": sorted(set(mutation_response["risk_flags"] + ([risk_level] if risk_level == "high" else []))),
-            "app_review_commit_available": review_commit_available,
-            "explicit_confirmation": f"CONFIRM {preview.token}" if review_commit_available else None,
+            "app_review_commit_available": commit_available,
+            "confirmed_write_available": confirmed_write_available,
+            "commit_available_after_confirmation": commit_available,
+            "commit_tool": commit_tool,
+            "required_oauth_permission": "ads_management" if is_meta_campaign_rename else None,
+            "explicit_confirmation": explicit_confirmation,
         }
         audit_logger.log(f"preview_only_{action}", response)
         return response
@@ -252,7 +322,15 @@ def build_dangerous_preview_tools(
             return _not_available(platform=platform, account_id=account_id, object_type=object_type, object_id=object_id, action=action, message=_redact_error(str(exc)))
         if error:
             return error
-        assert loaded is not None
+        if loaded is None:
+            return _not_available(
+                platform=platform,
+                account_id=account_id,
+                object_type=object_type,
+                object_id=object_id,
+                action=action,
+                message="Current object state could not be loaded. Preview was not created.",
+            )
         current = loaded["current"]
         current_status = _object_status(current)
         mutation_payload = _provider_payload_status(platform, object_type, object_id, requested_status)
@@ -297,7 +375,15 @@ def build_dangerous_preview_tools(
             return _not_available(platform=platform, account_id=account_id, object_type=object_type, object_id=object_id, action=action, message=_redact_error(str(exc)))
         if error:
             return error
-        assert loaded is not None
+        if loaded is None:
+            return _not_available(
+                platform=platform,
+                account_id=account_id,
+                object_type=object_type,
+                object_id=object_id,
+                action=action,
+                message="Current object state could not be loaded. Preview was not created.",
+            )
         account_config = loaded["account_config"]
         current = loaded["current"]
         current_budget = current.get(budget_field)
@@ -336,13 +422,22 @@ def build_dangerous_preview_tools(
         return _budget_preview(platform, account_id, "campaign", campaign_id, "change_budget", daily_budget, lifetime_budget)
 
     def preview_change_campaign_name(platform: str, account_id: str, campaign_id: str, new_name: str) -> dict:
+        """Preview a campaign rename; allowlisted Meta reviews can be committed after explicit confirmation."""
         try:
             loaded, error = _fetch_current(platform, account_id, "campaign", campaign_id, "change_name")
         except Exception as exc:  # noqa: BLE001
             return _not_available(platform=platform, account_id=account_id, object_type="campaign", object_id=campaign_id, action="change_name", message=_redact_error(str(exc)))
         if error:
             return error
-        assert loaded is not None
+        if loaded is None:
+            return _not_available(
+                platform=platform,
+                account_id=account_id,
+                object_type="campaign",
+                object_id=campaign_id,
+                action="change_name",
+                message="Current campaign state could not be loaded. Preview was not created.",
+            )
         current = loaded["current"]
         current_name = _object_name(current)
         return _record_preview(
@@ -351,7 +446,7 @@ def build_dangerous_preview_tools(
             object_type="campaign",
             object_id=campaign_id,
             action="change_name",
-            mutation_payload={"id": campaign_id, "name": new_name},
+            mutation_payload={"name": new_name} if platform == "meta_ads" else {"id": campaign_id, "name": new_name},
             current=current,
             current_value=current_name,
             requested_value=new_name,

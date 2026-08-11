@@ -85,6 +85,7 @@ def build_write_commit_tools(
         return result
 
     def commit_meta_confirmed_write(preview_token: str, confirmation: str) -> dict:
+        """Commit one allowlisted Meta preview after the user repeats its exact confirmation phrase."""
         preview = preview_manager.get(preview_token)
         blocked = {
             "status": "blocked",

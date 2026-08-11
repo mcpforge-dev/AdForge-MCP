@@ -16,6 +16,8 @@ preview_meta_update_adset
 preview_meta_update_ad
 ```
 
+Для переименования Meta-кампании AI-клиент также может выбрать совместимый tool `preview_change_campaign_name`. На allowlisted App Review объекте он использует тот же confirmed-write workflow, возвращает `commit_tool=commit_meta_confirmed_write`, `commit_available_after_confirmation=true` и provider request только с полем `name`.
+
 Commit-инструмент:
 
 ```text

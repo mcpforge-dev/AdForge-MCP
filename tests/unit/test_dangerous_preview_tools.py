@@ -3,9 +3,11 @@ from __future__ import annotations
 from ad_mcp.core.audit_logger import AuditLogger
 from ad_mcp.core.capability_registry import CapabilityRegistry
 from ad_mcp.core.connection_store import HostedConnectionStore
+from ad_mcp.core.models import ObjectMutationResponse
 from ad_mcp.core.policy import PolicyManager, SafetyPolicy
 from ad_mcp.core.preview_manager import PreviewManager
 from ad_mcp.providers.google_ads.client import GoogleAdsProvider
+from ad_mcp.providers.meta_ads.client import MetaAdsProvider
 from ad_mcp.providers.tiktok_ads.client import TikTokAdsProvider
 from ad_mcp.settings import Settings
 from ad_mcp.tools.dangerous_preview import build_dangerous_preview_tools
@@ -34,9 +36,52 @@ class FakeGoogleAdsProvider(GoogleAdsProvider):
             "preview": False,
         }
 
-    def commit_preview(self, preview):  # noqa: ANN001
+    def commit_preview(self, preview):
         self.commit_called = True
         raise AssertionError("commit_preview must not be called in preview-only beta.")
+
+
+class FakeMetaAdsProvider(MetaAdsProvider):
+    def __init__(self) -> None:
+        super().__init__(config={"accounts": [{"account_id": "act_1", "name": "Meta Test"}]})
+        self.commits = 0
+
+    def get_account_object(self, account_id: str, object_type: str, object_id: str, fields: list[str] | None = None) -> dict:
+        return {
+            "provider": "meta_ads",
+            "account_id": account_id,
+            "object_type": object_type,
+            "object_id": object_id,
+            "data": {"id": object_id, "name": "Before", "status": "PAUSED"},
+            "source_api": "unit_test",
+            "preview": False,
+        }
+
+    def list_meta_permissions(self, account_id: str) -> dict:
+        return {"granted": ["ads_management"]}
+
+    def commit_confirmed_write(self, preview, *, require_paused_objects: bool = True):
+        self.commits += 1
+        assert require_paused_objects is True
+        assert preview.payload == {"name": "After"}
+        assert preview.provider_payload == {
+            "http_method": "POST",
+            "endpoint": "/campaign_1",
+            "body": {"name": "After"},
+        }
+        return ObjectMutationResponse(
+            status="committed",
+            provider="meta_ads",
+            account_id=preview.account_id,
+            object_type="campaign",
+            action="update",
+            diff={
+                "before": {"id": "campaign_1", "name": "Before", "status": "PAUSED"},
+                "requested": {"name": "After"},
+                "after": {"id": "campaign_1", "name": "After", "status": "PAUSED"},
+            },
+            provider_response={"verified_by_reread": True, "status_preserved": True},
+        )
 
 
 def _settings_with_account(tmp_path) -> Settings:
@@ -50,6 +95,64 @@ def _settings_with_account(tmp_path) -> Settings:
         {"provider": "google_ads", "accounts": [{"account_id": "123", "name": "Test", "currency": "USD"}]},
     )
     return settings
+
+
+def _meta_confirmed_settings(tmp_path) -> Settings:
+    settings = Settings(
+        project_root=tmp_path,
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+        env="beta",
+        preview_only=True,
+        meta_ads_management_oauth_enabled=True,
+        meta_confirmed_write_enabled=True,
+        meta_confirmed_write_allowed_account_ids="act_1",
+        meta_confirmed_write_allowed_object_ids="campaign_1",
+        meta_confirmed_write_allowed_actions="change_name",
+        meta_confirmed_write_require_paused_objects=True,
+    )
+    HostedConnectionStore(settings.connection_store_file).save_provider_config(
+        "meta_ads",
+        {"provider": "meta_ads", "accounts": [{"account_id": "act_1", "name": "Meta Test"}]},
+    )
+    return settings
+
+
+def test_legacy_meta_rename_preview_uses_confirmed_write_flow_without_null_fields(tmp_path) -> None:
+    settings = _meta_confirmed_settings(tmp_path)
+    provider = FakeMetaAdsProvider()
+    registry = CapabilityRegistry({"meta_ads": provider})
+    manager = PreviewManager()
+    policy = PolicyManager(SafetyPolicy(preview_only=True))
+    audit = AuditLogger(tmp_path / "audit.jsonl")
+    previews = build_dangerous_preview_tools(registry, manager, audit, policy, settings)
+    commits = build_write_commit_tools(registry, manager, audit, policy, settings)
+
+    preview = previews["preview_change_campaign_name"]("meta_ads", "act_1", "campaign_1", "After")
+
+    assert preview["mode"] == "preview_confirm"
+    assert preview["will_apply"] is False
+    assert preview["app_review_commit_available"] is True
+    assert preview["confirmed_write_available"] is True
+    assert preview["commit_available_after_confirmation"] is True
+    assert preview["commit_tool"] == "commit_meta_confirmed_write"
+    assert preview["provider_request"] == {
+        "http_method": "POST",
+        "endpoint": "/campaign_1",
+        "body": {"name": "After"},
+    }
+    assert preview["diff"]["requested"] == {"name": "After"}
+    assert preview["explicit_confirmation"] == f"CONFIRM META WRITE {preview['preview_token']}"
+
+    committed = commits["commit_meta_confirmed_write"](
+        preview["preview_token"],
+        preview["explicit_confirmation"],
+    )
+
+    assert committed["status"] == "committed"
+    assert committed["diff"]["after"] == {"id": "campaign_1", "name": "After", "status": "PAUSED"}
+    assert committed["provider_response"]["status_preserved"] is True
+    assert provider.commits == 1
 
 
 def test_preview_pause_campaign_reads_current_state_and_never_applies(tmp_path) -> None:
