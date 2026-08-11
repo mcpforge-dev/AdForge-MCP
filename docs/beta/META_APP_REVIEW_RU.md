@@ -47,7 +47,7 @@ get_page_post_engagement
 get_page_instagram_account
 ```
 
-Каждый затронутый ответ содержит `source_api`, `real_data`, `data_status`, `fetched_at`. Page больше не зависит от Instagram-полей: сначала выполняется `/me/accounts`, затем `/{page_id}/published_posts` с Page Access Token. Публикации нормализуются в `post_id`, `text`/`description`, `created_time`, `permalink` и доступные `comments`/`reactions`/`shares`. Page Insights не запрашиваются, поэтому `read_insights` для этого сценария не нужен. Связанный Instagram проверяется отдельно и не блокирует Page-сценарий.
+Каждый затронутый ответ содержит `source_api`, `real_data`, `data_status`, `fetched_at`. Page больше не зависит от Instagram-полей: сначала выполняется `/me/accounts`, затем `/{page_id}/published_posts` с Page Access Token. Публикации нормализуются в `post_id`, `text`/`description`, `created_time`, `permalink` и доступные `comments`/`reactions`/`shares`. Если Meta не разрешает отдельное engagement-поле, запрос автоматически повторяется без него, реальные публикации сохраняются, а поле возвращается как `null` в `unavailable_engagement_fields`, без ложного `additional_permission_required`. Page Insights не запрашиваются, поэтому `read_insights` для этого сценария не нужен. Связанный Instagram проверяется отдельно и не блокирует Page-сценарий.
 
 ## ads_management workflow
 

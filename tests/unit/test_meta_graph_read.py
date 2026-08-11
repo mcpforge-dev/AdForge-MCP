@@ -45,10 +45,11 @@ class _HTTP:
                 "created_time": "2026-08-10T12:00:00+0000",
                 "permalink_url": "https://facebook.example/post/1",
                 "shares": {"count": 2},
-                "reactions": {"summary": {"total_count": 4}},
             }
             if "comments" in fields:
                 post["comments"] = {"summary": {"total_count": 3}}
+            if "reactions" in fields:
+                post["reactions"] = {"summary": {"total_count": 4}}
             return _Response(
                 {
                     "data": [post]
@@ -69,10 +70,11 @@ class _HTTP:
             post = {
                 "id": "page_1_post_1",
                 "shares": {"count": 2},
-                "reactions": {"summary": {"total_count": 4}},
             }
             if "comments" in fields:
                 post["comments"] = {"summary": {"total_count": 3}}
+            if "reactions" in fields:
+                post["reactions"] = {"summary": {"total_count": 4}}
             return _Response(
                 post
             )
@@ -96,6 +98,21 @@ class _PermissionHTTP(_HTTP):
 class _CommentsPermissionHTTP(_HTTP):
     def get(self, url: str, params: dict | None = None, headers: dict | None = None) -> _Response:
         if "comments" in (params or {}).get("fields", ""):
+            return _Response(
+                {
+                    "error": {
+                        "code": 10,
+                        "message": "This field requires an additional permission.",
+                    }
+                }
+            )
+        return super().get(url, params, headers)
+
+
+class _ReactionsPermissionHTTP(_HTTP):
+    def get(self, url: str, params: dict | None = None, headers: dict | None = None) -> _Response:
+        fields = (params or {}).get("fields", "")
+        if "comments" in fields or "reactions" in fields:
             return _Response(
                 {
                     "error": {
@@ -172,6 +189,33 @@ def test_page_post_retry_without_optional_comments_keeps_real_fields() -> None:
     assert "additional_permission_required" not in payload
 
 
+def test_page_posts_retry_without_reactions_and_keep_available_fields() -> None:
+    payload = list_page_posts(_credentials(), "page_1", http_client=_ReactionsPermissionHTTP())
+
+    assert payload["posts"][0]["id"] == "page_1_post_1"
+    assert payload["posts"][0]["engagement"] == {"comments": None, "reactions": None, "shares": 2}
+    assert payload["unavailable_engagement_fields"] == ["comments", "reactions"]
+    assert payload["partial"] is True
+    assert payload["real_data"] is True
+    assert "additional_permission_required" not in payload
+
+
+def test_page_post_retry_without_reactions_keeps_real_fields() -> None:
+    payload = get_page_post(
+        _credentials(),
+        "page_1",
+        "page_1_post_1",
+        http_client=_ReactionsPermissionHTTP(),
+    )
+
+    assert payload["post"]["id"] == "page_1_post_1"
+    assert payload["post"]["engagement"] == {"comments": None, "reactions": None, "shares": 2}
+    assert payload["unavailable_engagement_fields"] == ["comments", "reactions"]
+    assert payload["partial"] is True
+    assert payload["real_data"] is True
+    assert "additional_permission_required" not in payload
+
+
 def test_instagram_is_resolved_through_connected_facebook_page() -> None:
     payload = get_page_instagram_account(_credentials(), "page_1", http_client=_HTTP())
 
@@ -217,6 +261,21 @@ def test_page_engagement_retries_without_optional_comments() -> None:
 
     assert payload["engagement"] == {"comments": None, "reactions": 4, "shares": 2}
     assert payload["unavailable_engagement_fields"] == ["comments"]
+    assert payload["partial"] is True
+    assert payload["real_data"] is True
+    assert "additional_permission_required" not in payload
+
+
+def test_page_engagement_retries_without_reactions() -> None:
+    payload = get_page_post_engagement(
+        _credentials(),
+        "page_1",
+        "page_1_post_1",
+        http_client=_ReactionsPermissionHTTP(),
+    )
+
+    assert payload["engagement"] == {"comments": None, "reactions": None, "shares": 2}
+    assert payload["unavailable_engagement_fields"] == ["comments", "reactions"]
     assert payload["partial"] is True
     assert payload["real_data"] is True
     assert "additional_permission_required" not in payload

@@ -291,11 +291,12 @@ def _normalize_page_post(post: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-PAGE_POST_BASE_FIELDS = (
+PAGE_POST_CORE_FIELDS = (
     "id,message,story,created_time,permalink_url,full_picture,"
-    "attachments{description,title,type,url},shares,reactions.limit(0).summary(true)"
+    "attachments{description,title,type,url},shares"
 )
-PAGE_POST_FIELDS = f"{PAGE_POST_BASE_FIELDS},comments.limit(0).summary(true)"
+PAGE_POST_REACTION_FIELDS = f"{PAGE_POST_CORE_FIELDS},reactions.limit(0).summary(true)"
+PAGE_POST_FIELDS = f"{PAGE_POST_REACTION_FIELDS},comments.limit(0).summary(true)"
 
 
 def _list_published_posts(
@@ -304,24 +305,24 @@ def _list_published_posts(
     token: str,
     limit: int,
 ) -> tuple[list[dict[str, Any]], list[str]]:
-    try:
-        rows = graph.list_edge(
-            f"/{page_id}/published_posts",
-            {"fields": PAGE_POST_FIELDS},
-            access_token=token,
-            limit=limit,
-        )
-        return rows, []
-    except MetaGraphAPIError as exc:
-        if exc.code not in {10, 100, 200}:
-            raise
-    rows = graph.list_edge(
-        f"/{page_id}/published_posts",
-        {"fields": PAGE_POST_BASE_FIELDS},
-        access_token=token,
-        limit=limit,
+    variants = (
+        (PAGE_POST_FIELDS, []),
+        (PAGE_POST_REACTION_FIELDS, ["comments"]),
+        (PAGE_POST_CORE_FIELDS, ["comments", "reactions"]),
     )
-    return rows, ["comments"]
+    for fields, unavailable_fields in variants:
+        try:
+            rows = graph.list_edge(
+                f"/{page_id}/published_posts",
+                {"fields": fields},
+                access_token=token,
+                limit=limit,
+            )
+            return rows, unavailable_fields
+        except MetaGraphAPIError as exc:
+            if exc.code not in {10, 100, 200} or fields == PAGE_POST_CORE_FIELDS:
+                raise
+    raise MetaGraphAPIError("Meta Graph did not return Page publications.")
 
 
 def list_page_posts(
@@ -354,22 +355,25 @@ def get_page_post(
 ) -> dict[str, Any]:
     graph = _client(credentials, http_client)
     token = graph.page_access_token(page_id)
+    variants = (
+        (PAGE_POST_FIELDS, []),
+        (PAGE_POST_REACTION_FIELDS, ["comments"]),
+        (PAGE_POST_CORE_FIELDS, ["comments", "reactions"]),
+    )
+    data: dict[str, Any] = {}
     unavailable_fields: list[str] = []
-    try:
-        data = graph.get(
-            f"/{post_id}",
-            {"fields": f"{PAGE_POST_FIELDS},updated_time"},
-            access_token=token,
-        )
-    except MetaGraphAPIError as exc:
-        if exc.code not in {10, 100, 200}:
-            raise
-        data = graph.get(
-            f"/{post_id}",
-            {"fields": f"{PAGE_POST_BASE_FIELDS},updated_time"},
-            access_token=token,
-        )
-        unavailable_fields.append("comments")
+    for fields, missing in variants:
+        try:
+            data = graph.get(
+                f"/{post_id}",
+                {"fields": f"{fields},updated_time"},
+                access_token=token,
+            )
+            unavailable_fields = missing
+            break
+        except MetaGraphAPIError as exc:
+            if exc.code not in {10, 100, 200} or fields == PAGE_POST_CORE_FIELDS:
+                raise
     return live_meta_payload(
         {
             "page_id": page_id,
@@ -388,22 +392,21 @@ def get_page_post_engagement(
 ) -> dict[str, Any]:
     graph = _client(credentials, http_client)
     token = graph.page_access_token(page_id)
+    variants = (
+        ("id,shares,reactions.limit(0).summary(true),comments.limit(0).summary(true)", []),
+        ("id,shares,reactions.limit(0).summary(true)", ["comments"]),
+        ("id,shares", ["comments", "reactions"]),
+    )
+    post: dict[str, Any] = {}
     unavailable_fields: list[str] = []
-    try:
-        post = graph.get(
-            f"/{post_id}",
-            {"fields": "id,shares,comments.limit(0).summary(true),reactions.limit(0).summary(true)"},
-            access_token=token,
-        )
-    except MetaGraphAPIError as exc:
-        if exc.code not in {10, 100, 200}:
-            raise
-        post = graph.get(
-            f"/{post_id}",
-            {"fields": "id,shares,reactions.limit(0).summary(true)"},
-            access_token=token,
-        )
-        unavailable_fields.append("comments")
+    for fields, missing in variants:
+        try:
+            post = graph.get(f"/{post_id}", {"fields": fields}, access_token=token)
+            unavailable_fields = missing
+            break
+        except MetaGraphAPIError as exc:
+            if exc.code not in {10, 100, 200} or fields == "id,shares":
+                raise
     return live_meta_payload(
         {
             "page_id": page_id,
