@@ -43,6 +43,7 @@ STATIC_ROOT = WEB_ROOT / "static"
 LOGGER = logging.getLogger(__name__)
 AUTH_HEADER = "Authorization"
 TOKEN_HEADER = "X-AD-MCP-BETA-TOKEN"
+GOOGLE_LOGIN_STATE_COOKIE = "adforge_google_login_state"
 
 
 def _api_token_required(settings: Settings) -> bool:
@@ -79,6 +80,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     _omit_response_body = False
     _rate_limit_lock = threading.Lock()
     _rate_limit_hits: dict[str, list[float]] = {}
+    _max_rate_limit_keys = 4096
 
     def _set_default_headers(self) -> None:
         self.send_header("X-Content-Type-Options", "nosniff")
@@ -89,6 +91,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         self.send_header("Vary", "Authorization, Cookie")
         self.send_header("Cross-Origin-Resource-Policy", "same-origin")
         self.send_header("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+        if urlparse(self.settings.public_base_url).scheme.lower() == "https":
+            self.send_header("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
         self.send_header(
             "Content-Security-Policy",
             "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'self'",
@@ -167,10 +171,29 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Length", "0")
         self.end_headers()
 
-    def _redirect_with_session(self, location: str, session_token: str) -> None:
+    def _redirect_with_session(self, location: str, session_token: str, *, clear_cookie_name: str = "") -> None:
         self.send_response(HTTPStatus.FOUND)
         self._set_default_headers()
         self._send_session_cookie(session_token)
+        if clear_cookie_name:
+            self._clear_cookie(clear_cookie_name)
+        self.send_header("Location", location)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
+
+    def _redirect_with_cookie(self, location: str, name: str, value: str, *, max_age: int) -> None:
+        cookie = SimpleCookie()
+        cookie[name] = value
+        cookie[name]["path"] = "/"
+        cookie[name]["httponly"] = True
+        cookie[name]["samesite"] = "Lax"
+        cookie[name]["max-age"] = str(max(0, int(max_age)))
+        if self._secure_session_cookies():
+            cookie[name]["secure"] = True
+        self.send_response(HTTPStatus.FOUND)
+        self._set_default_headers()
+        for morsel in cookie.values():
+            self.send_header("Set-Cookie", morsel.OutputString())
         self.send_header("Location", location)
         self.send_header("Content-Length", "0")
         self.end_headers()
@@ -182,7 +205,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         cookie[self.settings.auth_session_cookie_name]["httponly"] = True
         cookie[self.settings.auth_session_cookie_name]["samesite"] = "Lax"
         cookie[self.settings.auth_session_cookie_name]["max-age"] = str(self.settings.auth_session_ttl_hours * 3600)
-        if self.settings.auth_secure_cookies:
+        if self._secure_session_cookies():
             cookie[self.settings.auth_session_cookie_name]["secure"] = True
         for morsel in cookie.values():
             self.send_header("Set-Cookie", morsel.OutputString())
@@ -194,10 +217,29 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         cookie[self.settings.auth_session_cookie_name]["httponly"] = True
         cookie[self.settings.auth_session_cookie_name]["samesite"] = "Lax"
         cookie[self.settings.auth_session_cookie_name]["max-age"] = "0"
-        if self.settings.auth_secure_cookies:
+        if self._secure_session_cookies():
             cookie[self.settings.auth_session_cookie_name]["secure"] = True
         for morsel in cookie.values():
             self.send_header("Set-Cookie", morsel.OutputString())
+
+    def _clear_cookie(self, name: str) -> None:
+        cookie = SimpleCookie()
+        cookie[name] = ""
+        cookie[name]["path"] = "/"
+        cookie[name]["httponly"] = True
+        cookie[name]["samesite"] = "Lax"
+        cookie[name]["max-age"] = "0"
+        if self._secure_session_cookies():
+            cookie[name]["secure"] = True
+        for morsel in cookie.values():
+            self.send_header("Set-Cookie", morsel.OutputString())
+
+    def _secure_session_cookies(self) -> bool:
+        return bool(
+            self.settings.auth_secure_cookies
+            or is_strict_auth_env(self.settings.env)
+            or urlparse(self.settings.public_base_url).scheme.lower() == "https"
+        )
 
     def _error(self, message: str, status: HTTPStatus = HTTPStatus.BAD_REQUEST, code: str = "bad_request") -> None:
         self._send_json({"error": message, "code": code}, status)
@@ -225,6 +267,19 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         cutoff = now - window
         key = self._rate_limit_key(scope, identifier)
         with self._rate_limit_lock:
+            if key not in self._rate_limit_hits and len(self._rate_limit_hits) >= self._max_rate_limit_keys:
+                for stale_key, stale_hits in list(self._rate_limit_hits.items()):
+                    if not stale_hits or max(stale_hits) < cutoff:
+                        self._rate_limit_hits.pop(stale_key, None)
+                        if len(self._rate_limit_hits) < self._max_rate_limit_keys:
+                            break
+            if key not in self._rate_limit_hits and len(self._rate_limit_hits) >= self._max_rate_limit_keys:
+                self._send_json(
+                    {"error": "Сервис временно перегружен попытками. Повторите запрос позже.", "code": "rate_limited"},
+                    HTTPStatus.TOO_MANY_REQUESTS,
+                    {"Retry-After": str(window)},
+                )
+                return False
             hits = [hit for hit in self._rate_limit_hits.get(key, []) if hit >= cutoff]
             if len(hits) >= max_hits:
                 self._rate_limit_hits[key] = hits
@@ -248,6 +303,15 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         cookie = SimpleCookie()
         cookie.load(raw_cookie)
         morsel = cookie.get(self.settings.auth_session_cookie_name)
+        return str(morsel.value) if morsel else ""
+
+    def _cookie_value(self, name: str) -> str:
+        raw_cookie = str(self.headers.get("Cookie", "") or "")
+        if not raw_cookie:
+            return ""
+        cookie = SimpleCookie()
+        cookie.load(raw_cookie)
+        morsel = cookie.get(name)
         return str(morsel.value) if morsel else ""
 
     def _session_user(self) -> AuthUser | None:
@@ -283,7 +347,15 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         protected_route = route.startswith("/api/") or route == self.settings.mcp_route_path
         if not protected_route or not _api_token_required(self.settings):
             return True
-        if route.startswith("/api/") and self._session_user():
+        operator_route = (
+            route.startswith("/api/diagnostics")
+            or route.startswith("/api/beta/")
+            or route in {"/api/hosted/oauth/diagnostics", "/api/hosted/oauth/readiness"}
+            or route.endswith("/oauth/diagnostics")
+            or route.endswith("/oauth/readiness")
+        )
+        session_user = self._session_user() if route.startswith("/api/") else None
+        if session_user and (not operator_route or session_user.is_admin):
             return True
         if not self.settings.web_api_token.strip():
             self._error(
@@ -300,6 +372,13 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             )
             return False
         return True
+
+    def _dashboard_service(self) -> MetaDashboardService:
+        """Build a workspace-scoped dashboard service for signed-in users."""
+        user = self._session_user()
+        if user and user.workspace_id:
+            return MetaDashboardService(self.settings, workspace_id=user.workspace_id)
+        return self.service
 
     def _request_origin(self) -> str:
         origin = str(self.headers.get("Origin", "") or "").strip()
@@ -330,7 +409,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
     def _ensure_same_origin_session_post(self, route: str) -> bool:
         if not route.startswith("/api/"):
             return True
-        if _extract_request_token(self.headers):
+        request_token = _extract_request_token(self.headers)
+        if request_token and self.settings.web_api_token.strip() and _request_token_is_valid(self.headers, self.settings):
             return True
         if not self._session_user():
             return True
@@ -396,6 +476,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         parsed = urlparse(self.path)
         return {key: values[-1] for key, values in parse_qs(parsed.query).items() if values}
 
+    @staticmethod
+    def _query_value_from_url(url: str, key: str) -> str:
+        parsed = urlparse(url)
+        values = parse_qs(parsed.query).get(key, [])
+        return str(values[-1]) if values else ""
+
     def _oauth_base_url(self) -> str:
         return self.settings.public_base_or_local_web_url.rstrip("/")
 
@@ -436,8 +522,8 @@ class AdsWebHandler(BaseHTTPRequestHandler):
         raw = self.rfile.read(content_length).decode("utf-8")
         return {key: values[-1] for key, values in parse_qs(raw).items() if values}
 
-    def _oauth_error_redirect(self, redirect_uri: str, error: str, state: str = "") -> None:
-        if not redirect_uri:
+    def _oauth_error_redirect(self, client_id: str, redirect_uri: str, error: str, state: str = "") -> None:
+        if not self.auth.oauth_redirect_uri_registered(client_id, redirect_uri):
             return self._send_json({"error": error}, HTTPStatus.BAD_REQUEST)
         payload = {"error": error}
         if state:
@@ -612,10 +698,22 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return self._redirect("/?google_login_error=auth_disabled")
                 if not self.google_login.configured():
                     return self._redirect("/?google_login_error=not_configured")
-                return self._redirect(self.google_login.authorization_url(next_path="/app"))
+                authorization_url = self.google_login.authorization_url(next_path="/app")
+                state = self._query_value_from_url(authorization_url, "state")
+                if not state:
+                    return self._redirect("/?google_login_error=invalid_state")
+                return self._redirect_with_cookie(
+                    authorization_url,
+                    GOOGLE_LOGIN_STATE_COOKIE,
+                    state,
+                    max_age=max(60, int(self.settings.google_login_state_ttl_seconds)),
+                )
             if route == self.settings.google_login_redirect_path:
                 try:
-                    profile = self.google_login.handle_callback(self._query())
+                    profile = self.google_login.handle_callback(
+                        self._query(),
+                        expected_state=self._cookie_value(GOOGLE_LOGIN_STATE_COOKIE),
+                    )
                     self.auth.ensure_schema()
                     user, created = self.auth.find_or_create_google_user(email=profile["email"], name=profile.get("name", ""))
                     token, _session_id = self.auth.create_session(
@@ -625,11 +723,20 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     )
                 except (GoogleLoginError, AuthValidationError, RuntimeError) as exc:
                     return self._redirect(f"/?google_login_error={quote(self._client_error_message(exc), safe='')}")
-                return self._redirect_with_session(f"/app?google_login={'created' if created else 'login'}", token)
+                return self._redirect_with_session(
+                    f"/app?google_login={'created' if created else 'login'}",
+                    token,
+                    clear_cookie_name=GOOGLE_LOGIN_STATE_COOKIE,
+                )
             if route == "/oauth/authorize":
                 query = self._query()
                 if query.get("response_type") != "code":
-                    return self._oauth_error_redirect(query.get("redirect_uri", ""), "unsupported_response_type", query.get("state", ""))
+                    return self._oauth_error_redirect(
+                        query.get("client_id", ""),
+                        query.get("redirect_uri", ""),
+                        "unsupported_response_type",
+                        query.get("state", ""),
+                    )
                 user = self._session_user()
                 if not user:
                     return self._redirect(f"/?oauth_authorize={quote(self.path, safe='')}")
@@ -645,7 +752,12 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                         code_challenge_method=str(query.get("code_challenge_method", "")),
                     )
                 except AuthValidationError as exc:
-                    return self._oauth_error_redirect(str(query.get("redirect_uri", "")), "invalid_request", str(query.get("state", "")))
+                    return self._oauth_error_redirect(
+                        str(query.get("client_id", "")),
+                        str(query.get("redirect_uri", "")),
+                        "invalid_request",
+                        str(query.get("state", "")),
+                    )
                 redirect_uri = str(query.get("redirect_uri", ""))
                 payload = {"code": code}
                 if query.get("state"):
@@ -707,6 +819,13 @@ class AdsWebHandler(BaseHTTPRequestHandler):
 
             if not self._ensure_api_authorized(route):
                 return
+
+            if route.startswith("/api/meta/") or route == "/api/hosted/connections" or (
+                route.startswith("/api/hosted/oauth/")
+                and not (route.endswith("/diagnostics") or route.endswith("/readiness"))
+            ):
+                if not self._ensure_session_user():
+                    return
 
             if route == self.settings.mcp_route_path:
                 return self._send_json(self.hosted.mcp_transport_placeholder(), HTTPStatus.NOT_IMPLEMENTED)
@@ -799,20 +918,20 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
 
             if route == "/api/meta/dashboard":
-                return self._send_json(self.service.dashboard(account_id=account_id, end_date=end_date))
+                return self._send_json(self._dashboard_service().dashboard(account_id=account_id, end_date=end_date))
             if route == "/api/meta/workspace":
-                return self._send_json(self.service.workspace(account_id=account_id, end_date=end_date))
+                return self._send_json(self._dashboard_service().workspace(account_id=account_id, end_date=end_date))
             if route == "/api/meta/data-contract":
-                return self._send_json(self.service.data_contract())
+                return self._send_json(self._dashboard_service().data_contract())
             if route == "/api/meta/campaign-structure":
-                return self._send_json(self.service.campaign_structure(account_id=account_id))
+                return self._send_json(self._dashboard_service().campaign_structure(account_id=account_id))
             if route == "/api/meta/delivery-issues":
-                return self._send_json(self.service.delivery_issues(account_id=account_id, limit=int(query.get("limit", "20"))))
+                return self._send_json(self._dashboard_service().delivery_issues(account_id=account_id, limit=int(query.get("limit", "20"))))
             if route == "/api/meta/assets":
-                return self._send_json(self.service.connected_assets(account_id=account_id))
+                return self._send_json(self._dashboard_service().connected_assets(account_id=account_id))
             if route == "/api/meta/top-performers":
                 return self._send_json(
-                    self.service.top_performers(
+                    self._dashboard_service().top_performers(
                         account_id=account_id,
                         end_date=end_date,
                         lookback_days=int(query.get("lookback_days", "7")),
@@ -823,7 +942,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
             if route == "/api/meta/no-result-entities":
                 return self._send_json(
-                    self.service.no_result_entities(
+                    self._dashboard_service().no_result_entities(
                         account_id=account_id,
                         end_date=end_date,
                         lookback_days=int(query.get("lookback_days", "7")),
@@ -833,20 +952,20 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     )
                 )
             if route == "/api/meta/config-diagnostics":
-                return self._send_json(self.service.config_diagnostics())
+                return self._send_json(self._dashboard_service().config_diagnostics())
             if route == "/api/meta/auth-diagnostics":
-                return self._send_json(self.service.auth_diagnostics())
+                return self._send_json(self._dashboard_service().auth_diagnostics())
             if route == "/api/meta/persistence":
-                return self._send_json(self.service.persistence_diagnostics())
+                return self._send_json(self._dashboard_service().persistence_diagnostics())
             if route == "/api/meta/debug-health":
-                return self._send_json(self.service.diagnostics_health())
+                return self._send_json(self._dashboard_service().diagnostics_health())
             if route == "/api/meta/skills/catalog":
-                return self._send_json(self.service.skill_catalog(account_id=account_id, end_date=end_date))
+                return self._send_json(self._dashboard_service().skill_catalog(account_id=account_id, end_date=end_date))
             if route == "/api/meta/skills/budget-summary":
-                return self._send_json(self.service.summarize_budget_skill(account_id=account_id, end_date=end_date))
+                return self._send_json(self._dashboard_service().summarize_budget_skill(account_id=account_id, end_date=end_date))
             if route == "/api/meta/skills/disable-candidates":
                 return self._send_json(
-                    self.service.disable_candidates_skill(
+                    self._dashboard_service().disable_candidates_skill(
                         account_id=account_id,
                         end_date=end_date,
                         lookback_days=int(query.get("lookback_days", "7")),
@@ -857,7 +976,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
             if route == "/api/meta/skills/scale-candidates":
                 return self._send_json(
-                    self.service.scale_candidates_skill(
+                    self._dashboard_service().scale_candidates_skill(
                         account_id=account_id,
                         end_date=end_date,
                         lookback_days=int(query.get("lookback_days", "7")),
@@ -869,7 +988,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
             if route == "/api/meta/skills/collect-report":
                 return self._send_json(
-                    self.service.collect_report_skill(
+                    self._dashboard_service().collect_report_skill(
                         account_id=account_id,
                         end_date=end_date,
                         lookback_days=int(query.get("lookback_days", "30")),
@@ -997,7 +1116,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if not user:
                     return
                 payload = self._json_body()
-                report_data = self.service.build_monthly_ads_report_for_user(
+                report_data = self._dashboard_service().build_monthly_ads_report_for_user(
                     user,
                     account_id=str(payload.get("account_id") or "").strip() or None,
                     end_date=str(payload.get("end_date") or "").strip() or None,
@@ -1020,7 +1139,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if not user:
                     return
                 payload = self._json_body()
-                report_data = self.service.build_monthly_ads_report_for_user(
+                report_data = self._dashboard_service().build_monthly_ads_report_for_user(
                     user,
                     account_id=str(payload.get("account_id") or "").strip() or None,
                     end_date=str(payload.get("end_date") or "").strip() or None,
@@ -1136,6 +1255,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     str(payload.get("current_password", "")),
                     str(payload.get("new_password", "")),
                     str(payload.get("confirm_password", "")),
+                    preserve_session_token=self._session_token(),
                 )
                 return self._send_json({"ok": True})
             if route == "/api/profile/avatar":
@@ -1210,6 +1330,9 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return
             if not self._ensure_same_origin_session_post(route):
                 return
+            if route.startswith("/api/hosted/") or route.startswith("/api/meta/"):
+                if not self._ensure_session_user():
+                    return
             payload = self._json_body()
             if route == "/api/hosted/connections/import-local":
                 user = self._session_user()
@@ -1256,7 +1379,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 return self._send_json(result)
             if route == "/api/meta/preview/clone-campaign":
                 return self._send_json(
-                    self.service.preview_clone_campaign(
+                    self._dashboard_service().preview_clone_campaign(
                         source_campaign_id=str(payload["source_campaign_id"]),
                         new_name=payload.get("new_name"),
                         daily_budget=payload.get("daily_budget"),
@@ -1267,7 +1390,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
             if route == "/api/meta/preview/update-campaign-budget":
                 return self._send_json(
-                    self.service.preview_update_campaign_budget(
+                    self._dashboard_service().preview_update_campaign_budget(
                         campaign_id=str(payload["campaign_id"]),
                         daily_budget=payload.get("daily_budget"),
                         lifetime_budget=payload.get("lifetime_budget"),
@@ -1278,7 +1401,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 )
             if route == "/api/meta/preview/pause-ads":
                 ids = payload.get("ids") or []
-                return self._send_json(self.service.preview_pause_ads(ids=[str(item) for item in ids], account_id=payload.get("account_id")))
+                return self._send_json(self._dashboard_service().preview_pause_ads(ids=[str(item) for item in ids], account_id=payload.get("account_id")))
         except (AdMCPError, ValueError, KeyError, json.JSONDecodeError, RuntimeError) as exc:
             return self._error(self._client_error_message(exc), code=self._client_error_code(exc))
         except Exception as exc:  # noqa: BLE001

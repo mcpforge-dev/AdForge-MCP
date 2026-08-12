@@ -53,6 +53,29 @@ def test_config_diagnostics_uses_hosted_connection_store(tmp_path) -> None:
     assert payload["runtime"]["accounts"][0]["account_id"] == "hosted_123"
 
 
+def test_workspace_scoped_dashboard_service_cannot_load_another_workspace(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=True,
+    )
+    assert settings.connections_fallback_to_local is False
+    store = HostedConnectionStore(settings.connection_store_file)
+    for workspace_id, account_id in (("workspace-a", "act_a"), ("workspace-b", "act_b")):
+        store.save_provider_config(
+            "meta_ads",
+            {"provider": "meta_ads", "accounts": [{"account_id": account_id, "name": account_id}]},
+            workspace_id=workspace_id,
+        )
+
+    service_a = MetaDashboardService(settings, workspace_id="workspace-a")
+    service_b = MetaDashboardService(settings, workspace_id="workspace-b")
+
+    assert [item["account_id"] for item in service_a._provider.config["accounts"]] == ["act_a"]
+    assert [item["account_id"] for item in service_b._provider.config["accounts"]] == ["act_b"]
+
+
 def test_monthly_report_reads_only_signed_in_workspace(tmp_path, monkeypatch) -> None:
     settings = Settings(
         project_root=tmp_path,

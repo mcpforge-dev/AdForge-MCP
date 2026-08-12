@@ -58,13 +58,13 @@ class GoogleLoginService:
         }
         return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
 
-    def handle_callback(self, query: dict[str, Any]) -> dict[str, str]:
+    def handle_callback(self, query: dict[str, Any], *, expected_state: str = "") -> dict[str, str]:
         if query.get("error"):
             raise GoogleLoginError("Google отменил вход или вернул ошибку авторизации.")
         code = str(query.get("code") or "").strip()
         if not code:
             raise GoogleLoginError("Google не вернул код авторизации.")
-        self._verify_state(str(query.get("state") or ""))
+        self._verify_state(str(query.get("state") or ""), expected_state=expected_state)
         token_payload = self._exchange_code(code)
         access_token = str(token_payload.get("access_token") or "").strip()
         if not access_token:
@@ -92,7 +92,9 @@ class GoogleLoginService:
         digest = hmac.new(self._state_secret, body.encode("ascii"), hashlib.sha256).digest()
         return f"{body}.{_b64url_encode(digest)}"
 
-    def _verify_state(self, state: str) -> dict[str, Any]:
+    def _verify_state(self, state: str, *, expected_state: str = "") -> dict[str, Any]:
+        if not expected_state or not hmac.compare_digest(state, expected_state):
+            raise GoogleLoginError("Google Login state не совпадает с браузерной сессией.")
         try:
             body, signature = state.split(".", 1)
             expected = _b64url_encode(hmac.new(self._state_secret, body.encode("ascii"), hashlib.sha256).digest())

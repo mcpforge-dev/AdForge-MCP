@@ -42,19 +42,20 @@ PREVIEW_ONLY_NOTE = "Реальное изменение не выполнено
 
 
 class MetaDashboardService:
-    def __init__(self, settings: Settings | None = None) -> None:
+    def __init__(self, settings: Settings | None = None, *, workspace_id: str | None = None) -> None:
         settings = settings or Settings()
         self._settings = settings
+        self._workspace_id = str(workspace_id or "").strip() or None
         safety_policy = load_safety_policy(settings.policy_config_path)
         if settings.preview_only:
             safety_policy.preview_only = True
             safety_policy.execution_mode = "simulated_no_write"
             safety_policy.write_mode = "preview_only"
         self._policy_manager = PolicyManager(safety_policy)
-        provider_configs, provider_sources = load_runtime_provider_configs(settings)
+        provider_configs, provider_sources = load_runtime_provider_configs(settings, workspace_id=self._workspace_id)
         self._provider_sources = provider_sources
         provider_config = provider_configs["meta_ads"]
-        if not provider_config.get("accounts"):
+        if not provider_config.get("accounts") and not self._workspace_id:
             provider_config = load_provider_config(settings.project_root / "config/providers", "meta_ads")
             self._provider_sources["meta_ads"] = "provider_example_config"
         self._provider_config = provider_config
@@ -858,10 +859,10 @@ class MetaDashboardService:
         return primary, example
 
     def _load_runtime_meta_config(self) -> dict[str, Any]:
-        provider_configs, provider_sources = load_runtime_provider_configs(self._settings)
+        provider_configs, provider_sources = load_runtime_provider_configs(self._settings, workspace_id=self._workspace_id)
         self._provider_sources = provider_sources
         provider_config = provider_configs["meta_ads"]
-        if provider_config.get("accounts"):
+        if provider_config.get("accounts") or self._workspace_id:
             return provider_config
         self._provider_sources["meta_ads"] = "provider_example_config"
         return load_provider_config(self._settings.project_root / "config/providers", "meta_ads")

@@ -503,7 +503,8 @@ def _rendered_page_evidence(url: str) -> dict[str, Any]:
 
     try:
         with sync_playwright() as playwright:
-            browser = playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage", "--no-sandbox"])
+            # Keep Chromium's sandbox enabled; this process may render attacker-controlled pages.
+            browser = playwright.chromium.launch(headless=True, args=["--disable-dev-shm-usage"])
             page = browser.new_page(viewport={"width": 1365, "height": 768}, java_script_enabled=True)
             page.route("**/*", _route_guard)
             response = page.goto(url, wait_until="domcontentloaded", timeout=TIMEOUT_SECONDS * 1000)

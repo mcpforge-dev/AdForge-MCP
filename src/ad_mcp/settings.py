@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from dotenv import load_dotenv
-from pydantic import Field
+from pydantic import Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -127,6 +127,14 @@ class Settings(BaseSettings):
     clickhouse_timeout_seconds: float = 5.0
     clickhouse_auto_sync_workspace: bool = True
     project_root: Path = Field(default=ROOT_DIR)
+
+    @model_validator(mode="after")
+    def disable_local_connection_fallback_in_strict_envs(self) -> "Settings":
+        # A local connections file may contain shared or legacy credentials;
+        # strict deployments must use workspace-scoped hosted storage only.
+        if is_strict_auth_env(self.env):
+            self.connections_fallback_to_local = False
+        return self
 
     @property
     def audit_log_file(self) -> Path:

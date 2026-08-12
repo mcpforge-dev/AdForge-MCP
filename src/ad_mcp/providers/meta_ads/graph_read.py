@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from typing import Any
+from urllib.parse import urlparse
 
 import httpx
 
@@ -38,7 +39,18 @@ class MetaGraphClient:
         *,
         access_token: str | None = None,
     ) -> dict[str, Any]:
-        url = path_or_url if path_or_url.startswith("https://") else f"{self.base_url}/{path_or_url.lstrip('/')}"
+        if path_or_url.startswith("https://"):
+            parsed = urlparse(path_or_url)
+            if (
+                parsed.hostname != "graph.facebook.com"
+                or parsed.username
+                or parsed.password
+                or parsed.fragment
+            ):
+                raise MetaGraphAPIError("Meta Graph pagination URL is not trusted.")
+            url = path_or_url
+        else:
+            url = f"{self.base_url}/{path_or_url.lstrip('/')}"
         token = access_token or self.credentials.access_token
         client = self.http_client or httpx.Client(timeout=20.0)
         close_client = self.http_client is None

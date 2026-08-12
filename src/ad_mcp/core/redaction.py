@@ -23,12 +23,17 @@ SECRET_TEXT_PATTERN = re.compile(
     r"(?i)\b(access_token|refresh_token|client_secret|app_secret|developer_token|oauth_client_secret|authorization|api_key|password|secret|token|code)=([^&\s'\"<>]+)"
 )
 
+SECRET_JSON_PATTERN = re.compile(
+    r"(?i)([\"'](?:access_token|refresh_token|client_secret|app_secret|developer_token|oauth_client_secret|authorization|api_key|password|secret|token|code)[\"']\s*:\s*[\"']?)([^,}\s'\"]+)"
+)
+
 BEARER_PATTERN = re.compile(r"(?i)\bBearer\s+[A-Za-z0-9._~+/=-]+")
 
 
 def redact_secret_text(text: Any) -> str:
     value = str(text or "")
     value = SECRET_TEXT_PATTERN.sub(r"\1=***REDACTED***", value)
+    value = SECRET_JSON_PATTERN.sub(r"\1***REDACTED***", value)
     return BEARER_PATTERN.sub("Bearer ***REDACTED***", value)
 
 

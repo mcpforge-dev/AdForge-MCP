@@ -280,6 +280,36 @@ def test_mcp_oauth_registration_rejects_bloated_redirects(tmp_path) -> None:
     assert fragment["code"] == "validation_error"
 
 
+def test_mcp_oauth_invalid_request_does_not_redirect_to_unregistered_uri(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    AuthStore(settings).ensure_schema()
+    base_url, close = _serve(settings)
+    try:
+        status, payload = _get_json(
+            base_url,
+            "/oauth/authorize?" + urlencode(
+                {
+                    "response_type": "token",
+                    "client_id": "unknown-client",
+                    "redirect_uri": "https://attacker.example/callback",
+                    "state": "state-1",
+                }
+            ),
+        )
+    finally:
+        close()
+
+    assert status == 400
+    assert payload["error"] == "unsupported_response_type"
+
+
 def test_mcp_oauth_chatgpt_cimd_authorize_and_token_flow(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
@@ -464,7 +494,7 @@ def test_google_login_callback_creates_or_reuses_user_session(tmp_path) -> None:
         def configured(self) -> bool:
             return True
 
-        def handle_callback(self, query: dict[str, str]) -> dict[str, str]:
+        def handle_callback(self, query: dict[str, str], *, expected_state: str = "") -> dict[str, str]:
             return self.profiles.pop(0)
 
     AdsWebHandler.google_login = _FakeGoogleLogin()  # type: ignore[assignment]
@@ -888,8 +918,8 @@ def test_email_registration_creates_session_and_authorizes_dashboard_api(tmp_pat
     assert "super-secret" not in str(payload)
     assert me_status == 200
     assert me["authenticated"] is True
-    assert capabilities_status == 200
-    assert capabilities["security"]["tokens_returned"] is False
+    assert capabilities_status == 401
+    assert capabilities["code"] == "api_auth_required"
     assert admin_status == 403
     assert admin_payload["code"] == "admin_required"
 
@@ -958,6 +988,36 @@ def test_session_post_requires_same_origin_for_logout(tmp_path) -> None:
     assert blocked_payload["code"] == "csrf_check_failed"
     assert ok_status == 200
     assert ok_payload["ok"] is True
+
+
+def test_session_post_does_not_treat_arbitrary_authorization_as_csrf_bypass(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        _status, _payload, cookie = _post_json(
+            base_url,
+            "/api/auth/register",
+            {"name": "Client User", "email": "client@example.com", "password": "super-secret"},
+        )
+        blocked_status, blocked_payload, _ = _post_json(
+            base_url,
+            "/api/auth/logout",
+            {},
+            cookie,
+            token="not-a-valid-beta-token",
+        )
+    finally:
+        close()
+
+    assert blocked_status == 403
+    assert blocked_payload["code"] == "csrf_check_failed"
 
 
 def test_user_mcp_token_lifecycle_returns_raw_only_once_and_stores_hash(tmp_path) -> None:

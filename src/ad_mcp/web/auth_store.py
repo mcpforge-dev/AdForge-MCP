@@ -16,13 +16,20 @@ from pathlib import Path
 from typing import Any
 from urllib.error import URLError
 from urllib.parse import unquote, urlparse
-from urllib.request import Request, urlopen
+from urllib.request import HTTPRedirectHandler, Request, build_opener
 
 from ad_mcp.settings import Settings
 
 
 CIMD_MAX_DOCUMENT_BYTES = 32_768
 CIMD_ALLOWED_HOST_SUFFIXES = ("chatgpt.com", "openai.com")
+
+
+class _NoRedirect(HTTPRedirectHandler):
+    """Do not let OAuth client metadata turn into a redirect-based SSRF."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: ANN001, D401
+        return None
 
 
 class AuthStoreError(RuntimeError):
@@ -114,6 +121,20 @@ def _host_matches_suffix(hostname: str, suffix: str) -> bool:
     return hostname == suffix or hostname.endswith(f".{suffix}")
 
 
+def _validate_oauth_redirect_uri(uri: str) -> str:
+    normalized = str(uri or "").strip()
+    if len(normalized) > 2048:
+        raise AuthValidationError("OAuth redirect_uri is too long.")
+    parsed = urlparse(normalized)
+    if not parsed.scheme or not parsed.netloc:
+        raise AuthValidationError("Некорректный OAuth redirect_uri.")
+    if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
+        raise AuthValidationError("OAuth redirect_uri должен быть https или localhost.")
+    if parsed.username or parsed.password or parsed.fragment:
+        raise AuthValidationError("OAuth redirect_uri содержит запрещённые части.")
+    return normalized
+
+
 def _normalize_email(email: str) -> str:
     return email.strip().lower()
 
@@ -121,6 +142,8 @@ def _normalize_email(email: str) -> str:
 def _password_hash(password: str) -> str:
     if len(password) < 8:
         raise AuthValidationError("Пароль должен быть не короче 8 символов.")
+    if len(password) > 256:
+        raise AuthValidationError("Password is too long.")
     salt = os.urandom(16)
     digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, 240_000)
     return "pbkdf2_sha256$240000$%s$%s" % (
@@ -134,9 +157,12 @@ def _verify_password(password: str, encoded: str) -> bool:
         algo, iterations, salt_b64, digest_b64 = encoded.split("$", 3)
         if algo != "pbkdf2_sha256":
             return False
+        iteration_count = int(iterations)
+        if iteration_count < 100_000 or iteration_count > 1_000_000:
+            return False
         salt = base64.b64decode(salt_b64.encode("ascii"))
         expected = base64.b64decode(digest_b64.encode("ascii"))
-        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, int(iterations))
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt, iteration_count)
         return hmac.compare_digest(actual, expected)
     except (ValueError, TypeError):
         return False
@@ -202,8 +228,8 @@ class AuthStore:
     def _placeholder(self) -> str:
         return "?" if self.driver == "sqlite" else "%s"
 
-    def _execute(self, connection, sql: str, values: tuple[Any, ...] = ()) -> None:
-        connection.execute(sql.replace("?", self._placeholder()), values)
+    def _execute(self, connection, sql: str, values: tuple[Any, ...] = ()):
+        return connection.execute(sql.replace("?", self._placeholder()), values)
 
     def _query_one(self, connection, sql: str, values: tuple[Any, ...] = ()) -> dict[str, Any] | None:
         cursor = connection.execute(sql.replace("?", self._placeholder()), values)
@@ -512,7 +538,15 @@ class AuthStore:
             )
             return user
 
-    def change_password(self, user_id: str, current_password: str, new_password: str, confirm_password: str) -> None:
+    def change_password(
+        self,
+        user_id: str,
+        current_password: str,
+        new_password: str,
+        confirm_password: str,
+        *,
+        preserve_session_token: str = "",
+    ) -> None:
         if new_password != confirm_password:
             raise AuthValidationError("Пароли не совпадают.")
         password_digest = _password_hash(new_password)
@@ -527,6 +561,22 @@ class AuthStore:
                 "UPDATE users SET password_hash = ?, updated_at = ? WHERE id = ?",
                 (password_digest, _now(), user_id),
             )
+            if preserve_session_token:
+                self._execute(
+                    connection,
+                    """
+                    UPDATE user_sessions
+                    SET revoked_at = ?
+                    WHERE user_id = ? AND revoked_at IS NULL AND session_token_hash <> ?
+                    """,
+                    (_now(), user_id, _hash_value(preserve_session_token)),
+                )
+            else:
+                self._execute(
+                    connection,
+                    "UPDATE user_sessions SET revoked_at = ? WHERE user_id = ? AND revoked_at IS NULL",
+                    (_now(), user_id),
+                )
 
     def profile_summary(self, user_id: str) -> dict[str, Any]:
         with self._connect() as connection:
@@ -888,16 +938,7 @@ class AuthStore:
             raise AuthValidationError("OAuth client can register at most 10 redirect_uris.")
         normalized_redirects = []
         for value in redirect_uris:
-            uri = str(value or "").strip()
-            if len(uri) > 2048:
-                raise AuthValidationError("OAuth redirect_uri is too long.")
-            parsed = urlparse(uri)
-            if parsed.scheme != "https" and parsed.hostname not in {"localhost", "127.0.0.1"}:
-                raise AuthValidationError("OAuth redirect_uri должен быть https или localhost.")
-            if not parsed.scheme or not parsed.netloc:
-                raise AuthValidationError("Некорректный OAuth redirect_uri.")
-            if parsed.fragment:
-                raise AuthValidationError("OAuth redirect_uri must not contain a fragment.")
+            uri = _validate_oauth_redirect_uri(str(value or ""))
             if uri not in normalized_redirects:
                 normalized_redirects.append(uri)
         client_id = f"holymedia_oauth_{uuid.uuid4().hex}"
@@ -928,7 +969,7 @@ class AuthStore:
         parsed = urlparse(client_id)
         if parsed.scheme != "https" or not parsed.netloc or not parsed.hostname:
             return False
-        if parsed.username or parsed.password:
+        if parsed.username or parsed.password or parsed.fragment:
             return False
         return any(_host_matches_suffix(parsed.hostname, suffix) for suffix in CIMD_ALLOWED_HOST_SUFFIXES)
 
@@ -943,7 +984,8 @@ class AuthStore:
             },
         )
         try:
-            with urlopen(request, timeout=5) as response:  # noqa: S310 - URL is HTTPS and allowlisted above.
+            opener = build_opener(_NoRedirect)
+            with opener.open(request, timeout=5) as response:  # noqa: S310 - URL is HTTPS and allowlisted above.
                 raw = response.read(CIMD_MAX_DOCUMENT_BYTES + 1)
         except (OSError, URLError) as exc:
             raise AuthValidationError("OAuth CIMD metadata is not reachable.") from exc
@@ -964,7 +1006,13 @@ class AuthStore:
         redirect_uris = metadata.get("redirect_uris")
         if not isinstance(redirect_uris, list) or not redirect_uris:
             raise AuthValidationError("OAuth CIMD metadata must include redirect_uris.")
-        normalized_redirects = [str(value or "").strip() for value in redirect_uris if str(value or "").strip()]
+        if len(redirect_uris) > 10:
+            raise AuthValidationError("OAuth CIMD metadata can declare at most 10 redirect_uris.")
+        normalized_redirects = []
+        for value in redirect_uris:
+            uri = _validate_oauth_redirect_uri(str(value or ""))
+            if uri not in normalized_redirects:
+                normalized_redirects.append(uri)
         if redirect_uri not in normalized_redirects:
             raise AuthValidationError("OAuth redirect_uri is not declared in CIMD metadata.")
         grant_types = metadata.get("grant_types")
@@ -1113,6 +1161,27 @@ class AuthStore:
             )
             return raw_code
 
+    def oauth_redirect_uri_registered(self, client_id: str, redirect_uri: str) -> bool:
+        """Return true only for an already registered client/redirect pair."""
+        client_id = str(client_id or "").strip()
+        redirect_uri = str(redirect_uri or "").strip()
+        if not client_id or not redirect_uri:
+            return False
+        self.ensure_schema()
+        with self._connect() as connection:
+            client = self._query_one(
+                connection,
+                "SELECT redirect_uris_json FROM mcp_oauth_clients WHERE client_id = ?",
+                (client_id,),
+            )
+        if not client:
+            return False
+        try:
+            redirect_uris = json.loads(str(client.get("redirect_uris_json") or "[]"))
+        except json.JSONDecodeError:
+            return False
+        return isinstance(redirect_uris, list) and redirect_uri in redirect_uris
+
     def exchange_mcp_oauth_code(
         self,
         *,
@@ -1153,11 +1222,13 @@ class AuthStore:
             auth_method = str(row.get("token_endpoint_auth_method") or "none")
             if auth_method != "none" and not self._verify_mcp_oauth_client_secret(connection, client_id, client_secret):
                 raise AuthInvalidClientError("OAuth client_secret недействителен.")
-            self._execute(
+            update_cursor = self._execute(
                 connection,
-                "UPDATE mcp_oauth_authorization_codes SET used_at = ? WHERE id = ?",
+                "UPDATE mcp_oauth_authorization_codes SET used_at = ? WHERE id = ? AND used_at IS NULL",
                 (now_text, row["id"]),
             )
+            if update_cursor.rowcount != 1:
+                raise AuthValidationError("OAuth authorization code уже использован.")
             raw_token = f"mcp_oauth_{secrets.token_urlsafe(40)}"
             expires_at_text = (now_dt + timedelta(days=30)).isoformat().replace("+00:00", "Z")
             self._execute(
