@@ -86,6 +86,7 @@
     diagnosticsRun: false,
     seoReport: null,
     seoFilters: { siteUrl: "__all", days: "28" },
+    reportAccounts: [],
     siteAnalysisCopy: {},
     siteAnalysisHistory: [],
   };
@@ -160,6 +161,11 @@
     el.seoRefresh = document.getElementById("seo-refresh");
     el.seoToolbar = document.getElementById("seo-toolbar");
     el.reportLoadingModal = document.getElementById("report-loading-modal");
+    el.reportNotice = document.getElementById("report-notice");
+    el.reportAccount = document.getElementById("report-account");
+    el.reportLookback = document.getElementById("report-lookback");
+    el.reportDownloadPdf = document.getElementById("report-download-pdf");
+    el.reportDownloadDocx = document.getElementById("report-download-docx");
     el.nextSteps = document.getElementById("next-steps");
     el.mcpUrl = document.getElementById("mcp-url");
     el.copyMcpUrl = document.getElementById("copy-mcp-url");
@@ -708,6 +714,8 @@
       tab.addEventListener("focus", select);
     });
     el.connectionsRefresh.addEventListener("click", () => loadConnections());
+    el.reportDownloadPdf?.addEventListener("click", () => downloadMonthlyAdsReport("pdf"));
+    el.reportDownloadDocx?.addEventListener("click", () => downloadMonthlyAdsReport("docx"));
     if (el.seoRefresh) el.seoRefresh.addEventListener("click", () => loadSeoReport({ force: true }));
     if (el.seoToolbar) el.seoToolbar.addEventListener("change", handleSeoFilterChange);
     if (el.seoToolbar) el.seoToolbar.addEventListener("click", handleSeoToolbarClick);
@@ -899,6 +907,7 @@
     if (state.section === "overview") loadOverview();
     if (state.section === "connections") loadConnections();
     if (state.section === "mcp") renderMcpPanel();
+    if (state.section === "report") loadMonthlyAdsReportPanel();
     if (state.section === "seo") loadSeoReport();
     if (state.section === "site-analysis") loadSiteAnalysisHistory();
     if (state.section === "diagnostics" && !state.diagnosticsRun) {
@@ -1322,6 +1331,87 @@
       ? `<button type="button" class="btn btn--primary btn--small" data-overview-cta>${esc(nextStep.ctaLabel)}</button>`
       : `<button type="button" class="btn btn--secondary btn--small" data-overview-cta>Открыть AI-клиента</button>`;
     el.overviewCta.querySelector("[data-overview-cta]").addEventListener("click", nextStep ? nextStep.action : () => setSection("mcp"));
+  }
+
+  /* ---------- client report ---------- */
+
+  async function loadMonthlyAdsReportPanel() {
+    el.reportNotice.innerHTML = "";
+    if (!state.connections) {
+      try {
+        state.connections = await api("/api/hosted/connections");
+      } catch (error) {
+        if (handle401(error)) return;
+        el.reportNotice.innerHTML = noticeMarkup(humanizeError(error), "error");
+        return;
+      }
+    }
+    const accounts = advertisingPlatforms(state.connections).flatMap((platform) =>
+      (platform.accounts || []).map((account) => ({
+        provider: platform.provider,
+        account_id: String(account.account_id || account.id || ""),
+        name: String(account.name || account.account_id || account.id || "Без названия"),
+      })).filter((account) => account.account_id),
+    );
+    state.reportAccounts = accounts;
+    const current = el.reportAccount.value;
+    el.reportAccount.innerHTML = accounts.length
+      ? accounts.map((account) => `<option value="${esc(account.account_id)}">${esc(account.name)} · ${esc(account.provider.replace("_", " "))}</option>`).join("")
+      : `<option value="">Нет подключённых рекламных кабинетов</option>`;
+    el.reportAccount.disabled = !accounts.length;
+    if (accounts.some((account) => account.account_id === current)) el.reportAccount.value = current;
+    el.reportDownloadPdf.disabled = !accounts.length;
+    el.reportDownloadDocx.disabled = !accounts.length;
+    if (!accounts.length) {
+      el.reportNotice.innerHTML = noticeMarkup("Сначала подключите рекламный кабинет в разделе «Подключения».", "warn");
+    }
+  }
+
+  async function downloadMonthlyAdsReport(format) {
+    const accountId = String(el.reportAccount?.value || "").trim();
+    const lookbackDays = Number.parseInt(el.reportLookback?.value || "30", 10);
+    if (!accountId) {
+      el.reportNotice.innerHTML = noticeMarkup("Выберите подключённый рекламный кабинет.", "warn");
+      return;
+    }
+    const button = format === "pdf" ? el.reportDownloadPdf : el.reportDownloadDocx;
+    setLoading(button, true);
+    el.reportNotice.innerHTML = noticeMarkup("Собираем отчёт по свежим данным рекламного кабинета…", "info");
+    try {
+      const selectedAccount = state.reportAccounts.find((account) => account.account_id === accountId);
+      const headers = { Accept: format === "pdf" ? "application/pdf" : "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "Content-Type": "application/json" };
+      const token = getToken();
+      if (token) headers.Authorization = `Bearer ${token}`;
+      const response = await fetch(`/api/meta/skills/collect-report.${format}`, {
+        method: "POST",
+        headers,
+        credentials: "same-origin",
+        body: JSON.stringify({ account_id: accountId, provider: selectedAccount?.provider || "meta_ads", lookback_days: lookbackDays }),
+      });
+      if (!response.ok) {
+        let payload = {};
+        try { payload = await response.json(); } catch (error) { /* keep generic status */ }
+        const requestError = new Error(payload.error || payload.message || `HTTP ${response.status}`);
+        requestError.status = response.status;
+        throw requestError;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `HolyMedia-MCP-ads-report-${safeFileDate()}.${format}`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      el.reportNotice.innerHTML = noticeMarkup(format === "pdf" ? "PDF-презентация скачана." : "DOCX-отчёт скачан.", "success");
+      toast(format === "pdf" ? "PDF-презентация скачана" : "DOCX-отчёт скачан", "success");
+    } catch (error) {
+      if (handle401(error)) return;
+      el.reportNotice.innerHTML = noticeMarkup(humanizeError(error), "error");
+    } finally {
+      setLoading(button, false);
+    }
   }
 
   function hasPending(platforms) {

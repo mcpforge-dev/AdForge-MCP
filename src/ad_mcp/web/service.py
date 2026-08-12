@@ -27,7 +27,10 @@ from ad_mcp.core.meta_skill_presets import (
 from ad_mcp.core.models import ObjectMutationResponse
 from ad_mcp.core.policy import PolicyManager
 from ad_mcp.core.preview_manager import PreviewManager
+from ad_mcp.providers.google_ads.client import GoogleAdsProvider
 from ad_mcp.providers.meta_ads.client import MetaAdsProvider
+from ad_mcp.providers.tiktok_ads.client import TikTokAdsProvider
+from ad_mcp.providers.yandex_direct.client import YandexDirectProvider
 from ad_mcp.reporting.monthly_ads import collect_monthly_ads_report
 from ad_mcp.settings import Settings
 from ad_mcp.storage.clickhouse import ClickHousePersistence
@@ -548,12 +551,23 @@ class MetaDashboardService:
         account_id: str | None = None,
         end_date: str | None = None,
         lookback_days: int = 30,
+        provider_name: str | None = None,
     ) -> dict[str, Any]:
         """Build a browser report from the signed-in user's workspace only."""
         store = HostedConnectionStore(self._settings.connection_store_file)
         workspace_id = str(getattr(user, "workspace_id", "") or "").strip() or None
-        config = store.provider_config("meta_ads", workspace_id=workspace_id)
-        provider = MetaAdsProvider(config=config)
+        report_provider = str(provider_name or "meta_ads").strip().lower()
+        provider_types = {
+            "google_ads": GoogleAdsProvider,
+            "meta_ads": MetaAdsProvider,
+            "tiktok_ads": TikTokAdsProvider,
+            "yandex_direct": YandexDirectProvider,
+        }
+        provider_type = provider_types.get(report_provider)
+        if provider_type is None:
+            raise ValueError("Для этого типа подключения пока нельзя собрать рекламный отчёт.")
+        config = store.provider_config(report_provider, workspace_id=workspace_id)
+        provider = provider_type(config=config)
         resolved_account_id = str(account_id or "").strip()
         if not resolved_account_id:
             accounts = config.get("accounts", []) if isinstance(config.get("accounts"), list) else []
@@ -561,13 +575,19 @@ class MetaDashboardService:
         account = provider.get_account_config(resolved_account_id)
         if not account:
             raise ValueError("Рекламный аккаунт не найден в рабочем пространстве пользователя.")
-        if self._has_placeholder_credentials(account):
-            raise ValueError("Для выбранного аккаунта не настроено рабочее подключение Meta.")
+        required_credentials = {
+            "meta_ads": ("access_token", "app_secret"),
+            "google_ads": ("developer_token", "oauth_client_id", "oauth_client_secret", "refresh_token"),
+            "tiktok_ads": ("access_token",),
+            "yandex_direct": ("access_token",),
+        }.get(report_provider, ())
+        if any(not str(account.get(key, "") or "").strip() for key in required_credentials):
+            raise ValueError("Для выбранного рекламного кабинета не настроено рабочее подключение.")
         resolved_end_date = end_date or date.today().isoformat()
         start_date, _, end_date_iso = self._date_window(end_date=resolved_end_date, lookback_days=lookback_days)
         return collect_monthly_ads_report(
             provider,
-            provider="meta_ads",
+            provider=report_provider,
             account_id=resolved_account_id,
             start_date=start_date,
             end_date=end_date_iso,

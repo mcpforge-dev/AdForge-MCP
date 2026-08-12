@@ -282,6 +282,7 @@
         <button type="button" class="nav-tab is-active" data-nav="overview">Начало работы</button>
         <button type="button" class="nav-tab" data-nav="connections">Подключения</button>
         <button type="button" class="nav-tab" data-nav="mcp">AI-клиент</button>
+        <button type="button" class="nav-tab" data-nav="report">Отчёт</button>
         <button type="button" class="nav-tab" data-nav="seo" disabled aria-disabled="true" title="Раздел временно недоступен">SEO</button>
         <button type="button" class="nav-tab" data-nav="site-analysis">Анализ сайта</button>
         <button type="button" class="nav-tab" data-nav="profile">Профиль</button>
@@ -312,6 +313,53 @@
               <button id="copy-mcp-url" type="button" class="btn btn--secondary btn--small">Скопировать</button>
             </div>
             <p class="card__hint">Изменения в рекламе применяются только после вашего подтверждения.</p>
+          </article>
+        </div>
+      </section>
+
+      <!-- Client report -->
+      <section id="section-report" class="section" data-section="report" hidden>
+        <div class="section-head">
+          <div>
+            <h2>Клиентский отчёт</h2>
+            <p class="section-head__sub">Соберите презентабельный отчёт по рекламному кабинету в формате PDF-презентации или DOCX.</p>
+          </div>
+        </div>
+        <div id="report-notice"></div>
+        <div class="grid-2 report-layout">
+          <article class="card report-builder-card">
+            <div class="report-builder-card__eyebrow">HOLYMEDIA MCP · REPORT</div>
+            <h3 class="card__title">Собрать отчёт</h3>
+            <p class="card__hint">В отчёт попадут только данные выбранного рекламного кабинета и периода. Пропуски не заменяются нулями.</p>
+            <div class="report-form-fields">
+              <label class="field">
+                <span class="field__label">Рекламный кабинет</span>
+                <select id="report-account" class="field__control"></select>
+              </label>
+              <label class="field">
+                <span class="field__label">Период</span>
+                <select id="report-lookback" class="field__control">
+                  <option value="7">Последние 7 дней</option>
+                  <option value="14">Последние 14 дней</option>
+                  <option value="30" selected>Последние 30 дней</option>
+                  <option value="90">Последние 90 дней</option>
+                </select>
+              </label>
+            </div>
+            <div class="report-actions">
+              <button id="report-download-pdf" type="button" class="btn btn--primary">Скачать PDF-презентацию</button>
+              <button id="report-download-docx" type="button" class="btn btn--secondary">Скачать DOCX</button>
+            </div>
+            <p class="card__hint report-builder-card__note">PDF оформлен как клиентская презентация 16:9: обложка, KPI, динамика, кампании, выводы и методология.</p>
+          </article>
+          <article class="report-preview-card" aria-label="Состав отчёта">
+            <div class="report-preview-card__topline"><span>MONTHLY ADS REPORT</span><span>01</span></div>
+            <div class="report-preview-card__body">
+              <span>HOLYMEDIA MCP</span>
+              <strong>Отчёт по<br>рекламным кампаниям</strong>
+              <em>Понятные цифры и выводы для клиента</em>
+            </div>
+            <div class="report-preview-card__footer">Обложка · KPI · сравнение · кампании · выводы</div>
           </article>
         </div>
       </section>

@@ -7,6 +7,7 @@ import pytest
 from ad_mcp.core.models import ReportResponse
 from ad_mcp.reporting.monthly_ads import collect_monthly_ads_report
 from ad_mcp.web.monthly_ads_report import build_monthly_ads_report_docx
+from ad_mcp.web.monthly_ads_report_pdf import build_monthly_ads_report_pdf
 
 
 class FakeProvider:

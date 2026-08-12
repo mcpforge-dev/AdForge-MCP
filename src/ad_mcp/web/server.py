@@ -35,6 +35,7 @@ from ad_mcp.web.service import MetaDashboardService
 from ad_mcp.web.site_analysis_history import SiteAnalysisHistoryStore
 from ad_mcp.web.site_analysis_report import build_site_analysis_docx
 from ad_mcp.web.monthly_ads_report import build_monthly_ads_report_docx
+from ad_mcp.web.monthly_ads_report_pdf import build_monthly_ads_report_pdf
 
 
 WEB_ROOT = Path(__file__).resolve().parent
@@ -1001,6 +1002,7 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     account_id=str(payload.get("account_id") or "").strip() or None,
                     end_date=str(payload.get("end_date") or "").strip() or None,
                     lookback_days=int(payload.get("lookback_days", 30)),
+                    provider_name=str(payload.get("provider") or "").strip() or None,
                 )
                 try:
                     report = build_monthly_ads_report_docx(report_data)
@@ -1010,6 +1012,29 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     report,
                     "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
                     "HolyMedia-MCP-monthly-ads-report.docx",
+                )
+            if route == "/api/meta/skills/collect-report.pdf":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                payload = self._json_body()
+                report_data = self.service.build_monthly_ads_report_for_user(
+                    user,
+                    account_id=str(payload.get("account_id") or "").strip() or None,
+                    end_date=str(payload.get("end_date") or "").strip() or None,
+                    lookback_days=int(payload.get("lookback_days", 30)),
+                    provider_name=str(payload.get("provider") or "").strip() or None,
+                )
+                try:
+                    report = build_monthly_ads_report_pdf(report_data)
+                except RuntimeError:
+                    return self._error("Генератор PDF временно недоступен.", HTTPStatus.SERVICE_UNAVAILABLE, "pdf_unavailable")
+                return self._send_download(
+                    report,
+                    "application/pdf",
+                    "HolyMedia-MCP-monthly-ads-report.pdf",
                 )
             if route == "/api/auth/forgot-password":
                 payload = self._json_body()
