@@ -1,5 +1,13 @@
 {
   "$schema": "https://turborepo.com/schema.json",
+  "globalEnv": [
+    "NODE_ENV",
+    "V2_INTEGRATION_TESTS",
+    "DATABASE_URL",
+    "REDIS_URL",
+    "SESSION_HASH_SECRET",
+    "CORS_ORIGINS"
+  ],
   "tasks": {
     "build": {
       "dependsOn": ["^build"],
