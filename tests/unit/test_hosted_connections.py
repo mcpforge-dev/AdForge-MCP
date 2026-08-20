@@ -3,9 +3,37 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+
 from ad_mcp.core.connection_store import HostedConnectionStore
 from ad_mcp.settings import Settings
 from ad_mcp.web.hosted import HostedConnectionService
+
+
+class _FakeManualMetaOAuth:
+    def __init__(self) -> None:
+        self.authorization_args = None
+        self.selection_args = None
+
+    def authorization_url(self, workspace_id=None, user_id=None, *, manual_request_id=None):
+        self.authorization_args = (workspace_id, user_id, manual_request_id)
+        return "https://www.facebook.com/dialog/oauth?safe=1"
+
+    def pending_selection(self, pending_id, workspace_id=None):
+        return {
+            "provider": "meta_ads",
+            "pending_id": pending_id,
+            "status": "pending_account_selection",
+            "metadata": {"manual_request_id": "request-1"},
+            "accounts": [
+                {"account_id": "act_111", "name": "Requested"},
+                {"account_id": "act_222", "name": "Must stay hidden"},
+            ],
+        }
+
+    def select_accounts(self, pending_id, account_ids, workspace_id=None, user_id=None):
+        self.selection_args = (pending_id, account_ids, workspace_id, user_id)
+        return {"provider": "meta_ads", "status": "connected", "accounts": [{"account_id": account_ids[0]}]}
 
 
 def test_mcp_connection_info_uses_public_url_and_route_path(tmp_path: Path) -> None:
@@ -23,6 +51,29 @@ def test_mcp_connection_info_uses_public_url_and_route_path(tmp_path: Path) -> N
     assert info["url"] == "https://mcp.adforge.dev/mcp"
     assert info["transport"] == "streamable_http"
     assert info["auth"]["type"] == "bearer"
+
+
+def test_manual_meta_oauth_is_bound_to_request_workspace_and_requested_account(tmp_path: Path) -> None:
+    service = HostedConnectionService(Settings(project_root=tmp_path, connection_store_path="tokens/connections.json"))
+    fake_oauth = _FakeManualMetaOAuth()
+    service._meta_oauth = fake_oauth
+    request = {
+        "id": "request-1",
+        "workspace_id": "workspace-client",
+        "user_id": "user-client",
+        "meta_ad_account_id": "111",
+        "status": "in_progress",
+    }
+
+    authorization = service.manual_meta_oauth_authorization_info(request)
+    pending = service.manual_meta_oauth_pending(request, "pending-1")
+    selected = service.manual_meta_oauth_select(request, "pending-1")
+
+    assert authorization["status"] == "oauth_ready"
+    assert fake_oauth.authorization_args == ("workspace-client", "user-client", "request-1")
+    assert [account["account_id"] for account in pending["accounts"]] == ["act_111"]
+    assert fake_oauth.selection_args == ("pending-1", ["act_111"], "workspace-client", "user-client")
+    assert selected["accounts"][0]["account_id"] == "act_111"
 
 
 def test_mcp_connection_info_exposes_safe_ai_client_compatibility(tmp_path: Path) -> None:
@@ -93,6 +144,22 @@ def test_oauth_start_preview_marks_beta_platform_as_not_configured(tmp_path: Pat
 
     assert payload["status"] == "oauth_not_configured"
     assert payload["redirect_url"] == "https://mcp.adforge.dev/oauth/meta/callback"
+
+
+def test_meta_public_oauth_is_blocked_while_manual_onboarding_is_enabled(tmp_path: Path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        public_base_url="https://mcp.adforge.dev",
+        meta_oauth_app_id="meta-app-id",
+        meta_oauth_app_secret="meta-app-secret",
+    )
+    service = HostedConnectionService(settings)
+
+    with pytest.raises(ValueError, match="специалистом"):
+        service.oauth_authorization_info("meta_ads")
+    readiness = service.oauth_readiness("meta_ads")["platforms"][0]
+    assert readiness["overall_status"] == "blocked_manual_onboarding"
+    assert readiness["manual_onboarding_enabled"] is True
 
 
 def test_dashboard_oauth_return_url_points_to_connections(tmp_path: Path) -> None:

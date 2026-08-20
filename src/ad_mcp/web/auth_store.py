@@ -5,6 +5,7 @@ import hashlib
 import hmac
 import json
 import os
+import re
 import secrets
 import sqlite3
 import threading
@@ -726,6 +727,216 @@ class AuthStore:
                     "UPDATE platform_connections SET status = 'disconnected', updated_at = ? WHERE id = ?",
                     (timestamp, connection_id),
                 )
+
+    @staticmethod
+    def _manual_meta_id(value: Any, *, field: str, required: bool = False, account: bool = False) -> str:
+        clean = str(value or "").strip()
+        if not clean:
+            if required:
+                raise AuthValidationError(f"{field} обязателен для заявки.")
+            return ""
+        if len(clean) > 64 or not re.fullmatch(r"(?:act_)?\d{5,30}", clean):
+            raise AuthValidationError(f"{field} должен содержать только корректный числовой ID Meta.")
+        if account and not clean.startswith("act_"):
+            return f"act_{clean}"
+        return clean
+
+    def create_manual_connection_request(self, user: AuthUser, payload: dict[str, Any]) -> dict[str, Any]:
+        """Create a Meta onboarding request without accepting provider credentials."""
+        self.ensure_schema()
+        forbidden = {
+            "access_token", "user_access_token", "page_access_token", "refresh_token",
+            "app_secret", "client_secret", "developer_token", "password", "token",
+        }
+        if forbidden.intersection(str(key).strip().lower() for key in payload):
+            raise AuthValidationError("Заявка не принимает пароли, токены или секреты. Передайте только данные рекламного кабинета.")
+        workspace_id = str(user.workspace_id or "").strip()
+        if not workspace_id:
+            raise AuthValidationError("Для заявки не найдено рабочее пространство.")
+        company_name = str(payload.get("company_name") or "").strip()
+        if len(company_name) > 160:
+            raise AuthValidationError("Название компании слишком длинное.")
+        business_id = self._manual_meta_id(payload.get("business_id"), field="Business ID")
+        ad_account_id = self._manual_meta_id(payload.get("ad_account_id"), field="ID рекламного кабинета", required=True, account=True)
+        page_id = self._manual_meta_id(payload.get("page_id"), field="Page ID")
+        instagram_username = str(payload.get("instagram_username") or "").strip().lstrip("@").lower()
+        if len(instagram_username) > 80 or (instagram_username and not re.fullmatch(r"[a-z0-9._]+", instagram_username)):
+            raise AuthValidationError("Instagram username содержит недопустимые символы.")
+        contact_preference = str(payload.get("contact_preference") or "email").strip().lower()
+        if contact_preference not in {"email", "telegram", "whatsapp"}:
+            raise AuthValidationError("Выберите допустимый способ связи.")
+        client_note = str(payload.get("client_note") or "").strip()
+        if len(client_note) > 2000:
+            raise AuthValidationError("Комментарий к заявке слишком длинный.")
+        if re.search(
+            r"access[\s_-]?token|page[\s_-]?access|app[\s_-]?secret|client[\s_-]?secret|password|bearer\s+|(?:EA|sk-|GOCSPX-)[A-Za-z0-9_\-|]{16,}",
+            client_note,
+            re.IGNORECASE,
+        ):
+            raise AuthValidationError("Комментарий не должен содержать пароли, токены или секреты.")
+        company_name = company_name or str(user.name or user.email).strip()
+        now = _now()
+        with self._connect() as connection:
+            active = self._query_one(
+                connection,
+                """
+                SELECT id FROM manual_connection_requests
+                WHERE user_id = ? AND workspace_id = ? AND provider = 'meta_ads'
+                  AND status NOT IN ('completed', 'cancelled')
+                ORDER BY created_at DESC LIMIT 1
+                """,
+                (user.id, workspace_id),
+            )
+            if active:
+                return self._manual_connection_request_by_id(connection, str(active["id"])) | {"created": False}
+            request_id = uuid.uuid4().hex
+            self._execute(
+                connection,
+                """
+                INSERT INTO manual_connection_requests
+                  (id, workspace_id, user_id, provider, company_name, meta_business_id,
+                   meta_ad_account_id, meta_page_id, instagram_username, contact_preference,
+                   client_note, status, specialist_note, assigned_to, created_at, updated_at)
+                VALUES (?, ?, ?, 'meta_ads', ?, ?, ?, ?, ?, ?, ?, 'new', '', NULL, ?, ?)
+                """,
+                (
+                    request_id, workspace_id, user.id, company_name, business_id,
+                    ad_account_id, page_id, instagram_username, contact_preference,
+                    client_note, now, now,
+                ),
+            )
+            self._execute(
+                connection,
+                """
+                INSERT INTO audit_events
+                  (id, actor_user_id, workspace_id, event_type, entity_type, entity_id, metadata_json, created_at)
+                VALUES (?, ?, ?, 'manual_connection_request_created', 'manual_connection_request', ?, ?, ?)
+                """,
+                (
+                    uuid.uuid4().hex, user.id, workspace_id, request_id,
+                    json.dumps({"provider": "meta_ads", "account_id": ad_account_id}, separators=(",", ":")), now,
+                ),
+            )
+            return self._manual_connection_request_by_id(connection, request_id) | {"created": True}
+
+    def _manual_connection_request_by_id(self, connection, request_id: str) -> dict[str, Any]:
+        row = self._query_one(
+            connection,
+            """
+            SELECT id, workspace_id, user_id, provider, company_name, meta_business_id,
+                   meta_ad_account_id, meta_page_id, instagram_username, contact_preference,
+                   client_note, status, specialist_note, assigned_to, created_at, updated_at
+            FROM manual_connection_requests WHERE id = ? LIMIT 1
+            """,
+            (request_id,),
+        )
+        if not row:
+            raise AuthValidationError("Заявка на подключение не найдена.")
+        return row
+
+    def list_manual_connection_requests_for_user(self, user: AuthUser) -> list[dict[str, Any]]:
+        self.ensure_schema()
+        with self._connect() as connection:
+            return self._query_all(
+                connection,
+                """
+                SELECT id, workspace_id, user_id, provider, company_name, meta_business_id,
+                       meta_ad_account_id, meta_page_id, instagram_username, contact_preference,
+                       client_note, status, specialist_note, assigned_to, created_at, updated_at
+                FROM manual_connection_requests
+                WHERE user_id = ? AND workspace_id = ?
+                ORDER BY created_at DESC LIMIT 20
+                """,
+                (user.id, str(user.workspace_id or "")),
+            )
+
+    def list_manual_connection_requests(self, *, limit: int = 100) -> list[dict[str, Any]]:
+        self.ensure_schema()
+        safe_limit = max(1, min(int(limit), 200))
+        with self._connect() as connection:
+            return self._query_all(
+                connection,
+                """
+                SELECT r.id, r.workspace_id, r.user_id, u.name AS user_name, u.email AS user_email,
+                       r.provider, r.company_name, r.meta_business_id, r.meta_ad_account_id,
+                       r.meta_page_id, r.instagram_username, r.contact_preference, r.client_note,
+                       r.status, r.specialist_note, r.assigned_to, r.created_at, r.updated_at
+                FROM manual_connection_requests r
+                LEFT JOIN users u ON u.id = r.user_id
+                ORDER BY CASE r.status WHEN 'new' THEN 0 WHEN 'in_progress' THEN 1 ELSE 2 END,
+                         r.created_at DESC LIMIT ?
+                """,
+                (safe_limit,),
+            )
+
+    def manual_connection_request(self, request_id: str) -> dict[str, Any]:
+        self.ensure_schema()
+        with self._connect() as connection:
+            return self._manual_connection_request_by_id(connection, str(request_id or "").strip())
+
+    def user_by_id(self, user_id: str) -> AuthUser:
+        self.ensure_schema()
+        with self._connect() as connection:
+            row = self._query_one(
+                connection,
+                """
+                SELECT u.*, wm.workspace_id
+                FROM users u
+                LEFT JOIN workspace_members wm ON wm.user_id = u.id
+                WHERE u.id = ?
+                ORDER BY wm.created_at ASC
+                LIMIT 1
+                """,
+                (str(user_id or "").strip(),),
+            )
+        if not row:
+            raise AuthValidationError("Пользователь заявки не найден.")
+        return self._row_to_user(row)
+
+    def update_manual_connection_request(
+        self,
+        request_id: str,
+        *,
+        status: str,
+        specialist_note: str,
+        assigned_to: str | None,
+        actor_user_id: str,
+    ) -> dict[str, Any]:
+        self.ensure_schema()
+        clean_status = str(status or "").strip().lower()
+        if clean_status not in {"new", "in_progress", "waiting_for_client", "ready_for_connection", "completed", "cancelled"}:
+            raise AuthValidationError("Недопустимый статус заявки.")
+        note = str(specialist_note or "").strip()
+        if len(note) > 2000:
+            raise AuthValidationError("Заметка специалиста слишком длинная.")
+        clean_id = str(request_id or "").strip()
+        if not clean_id:
+            raise AuthValidationError("Не указан ID заявки.")
+        now = _now()
+        with self._connect() as connection:
+            current = self._manual_connection_request_by_id(connection, clean_id)
+            self._execute(
+                connection,
+                """
+                UPDATE manual_connection_requests
+                SET status = ?, specialist_note = ?, assigned_to = ?, updated_at = ?
+                WHERE id = ?
+                """,
+                (clean_status, note, assigned_to or None, now, clean_id),
+            )
+            self._execute(
+                connection,
+                """
+                INSERT INTO audit_events
+                  (id, actor_user_id, workspace_id, event_type, entity_type, entity_id, metadata_json, created_at)
+                VALUES (?, ?, ?, 'manual_connection_request_updated', 'manual_connection_request', ?, ?, ?)
+                """,
+                (
+                    uuid.uuid4().hex, actor_user_id, current.get("workspace_id"), clean_id,
+                    json.dumps({"status": clean_status}, separators=(",", ":")), now,
+                ),
+            )
+            return self._manual_connection_request_by_id(connection, clean_id)
 
     def avatar_path(self, user_id: str) -> str:
         with self._connect() as connection:
@@ -1663,6 +1874,26 @@ _SCHEMA = [
       entity_id TEXT,
       metadata_json TEXT,
       created_at TEXT NOT NULL
+    )
+    """,
+    """
+    CREATE TABLE IF NOT EXISTS manual_connection_requests (
+      id TEXT PRIMARY KEY,
+      workspace_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT 'meta_ads',
+      company_name TEXT NOT NULL,
+      meta_business_id TEXT,
+      meta_ad_account_id TEXT NOT NULL,
+      meta_page_id TEXT,
+      instagram_username TEXT,
+      contact_preference TEXT NOT NULL DEFAULT 'email',
+      client_note TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'new',
+      specialist_note TEXT NOT NULL DEFAULT '',
+      assigned_to TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
     )
     """,
 ]

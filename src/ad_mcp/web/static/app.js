@@ -75,6 +75,7 @@
     user: null,
     capabilities: null,
     connections: null,
+    manualMetaRequest: null,
     mcpToken: null,
     mcpOAuthClient: null,
     activePending: null,
@@ -2686,8 +2687,12 @@
     el.connectionsNotice.innerHTML = state.notice ? noticeMarkup(state.notice.text, state.notice.tone) : "";
     if (!state.connections) el.connectionsList.innerHTML = emptyState("Загружаем подключения...");
     try {
-      const connections = await api("/api/hosted/connections");
+      const [connections, requestInfo] = await Promise.all([
+        api("/api/hosted/connections"),
+        api("/api/connection-requests").catch(() => ({ requests: [] })),
+      ]);
       state.connections = connections;
+      state.manualMetaRequest = (requestInfo.requests || [])[0] || null;
       renderConnections(connections);
     } catch (error) {
       if (handle401(error)) return;
@@ -2740,8 +2745,9 @@
     const status = resolveStatus(platform);
     const accounts = platform.accounts || [];
     const testMode = TEST_MODE.has(platform.provider);
-    const canConnect = Boolean(platform.oauth_configured);
-    const connectLabel = !canConnect ? "Платформа настраивается" : status === "connected" ? "Переподключить" : "Подключить";
+    const manualMetaOnly = platform.provider === "meta_ads" && platform.manual_onboarding_enabled;
+    const canConnect = Boolean(platform.oauth_configured) && !manualMetaOnly;
+    const connectLabel = manualMetaOnly ? "Подключение через Meta временно недоступно" : !canConnect ? "Платформа настраивается" : status === "connected" ? "Переподключить" : "Подключить";
 
     const metaBits = platformMeta(platform, status, accounts);
 
@@ -2762,13 +2768,41 @@
         ${metaBits.length ? `<div class="platform-card__meta">${metaBits.join("")}</div>` : ""}
         <p class="platform-card__hint">${esc(statusHint(status, canConnect))}</p>
         ${accountsBlock}
+        ${manualMetaOnly ? renderManualMetaCallout(state.manualMetaRequest) : ""}
         ${pending ? renderPendingCallout(platform, pending) : ""}
         ${expired && !pending ? renderExpiredCallout() : ""}
         <div class="platform-card__actions">
           <button type="button" class="btn btn--primary btn--small" data-oauth="${escAttr(platform.provider)}" ${canConnect ? "" : "disabled"}>${connectLabel}</button>
+          ${manualMetaOnly ? `<button type="button" class="btn btn--secondary btn--small" data-manual-meta-request>${state.manualMetaRequest ? "Открыть заявку" : "Оставить заявку на подключение вручную"}</button>` : ""}
           ${accounts.length ? `<button type="button" class="btn btn--danger btn--small" data-disconnect="${escAttr(platform.provider)}">Отключить</button>` : ""}
         </div>
       </article>
+    `;
+  }
+
+  function renderManualMetaCallout(request) {
+    if (request) {
+      const labels = {
+        new: "Заявка принята",
+        in_progress: "Специалист обрабатывает заявку",
+        waiting_for_client: "Нужно действие с вашей стороны",
+        ready_for_connection: "Можно подключать кабинет",
+        completed: "Подключение завершено",
+        cancelled: "Заявка закрыта",
+      };
+      return `
+        <div class="callout callout--info">
+          <strong>${esc(labels[request.status] || "Заявка на ручное подключение")}</strong>
+          <span>Meta App проходит проверку. Специалист HolyMedia поможет подключить кабинет без передачи пароля или access token.</span>
+          ${request.specialist_note ? `<small>${esc(request.specialist_note)}</small>` : ""}
+        </div>
+      `;
+    }
+    return `
+      <div class="callout callout--info">
+        <strong>Подключение Meta через специалиста</strong>
+        <span>Пока приложение Meta проходит проверку, оставьте заявку. Специалист HolyMedia подключит кабинет через безопасную выдачу доступа в Business Manager.</span>
+      </div>
     `;
   }
 
@@ -2944,6 +2978,9 @@
     el.connectionsList.querySelectorAll("[data-oauth]").forEach((btn) =>
       btn.addEventListener("click", () => startOAuth(btn.dataset.oauth, btn)),
     );
+    el.connectionsList.querySelectorAll("[data-manual-meta-request]").forEach((btn) =>
+      btn.addEventListener("click", () => openManualMetaRequest()),
+    );
     el.connectionsList.querySelectorAll("[data-diag]").forEach((btn) =>
       btn.addEventListener("click", () => runPlatformDiagnostics(btn.dataset.diag, btn)),
     );
@@ -3095,6 +3132,51 @@
       state.notice = { tone: "error", text: humanizeError(error) };
       renderConnections(state.connections);
       showClientMessage("Ошибка подключения", humanizeError(error), "error");
+    }
+  }
+
+  function openManualMetaRequest() {
+    const request = state.manualMetaRequest || {};
+    showClientModal({
+      title: request.id ? "Заявка на подключение Meta" : "Оставить заявку на подключение Meta",
+      subtitle: "Передайте только данные кабинета. Пароли, access token и секреты HolyMedia не нужны.",
+      body: `
+        <form id="manual-meta-request-form" class="stack-form">
+          <label class="field"><span class="field__label">Компания или проект</span><input name="company_name" maxlength="160" value="${escAttr(request.company_name || state.user?.name || "")}" required></label>
+          <label class="field"><span class="field__label">ID рекламного кабинета Meta</span><input name="ad_account_id" inputmode="numeric" maxlength="32" placeholder="Например: 1423247033195473" value="${escAttr(request.meta_ad_account_id || "")}" required></label>
+          <p class="field__hint">Его можно найти в Ads Manager. Можно указать с префиксом <code>act_</code> или без него.</p>
+          <label class="field"><span class="field__label">Business ID <small>(необязательно)</small></span><input name="business_id" inputmode="numeric" maxlength="32" placeholder="ID Business Portfolio" value="${escAttr(request.meta_business_id || "")}"></label>
+          <label class="field"><span class="field__label">Facebook Page ID <small>(необязательно)</small></span><input name="page_id" inputmode="numeric" maxlength="32" value="${escAttr(request.meta_page_id || "")}"></label>
+          <label class="field"><span class="field__label">Instagram username <small>(необязательно)</small></span><input name="instagram_username" maxlength="80" placeholder="@company" value="${escAttr(request.instagram_username || "")}"></label>
+          <label class="field"><span class="field__label">Как связаться</span><select name="contact_preference"><option value="email" ${request.contact_preference !== "telegram" && request.contact_preference !== "whatsapp" ? "selected" : ""}>Email из аккаунта HolyMedia</option><option value="telegram" ${request.contact_preference === "telegram" ? "selected" : ""}>Telegram</option><option value="whatsapp" ${request.contact_preference === "whatsapp" ? "selected" : ""}>WhatsApp</option></select></label>
+          <label class="field"><span class="field__label">Комментарий специалисту <small>(необязательно)</small></span><textarea name="client_note" rows="4" maxlength="2000" placeholder="Например: нужен доступ только к рекламе и отчётам.">${esc(request.client_note || "")}</textarea></label>
+          <div class="callout callout--warn"><strong>Не отправляйте секреты</strong><span>HolyMedia не просит пароль Meta, access token, app secret или код из SMS. Доступ выдаётся через Business Manager.</span></div>
+          <div class="modal-form-actions"><button type="submit" class="btn btn--primary">${request.id ? "Обновить заявку" : "Отправить заявку"}</button><button type="button" class="btn btn--ghost" data-client-modal-close>Закрыть</button></div>
+        </form>
+      `,
+      tone: "info",
+      closeLabel: "",
+    });
+    const form = el.clientModal.querySelector("#manual-meta-request-form");
+    form?.addEventListener("submit", (event) => submitManualMetaRequest(event, form, event.submitter));
+    el.clientModal.querySelectorAll("[data-client-modal-close]").forEach((button) => button.addEventListener("click", closeClientModal));
+  }
+
+  async function submitManualMetaRequest(event, form, button) {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(form).entries());
+    setLoading(button, true);
+    try {
+      const result = await api("/api/connection-requests/meta", "POST", payload);
+      state.manualMetaRequest = result;
+      state.notice = { tone: "success", text: "Заявка отправлена специалисту HolyMedia." };
+      closeClientModal();
+      await loadConnections();
+      showClientMessage("Заявка отправлена", "Специалист HolyMedia свяжется с вами по указанному в аккаунте контакту.", "success");
+    } catch (error) {
+      if (handle401(error)) return;
+      setLoading(button, false);
+      showClientMessage("Не удалось отправить заявку", humanizeError(error), "error");
     }
   }
 
@@ -3294,17 +3376,18 @@
   async function loadAdmin() {
     el.adminContent.innerHTML = emptyState("Загружаем пользователей...");
     try {
-      const [users, diagnostics] = await Promise.all([
+      const [users, diagnostics, requests] = await Promise.all([
         api("/api/admin/users"),
         api("/api/admin/diagnostics"),
+        api("/api/admin/connection-requests"),
       ]);
-      renderAdmin(users.users || [], diagnostics);
+      renderAdmin(users.users || [], diagnostics, requests.requests || []);
     } catch (error) {
       el.adminContent.innerHTML = errorState(humanizeError(error));
     }
   }
 
-  function renderAdmin(users, diagnostics) {
+  function renderAdmin(users, diagnostics, requests = []) {
     const rows = users.map((user) => `
       <tr>
         <td><strong>${esc(user.name || "—")}</strong><br><span class="mono">${esc(user.email || "")}</span></td>
@@ -3330,6 +3413,16 @@
     const database = diagnostics.database || {};
     const oauthProviders = diagnostics.oauth_readiness?.platforms || diagnostics.oauth?.providers || [];
     const oauthCards = oauthProviders.map(renderAdminOAuthCard).join("");
+    const requestRows = requests.map((request) => `
+      <tr>
+        <td><strong>${esc(request.company_name || "—")}</strong><br><span class="mono">${esc(request.meta_ad_account_id || "")}</span></td>
+        <td><strong>${esc(request.user_name || "—")}</strong><br><span class="mono">${esc(request.user_email || "")}</span></td>
+        <td><span class="mono">${esc(request.meta_business_id || "—")}</span><br>${request.meta_page_id ? `<span class="mono">Page: ${esc(request.meta_page_id)}</span>` : ""}</td>
+        <td><select data-request-status="${escAttr(request.id)}"><option value="new" ${request.status === "new" ? "selected" : ""}>Новая</option><option value="in_progress" ${request.status === "in_progress" ? "selected" : ""}>В работе</option><option value="waiting_for_client" ${request.status === "waiting_for_client" ? "selected" : ""}>Ждём клиента</option><option value="ready_for_connection" ${request.status === "ready_for_connection" ? "selected" : ""}>Готова к подключению</option><option value="completed" ${request.status === "completed" ? "selected" : ""}>Завершена</option><option value="cancelled" ${request.status === "cancelled" ? "selected" : ""}>Закрыта</option></select></td>
+        <td><textarea data-request-note="${escAttr(request.id)}" rows="2" maxlength="2000" placeholder="Что сделать клиенту или специалисту">${esc(request.specialist_note || "")}</textarea><div class="admin-table__actions"><button class="btn btn--secondary btn--small" data-request-save="${escAttr(request.id)}">Сохранить</button>${!["completed", "cancelled"].includes(request.status) ? `<button class="btn btn--primary btn--small" data-request-meta-oauth="${escAttr(request.id)}">Подключить Meta</button>` : ""}</div></td>
+        <td>${esc(formatTime(request.created_at))}</td>
+      </tr>
+    `).join("");
     el.adminContent.innerHTML = `
       <div class="diag-grid">
         <article class="card">
@@ -3356,6 +3449,13 @@
       </div>
       ${oauthCards ? `<article class="card"><h3 class="card__title">OAuth setup</h3><div class="admin-oauth-grid">${oauthCards}</div></article>` : ""}
       <article class="card">
+        <h3 class="card__title">Заявки на ручное подключение Meta</h3>
+        <p class="card__hint">Здесь нет токенов и паролей. После проверки заявки специалист выдаёт доступ через Meta Business Manager и подключает кабинет к workspace клиента.</p>
+        <div class="admin-table-wrap">
+          <table class="admin-table"><thead><tr><th>Компания / кабинет</th><th>Клиент</th><th>Business / Page</th><th>Статус</th><th>Заметка</th><th>Создана</th></tr></thead><tbody>${requestRows || `<tr><td colspan="6">Заявок пока нет.</td></tr>`}</tbody></table>
+        </div>
+      </article>
+      <article class="card">
         <h3 class="card__title">Пользователи</h3>
         <div class="admin-table-wrap">
           <table class="admin-table">
@@ -3377,6 +3477,21 @@
         updateAdminUser(button.dataset.adminTokenRevoke, {}, "/api/admin/users/mcp-token/revoke", button);
       });
     });
+    el.adminContent.querySelectorAll("[data-request-save]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const requestId = button.dataset.requestSave;
+        const status = el.adminContent.querySelector(`[data-request-status="${CSS.escape(requestId)}"]`)?.value || "new";
+        const note = el.adminContent.querySelector(`[data-request-note="${CSS.escape(requestId)}"]`)?.value || "";
+        updateAdminConnectionRequest(requestId, { status, specialist_note: note }, button);
+      });
+    });
+    el.adminContent.querySelectorAll("[data-request-meta-oauth]").forEach((button) => {
+      button.addEventListener("click", () => startManualMetaOAuth(button.dataset.requestMetaOauth, button));
+    });
+    const oauthParams = new URLSearchParams(window.location.search);
+    const manualRequestId = oauthParams.get("manual_meta_request");
+    const pendingId = oauthParams.get("pending_id");
+    if (manualRequestId && pendingId) completeManualMetaOAuth(manualRequestId, pendingId);
   }
 
   function renderAdminOAuthCard(provider) {
@@ -3419,6 +3534,46 @@
     } catch (error) {
       toast(humanizeError(error), "error");
       setLoading(button, false);
+    }
+  }
+
+  async function updateAdminConnectionRequest(requestId, payload, button) {
+    setLoading(button, true);
+    try {
+      await api("/api/admin/connection-requests/status", "POST", { request_id: requestId, ...payload });
+      await loadAdmin();
+      toast("Заявка обновлена.", "success");
+    } catch (error) {
+      toast(humanizeError(error), "error");
+      setLoading(button, false);
+    }
+  }
+
+  async function startManualMetaOAuth(requestId, button) {
+    setLoading(button, true);
+    try {
+      const result = await api("/api/admin/connection-requests/meta/authorize-url", "POST", { request_id: requestId });
+      window.location.assign(result.authorization_url);
+    } catch (error) {
+      toast(humanizeError(error), "error");
+      setLoading(button, false);
+    }
+  }
+
+  async function completeManualMetaOAuth(requestId, pendingId) {
+    const cleanUrl = `${window.location.pathname}`;
+    window.history.replaceState({}, "", cleanUrl);
+    try {
+      const result = await api(`/api/admin/connection-requests/meta/pending?request_id=${encodeURIComponent(requestId)}&pending_id=${encodeURIComponent(pendingId)}`);
+      const account = (result.pending?.accounts || [])[0];
+      if (!account) throw new Error("Рекламный кабинет из заявки не найден в OAuth-доступе специалиста.");
+      const confirmed = window.confirm(`Подключить ${account.name || account.account_id} (${account.account_id}) к workspace клиента?`);
+      if (!confirmed) return;
+      await api("/api/admin/connection-requests/meta/select", "POST", { request_id: requestId, pending_id: pendingId });
+      toast("Meta Ads подключён к workspace клиента.", "success");
+      await loadAdmin();
+    } catch (error) {
+      toast(humanizeError(error), "error");
     }
   }
 

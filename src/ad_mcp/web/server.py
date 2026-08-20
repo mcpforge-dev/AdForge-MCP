@@ -800,10 +800,26 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                     return
                 self.auth.ensure_schema()
                 return self._send_json({"profile": self.auth.profile_summary(user.id)})
+            if route == "/api/connection-requests":
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                return self._send_json({"requests": self.auth.list_manual_connection_requests_for_user(user)})
             if route == "/api/admin/users":
                 if not self._ensure_admin_user():
                     return
                 return self._send_json({"users": self.auth.list_users()})
+            if route == "/api/admin/connection-requests":
+                if not self._ensure_admin_user():
+                    return
+                return self._send_json({"requests": self.auth.list_manual_connection_requests()})
+            if route == "/api/admin/connection-requests/meta/pending":
+                if not self._ensure_admin_user():
+                    return
+                query = self._query()
+                request = self.auth.manual_connection_request(str(query.get("request_id") or ""))
+                pending = self.hosted.manual_meta_oauth_pending(request, str(query.get("pending_id") or ""))
+                return self._send_json({"pending": pending})
             if route == "/api/admin/diagnostics":
                 if not self._ensure_admin_user():
                     return
@@ -1302,6 +1318,72 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 result = self.auth.create_mcp_oauth_client_credentials(user)
                 safe = {key: value for key, value in result.items() if key != "client_secret"}
                 return self._send_json({"client": safe, "client_secret": result["client_secret"]})
+            if route == "/api/connection-requests/meta":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                user = self._ensure_session_user()
+                if not user:
+                    return
+                if not self._ensure_rate_limit("manual_connection_request", identifier=user.id, limit=3):
+                    return
+                payload = self._json_body()
+                result = self.auth.create_manual_connection_request(user, payload)
+                return self._send_json(result, HTTPStatus.CREATED if result.get("created") else HTTPStatus.OK)
+            if route == "/api/admin/connection-requests/status":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                admin = self._ensure_admin_user()
+                if not admin:
+                    return
+                payload = self._json_body()
+                result = self.auth.update_manual_connection_request(
+                    str(payload.get("request_id") or ""),
+                    status=str(payload.get("status") or ""),
+                    specialist_note=str(payload.get("specialist_note") or ""),
+                    assigned_to=admin.id,
+                    actor_user_id=admin.id,
+                )
+                return self._send_json({"request": result})
+            if route == "/api/admin/connection-requests/meta/authorize-url":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                admin = self._ensure_admin_user()
+                if not admin:
+                    return
+                if not self._ensure_rate_limit("manual_meta_oauth", identifier=admin.id, limit=10):
+                    return
+                payload = self._json_body()
+                request = self.auth.manual_connection_request(str(payload.get("request_id") or ""))
+                result = self.hosted.manual_meta_oauth_authorization_info(request)
+                self.auth.update_manual_connection_request(
+                    request["id"],
+                    status="in_progress",
+                    specialist_note=str(request.get("specialist_note") or ""),
+                    assigned_to=admin.id,
+                    actor_user_id=admin.id,
+                )
+                return self._send_json(result)
+            if route == "/api/admin/connection-requests/meta/select":
+                if not self._ensure_same_origin_session_post(route):
+                    return
+                admin = self._ensure_admin_user()
+                if not admin:
+                    return
+                payload = self._json_body()
+                request = self.auth.manual_connection_request(str(payload.get("request_id") or ""))
+                result = self.hosted.manual_meta_oauth_select(request, str(payload.get("pending_id") or ""))
+                target_user = self.auth.user_by_id(str(request.get("user_id") or ""))
+                if target_user.workspace_id != str(request.get("workspace_id") or ""):
+                    raise AuthValidationError("Workspace пользователя не совпадает с заявкой.")
+                self.auth.record_platform_connection(target_user, "meta_ads", result.get("accounts", []))
+                completed = self.auth.update_manual_connection_request(
+                    request["id"],
+                    status="completed",
+                    specialist_note="Meta Ads подключён. Кабинет доступен в AI-клиенте в режиме чтения.",
+                    assigned_to=admin.id,
+                    actor_user_id=admin.id,
+                )
+                return self._send_json({"connection": result, "request": completed})
             if route == "/api/admin/users/status":
                 if not self._ensure_same_origin_session_post(route):
                     return

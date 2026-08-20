@@ -279,6 +279,16 @@ class HostedConnectionService:
         }
 
     def dashboard_oauth_return_url(self, provider: str, payload: dict[str, Any] | None = None, error: str | None = None) -> str:
+        metadata = payload.get("metadata", {}) if isinstance(payload, dict) else {}
+        manual_request_id = str(metadata.get("manual_request_id") or "") if isinstance(metadata, dict) else ""
+        if provider == "meta_ads" and manual_request_id:
+            query = {
+                "manual_meta_request": manual_request_id,
+                "status": str(payload.get("status") or "pending_account_selection"),
+            }
+            if payload.get("pending_id"):
+                query["pending_id"] = str(payload["pending_id"])
+            return f"/admin?{urlencode(query)}"
         query: dict[str, str] = {"section": "connections", "provider": provider}
         if error:
             query["status"] = "error"
@@ -339,6 +349,8 @@ class HostedConnectionService:
         }
 
     def meta_oauth_redirect_url(self, user: Any | None = None) -> str:
+        if self._settings.meta_manual_onboarding_enabled:
+            raise ValueError("Подключение Meta через OAuth временно выполняется специалистом HolyMedia.")
         return self._meta_oauth.authorization_url(workspace_id=self._workspace_id(user), user_id=self._user_id(user))
 
     def meta_oauth_callback(self, query: dict[str, str]) -> dict[str, Any]:
@@ -357,12 +369,67 @@ class HostedConnectionService:
             user_id=self._user_id(user),
         )
 
+    @staticmethod
+    def _manual_meta_account_id(value: Any) -> str:
+        clean = str(value or "").strip()
+        return clean if clean.startswith("act_") else f"act_{clean}"
+
+    def manual_meta_oauth_authorization_info(self, request: dict[str, Any]) -> dict[str, Any]:
+        request_id = str(request.get("id") or "").strip()
+        workspace_id = str(request.get("workspace_id") or "").strip()
+        user_id = str(request.get("user_id") or "").strip()
+        if not request_id or not workspace_id or not user_id:
+            raise ValueError("Заявка не содержит безопасную привязку к пользователю и workspace.")
+        if str(request.get("status") or "") in {"completed", "cancelled"}:
+            raise ValueError("Эта заявка уже закрыта.")
+        return {
+            "request_id": request_id,
+            "status": "oauth_ready",
+            "authorization_url": self._meta_oauth.authorization_url(
+                workspace_id=workspace_id,
+                user_id=user_id,
+                manual_request_id=request_id,
+            ),
+        }
+
+    def manual_meta_oauth_pending(self, request: dict[str, Any], pending_id: str) -> dict[str, Any]:
+        pending = self._meta_oauth.pending_selection(
+            str(pending_id or "").strip(),
+            workspace_id=str(request.get("workspace_id") or "").strip(),
+        )
+        metadata = pending.get("metadata", {}) if isinstance(pending.get("metadata"), dict) else {}
+        if str(metadata.get("manual_request_id") or "") != str(request.get("id") or ""):
+            raise ValueError("OAuth-сессия не относится к выбранной заявке.")
+        requested_account_id = self._manual_meta_account_id(request.get("meta_ad_account_id"))
+        accounts = [
+            account
+            for account in pending.get("accounts", [])
+            if self._manual_meta_account_id(account.get("account_id")) == requested_account_id
+        ]
+        if not accounts:
+            raise ValueError("У специалиста нет доступа к рекламному кабинету из заявки.")
+        return pending | {"accounts": accounts, "requested_account_id": requested_account_id}
+
+    def manual_meta_oauth_select(self, request: dict[str, Any], pending_id: str) -> dict[str, Any]:
+        pending = self.manual_meta_oauth_pending(request, pending_id)
+        account_id = str(pending["requested_account_id"])
+        return self._meta_oauth.select_accounts(
+            str(pending_id or "").strip(),
+            [account_id],
+            workspace_id=str(request.get("workspace_id") or "").strip(),
+            user_id=str(request.get("user_id") or "").strip(),
+        )
+
     def oauth_redirect_url(self, provider: str, user: Any | None = None) -> str:
+        if provider == "meta_ads" and self._settings.meta_manual_onboarding_enabled:
+            raise ValueError("Подключение Meta через OAuth временно выполняется специалистом HolyMedia.")
         service = self._require_oauth_service(provider)
         self._ensure_oauth_public(provider)
         return service.authorization_url(workspace_id=self._workspace_id(user), user_id=self._user_id(user))
 
     def oauth_authorization_info(self, provider: str, user: Any | None = None) -> dict[str, Any]:
+        if provider == "meta_ads" and self._settings.meta_manual_onboarding_enabled:
+            raise ValueError("Подключение Meta через OAuth временно выполняется специалистом HolyMedia.")
         service = self._require_oauth_service(provider)
         self._ensure_oauth_public(provider)
         return {
@@ -482,6 +549,7 @@ class HostedConnectionService:
             "oauth_configured": oauth_preview.get("status") == "oauth_ready",
             "oauth_credentials_configured": oauth_credentials_configured,
             "oauth_public_enabled": oauth_public_enabled,
+            "manual_onboarding_enabled": platform.provider == "meta_ads" and self._settings.meta_manual_onboarding_enabled,
             "oauth_redirect_url": oauth_preview.get("redirect_url"),
             "status": status,
             "source": source,
@@ -546,6 +614,8 @@ class HostedConnectionService:
             overall_status = "ready_to_connect"
         elif missing_required:
             overall_status = "blocked_missing_credentials"
+        elif authorize_status["status"] == "blocked_manual_onboarding":
+            overall_status = "blocked_manual_onboarding"
         elif not public_enabled:
             overall_status = "blocked_provider_dashboard_check"
         else:
@@ -559,6 +629,7 @@ class HostedConnectionService:
             "credentials_present": credentials_present,
             "missing_required_env": missing_required,
             "public_connection_enabled": public_enabled,
+            "manual_onboarding_enabled": platform.provider == "meta_ads" and self._settings.meta_manual_onboarding_enabled,
             "expected_redirect_url": diagnostic["redirect_url"],
             "authorize_url": authorize_status,
             "connect_button_enabled": connect_enabled,
@@ -580,6 +651,11 @@ class HostedConnectionService:
         }
 
     def _authorize_url_readiness(self, provider: str, credentials_present: bool, public_enabled: bool) -> dict[str, Any]:
+        if provider == "meta_ads" and self._settings.meta_manual_onboarding_enabled:
+            return {
+                "status": "blocked_manual_onboarding",
+                "message": "Meta подключается через заявку специалисту до завершения App Review.",
+            }
         if not credentials_present:
             return {"status": "blocked_missing_credentials", "message": "Required OAuth env credentials are missing."}
         if not public_enabled:

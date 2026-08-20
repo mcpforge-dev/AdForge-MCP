@@ -68,6 +68,7 @@ class Settings(BaseSettings):
     meta_oauth_app_secret: str = ""
     meta_oauth_api_version: str = "v20.0"
     meta_oauth_scopes: str = "ads_read,business_management,pages_show_list,pages_read_engagement"
+    meta_manual_onboarding_enabled: bool = True
     meta_ads_management_oauth_enabled: bool = False
     meta_oauth_state_ttl_seconds: int = 900
     meta_app_review_commit_enabled: bool = False

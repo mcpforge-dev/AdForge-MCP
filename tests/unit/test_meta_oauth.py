@@ -157,6 +157,21 @@ def test_meta_oauth_callback_discovers_accounts_and_select_saves_credentials(tmp
     assert "page-token" not in str(selected)
 
 
+def test_meta_oauth_manual_request_is_signed_and_returned_as_safe_metadata(tmp_path) -> None:
+    service = MetaOAuthService(_settings(tmp_path), _FakeMetaHTTP())
+    url = service.authorization_url(
+        workspace_id="workspace-client",
+        user_id="user-client",
+        manual_request_id="request-123",
+    )
+    state = parse_qs(urlparse(url).query)["state"][0]
+
+    pending = service.handle_callback({"code": "callback-code", "state": state})
+
+    assert pending["metadata"]["manual_request_id"] == "request-123"
+    assert "long-token" not in str(pending)
+
+
 def test_meta_oauth_rejects_tampered_state(tmp_path) -> None:
     service = MetaOAuthService(_settings(tmp_path), _FakeMetaHTTP())
     state = parse_qs(urlparse(service.authorization_url()).query)["state"][0]

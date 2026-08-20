@@ -56,7 +56,13 @@ class MetaOAuthService:
             permissions.append("ads_management")
         return permissions
 
-    def authorization_url(self, workspace_id: str | None = None, user_id: str | None = None) -> str:
+    def authorization_url(
+        self,
+        workspace_id: str | None = None,
+        user_id: str | None = None,
+        *,
+        manual_request_id: str | None = None,
+    ) -> str:
         self._ensure_configured()
         redirect_uri = self.redirect_uri()
         state_id = uuid4().hex
@@ -68,6 +74,7 @@ class MetaOAuthService:
                 "redirect_uri": redirect_uri,
                 "workspace_id": workspace_id,
                 "user_id": user_id,
+                "manual_request_id": manual_request_id,
             }
         )
         self._store.save_oauth_state(
@@ -168,6 +175,7 @@ class MetaOAuthService:
                 "granted_permissions": granted_permissions,
                 "declined_permissions": declined_permissions,
                 "discovery_warnings": discovery_warnings,
+                "manual_request_id": str(state_payload.get("manual_request_id") or ""),
             },
         )
         return pending | {"status": "pending_account_selection", "account_count": len(pending["accounts"])}
