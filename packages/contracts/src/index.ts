@@ -75,3 +75,62 @@ export type ProviderConnectionView = {
   missingScopes: string[];
   accounts: ProviderAccountView[];
 };
+
+export type ProviderDateRange = {
+  startDate: string;
+  endDate: string;
+  timezone?: string | null;
+};
+
+export type ProviderProvenance = {
+  provider: ProviderId;
+  sourceApi: string;
+  realData: boolean;
+  dataStatus: "live" | "empty" | "partial" | "additional_permission_required";
+  fetchedAt: string;
+  cacheAgeSeconds?: number;
+};
+
+export type ProviderMoney = {
+  amount: string;
+  currency: string | null;
+};
+
+export type ProviderMetricSummary = {
+  spend: ProviderMoney | null;
+  impressions: number | null;
+  clicks: number | null;
+  ctr: number | null;
+  cpc: ProviderMoney | null;
+  cpm: ProviderMoney | null;
+  conversions: number | null;
+  conversionValue: string | null;
+  costPerConversion: ProviderMoney | null;
+};
+
+export type ProviderAccountSummary = ProviderAccountView & {
+  metrics?: ProviderMetricSummary;
+  provenance: ProviderProvenance;
+};
+
+export type ProviderCampaign = {
+  id: string;
+  name: string;
+  status: string | null;
+  objective: string | null;
+  budget: ProviderMoney | null;
+  metrics?: ProviderMetricSummary;
+  metadata?: Record<string, string | number | boolean | null>;
+  provenance: ProviderProvenance;
+};
+
+export type ProviderHealthView = {
+  credentialsValid: boolean;
+  providerReachable: boolean;
+  scopesSufficient: boolean;
+  accountReachable: boolean;
+  selectedAccountValid: boolean;
+  status: "healthy" | "degraded" | "reauth_required";
+  missingScopes: string[];
+  provenance: ProviderProvenance;
+};

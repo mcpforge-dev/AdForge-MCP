@@ -7,6 +7,7 @@ import {
 import type {
   ProviderAccountView,
   ProviderConnectionView,
+  ProviderDateRange,
   ProviderDefinition,
   ProviderId,
 } from "@holymedia/contracts";
@@ -24,10 +25,12 @@ import { ProviderRefreshCoordinator } from "./refresh-coordinator.service.js";
 import { ProviderRegistry } from "./provider.registry.js";
 import { ProviderMetricsService } from "./provider.metrics.js";
 import type {
+  MetaReadAdapter,
   NormalizedProviderAccount,
   ProviderCredentialPayload,
   ProviderScopeMetadata,
 } from "./provider.types.js";
+import { isProviderReadAdapter } from "./provider.types.js";
 
 @Injectable()
 export class ProviderService {
@@ -524,6 +527,219 @@ export class ProviderService {
     return this.accountView(account);
   }
 
+  public async readAccountSummary(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    range?: ProviderDateRange,
+  ) {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return context.adapter.getAccountSummary(context.read, range);
+  }
+
+  public async readCampaigns(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    range: ProviderDateRange | undefined,
+    limit?: number,
+    cursor?: string,
+  ) {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return context.adapter.listCampaigns(context.read, range, limit, cursor);
+  }
+
+  public async readMetrics(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    range: ProviderDateRange,
+    campaignId?: string,
+  ) {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return context.adapter.getMetrics(context.read, range, campaignId);
+  }
+
+  public async readHealth(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    return context.adapter.health(context.read);
+  }
+
+  public async metaBusinesses(workspaceId: string, connectionId: string) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const adapter = context.adapter as unknown as MetaReadAdapter;
+    if (typeof adapter.listBusinesses !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Meta Business read is not configured.",
+      );
+    return adapter.listBusinesses(context.credentials);
+  }
+
+  public async metaPages(workspaceId: string, connectionId: string) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const adapter = context.adapter as unknown as MetaReadAdapter;
+    if (typeof adapter.listPages !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Meta Page read is not configured.",
+      );
+    return adapter.listPages(context.credentials);
+  }
+
+  public async metaBusinessAdAccounts(
+    workspaceId: string,
+    connectionId: string,
+    businessId: string,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const adapter = context.adapter as unknown as MetaReadAdapter;
+    if (typeof adapter.listBusinessAdAccounts !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Meta Business read is not configured.",
+      );
+    return adapter.listBusinessAdAccounts(context.credentials, businessId);
+  }
+
+  public async metaBusinessPages(
+    workspaceId: string,
+    connectionId: string,
+    businessId: string,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const adapter = context.adapter as unknown as MetaReadAdapter;
+    if (typeof adapter.listBusinessPages !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Meta Business read is not configured.",
+      );
+    return adapter.listBusinessPages(context.credentials, businessId);
+  }
+
+  public async metaPagePosts(
+    workspaceId: string,
+    connectionId: string,
+    pageId: string,
+    limit?: number,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const adapter = context.adapter as unknown as MetaReadAdapter;
+    if (typeof adapter.listPagePosts !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Meta Page read is not configured.",
+      );
+    return adapter.listPagePosts(context.credentials, pageId, limit);
+  }
+
+  public async metaInstagram(
+    workspaceId: string,
+    connectionId: string,
+    pageId: string,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const adapter = context.adapter as unknown as MetaReadAdapter;
+    if (typeof adapter.getPageInstagramAccount !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Meta Instagram read is not configured.",
+      );
+    return adapter.getPageInstagramAccount(context.credentials, pageId);
+  }
+
+  private async readContext(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const account = await this.database.client.providerAccount.findFirst({
+      where: { id: accountId, connectionId, workspaceId, enabled: true },
+    });
+    if (!account)
+      throw new NotFoundException("Selected provider account not found.");
+    if (!isProviderReadAdapter(context.adapter))
+      throw new ProviderError(
+        "provider_not_configured",
+        "Provider read is not configured.",
+      );
+    const loginCustomerId = stringMetadata(account.metadata, "loginCustomerId");
+    return {
+      ...context,
+      account,
+      adapter: context.adapter,
+      read: {
+        credentials: context.credentials,
+        accountId: account.externalAccountId,
+        ...(account.currency ? { currency: account.currency } : {}),
+        ...(loginCustomerId ? { loginCustomerId } : {}),
+      },
+    };
+  }
+
+  private async connectionReadCredentials(
+    workspaceId: string,
+    connectionId: string,
+  ) {
+    const connection = await this.connectionWithCredential(
+      workspaceId,
+      connectionId,
+    );
+    if (!connection.credential)
+      throw new ProviderError(
+        "authentication_failed",
+        "Provider authorization is required.",
+      );
+    const credentials = this.vault.decrypt<ProviderCredentialPayload>(
+      connection.credential.encryptedPayload,
+      connection.credential.encryptionVersion,
+    );
+    const adapter = this.registry.adapter(connection.provider as ProviderId);
+    return { connection, credentials, adapter };
+  }
+
   private async persistAccounts(
     workspaceId: string,
     connectionId: string,
@@ -722,4 +938,10 @@ export class ProviderService {
 
 function toIso(value: Date | null): string | null {
   return value ? value.toISOString() : null;
+}
+
+function stringMetadata(value: unknown, key: string): string | undefined {
+  if (!value || typeof value !== "object") return undefined;
+  const candidate = (value as Record<string, unknown>)[key];
+  return typeof candidate === "string" ? candidate : undefined;
 }

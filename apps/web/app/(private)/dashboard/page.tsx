@@ -48,6 +48,7 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [readResult, setReadResult] = useState<unknown>(null);
   const [error, setError] = useState("");
 
   async function loadWorkspaces() {
@@ -161,6 +162,40 @@ export default function DashboardPage() {
     );
     if (response.ok) await loadConnections(active);
     else setError("Не удалось изменить доступ рекламного кабинета.");
+  }
+
+  async function readSmoke(connection: Connection, account: ProviderAccount) {
+    if (!active) return;
+    const from = new Date(Date.now() - 6 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const to = new Date().toISOString().slice(0, 10);
+    const query = `startDate=${from}&endDate=${to}`;
+    const [healthResponse, metricsResponse, campaignsResponse] =
+      await Promise.all([
+        fetch(
+          `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/health`,
+          { credentials: "include" },
+        ),
+        fetch(
+          `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/metrics?${query}`,
+          { credentials: "include" },
+        ),
+        fetch(
+          `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/campaigns?${query}&limit=10`,
+          { credentials: "include" },
+        ),
+      ]);
+    if (!healthResponse.ok || !metricsResponse.ok || !campaignsResponse.ok) {
+      setError("Не удалось выполнить read-проверку рекламного кабинета.");
+      return;
+    }
+    setReadResult({
+      account: account.displayName,
+      health: await healthResponse.json(),
+      metrics: await metricsResponse.json(),
+      campaigns: await campaignsResponse.json(),
+    });
   }
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
@@ -362,6 +397,14 @@ export default function DashboardPage() {
                           {account.externalAccountId} ·{" "}
                           {account.status ?? "unknown"}
                         </small>
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          disabled={!account.enabled}
+                          onClick={() => void readSmoke(connection, account)}
+                        >
+                          Проверить чтение
+                        </button>
                       </label>
                     ))}
                   </div>
@@ -371,6 +414,17 @@ export default function DashboardPage() {
           })}
         </div>
       </section>
+      {readResult !== null && (
+        <section className="panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Read-only smoke</p>
+              <h2>Последний ответ провайдера</h2>
+            </div>
+          </div>
+          <pre>{String(JSON.stringify(readResult, null, 2))}</pre>
+        </section>
+      )}
       {error && <p className="error">{error}</p>}
     </main>
   );

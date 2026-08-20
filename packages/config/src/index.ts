@@ -34,9 +34,29 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_CLIENT_ID: z.string().optional(),
   PROVIDER_GOOGLE_CLIENT_SECRET: z.string().optional(),
   PROVIDER_GOOGLE_REDIRECT_URI: z.string().url().optional(),
+  PROVIDER_GOOGLE_DEVELOPER_TOKEN: z.string().optional(),
+  PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID: z
+    .string()
+    .regex(/^\d{10}$/)
+    .optional(),
+  PROVIDER_GOOGLE_API_VERSION: z
+    .string()
+    .regex(/^v?\d+$/)
+    .default("v24"),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
   PROVIDER_META_CLIENT_SECRET: z.string().optional(),
   PROVIDER_META_REDIRECT_URI: z.string().url().optional(),
+  PROVIDER_META_API_VERSION: z
+    .string()
+    .regex(/^v\d+\.\d+$/)
+    .default("v20.0"),
+  PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED: booleanFromEnv.default(false),
+  PROVIDER_HTTP_TIMEOUT_MS: z.coerce
+    .number()
+    .int()
+    .min(1000)
+    .max(120000)
+    .default(20000),
   COOKIE_DOMAIN: z.string().optional(),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
   EMAIL_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
@@ -69,9 +89,15 @@ export type AppConfig = {
   providerGoogleClientId: string | undefined;
   providerGoogleClientSecret: string | undefined;
   providerGoogleRedirectUri: string | undefined;
+  providerGoogleDeveloperToken: string | undefined;
+  providerGoogleLoginCustomerId: string | undefined;
+  providerGoogleApiVersion: string;
   providerMetaClientId: string | undefined;
   providerMetaClientSecret: string | undefined;
   providerMetaRedirectUri: string | undefined;
+  providerMetaApiVersion: string;
+  providerMetaAdsManagementOauthEnabled: boolean;
+  providerHttpTimeoutMs: number;
   cookieDomain: string | undefined;
   sessionTtlDays: number;
   emailTokenTtlMinutes: number;
@@ -127,9 +153,16 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleClientId: value.PROVIDER_GOOGLE_CLIENT_ID,
     providerGoogleClientSecret: value.PROVIDER_GOOGLE_CLIENT_SECRET,
     providerGoogleRedirectUri: value.PROVIDER_GOOGLE_REDIRECT_URI,
+    providerGoogleDeveloperToken: value.PROVIDER_GOOGLE_DEVELOPER_TOKEN,
+    providerGoogleLoginCustomerId: value.PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID,
+    providerGoogleApiVersion: value.PROVIDER_GOOGLE_API_VERSION,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,
     providerMetaClientSecret: value.PROVIDER_META_CLIENT_SECRET,
     providerMetaRedirectUri: value.PROVIDER_META_REDIRECT_URI,
+    providerMetaApiVersion: value.PROVIDER_META_API_VERSION,
+    providerMetaAdsManagementOauthEnabled:
+      value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED,
+    providerHttpTimeoutMs: value.PROVIDER_HTTP_TIMEOUT_MS,
     cookieDomain: value.COOKIE_DOMAIN,
     sessionTtlDays: value.SESSION_TTL_DAYS,
     emailTokenTtlMinutes: value.EMAIL_TOKEN_TTL_MINUTES,

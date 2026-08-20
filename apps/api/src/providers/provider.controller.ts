@@ -21,7 +21,11 @@ import {
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
-import { AccountSelectionDto, OAuthCallbackDto } from "./provider.dto.js";
+import {
+  AccountSelectionDto,
+  OAuthCallbackDto,
+  ProviderDateRangeDto,
+} from "./provider.dto.js";
 import { ProviderService } from "./provider.service.js";
 import { isProviderId } from "./provider.types.js";
 
@@ -151,6 +155,150 @@ export class ProviderController {
       principal,
       request,
     );
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/accounts/:accountId/summary")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public accountSummary(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("accountId") accountId: string,
+    @Query() query: ProviderDateRangeDto,
+  ) {
+    const range =
+      query.startDate && query.endDate
+        ? { startDate: query.startDate, endDate: query.endDate }
+        : undefined;
+    return this.providers.readAccountSummary(
+      id,
+      connectionId,
+      accountId,
+      range,
+    );
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/accounts/:accountId/campaigns")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public campaigns(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("accountId") accountId: string,
+    @Query() query: ProviderDateRangeDto,
+  ) {
+    const range =
+      query.startDate && query.endDate
+        ? { startDate: query.startDate, endDate: query.endDate }
+        : undefined;
+    return this.providers.readCampaigns(
+      id,
+      connectionId,
+      accountId,
+      range,
+      query.limit,
+      query.cursor,
+    );
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/accounts/:accountId/metrics")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public metrics(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("accountId") accountId: string,
+    @Query() query: ProviderDateRangeDto,
+  ) {
+    if (!query.startDate || !query.endDate)
+      throw new BadRequestException("startDate and endDate are required.");
+    return this.providers.readMetrics(
+      id,
+      connectionId,
+      accountId,
+      { startDate: query.startDate, endDate: query.endDate },
+      query.campaignId,
+    );
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/accounts/:accountId/health")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public health(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("accountId") accountId: string,
+  ) {
+    return this.providers.readHealth(id, connectionId, accountId);
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/meta/businesses")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public metaBusinesses(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+  ) {
+    return this.providers.metaBusinesses(id, connectionId);
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/meta/pages")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public metaPages(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+  ) {
+    return this.providers.metaPages(id, connectionId);
+  }
+
+  @Get(
+    "workspaces/:id/connections/:connectionId/meta/businesses/:businessId/ad-accounts",
+  )
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public metaBusinessAdAccounts(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("businessId") businessId: string,
+  ) {
+    return this.providers.metaBusinessAdAccounts(id, connectionId, businessId);
+  }
+
+  @Get(
+    "workspaces/:id/connections/:connectionId/meta/businesses/:businessId/pages",
+  )
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public metaBusinessPages(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("businessId") businessId: string,
+  ) {
+    return this.providers.metaBusinessPages(id, connectionId, businessId);
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/meta/pages/:pageId/posts")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public metaPagePosts(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("pageId") pageId: string,
+    @Query() query: ProviderDateRangeDto,
+  ) {
+    return this.providers.metaPagePosts(id, connectionId, pageId, query.limit);
+  }
+
+  @Get("workspaces/:id/connections/:connectionId/meta/pages/:pageId/instagram")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.read")
+  public metaInstagram(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Param("pageId") pageId: string,
+  ) {
+    return this.providers.metaInstagram(id, connectionId, pageId);
   }
 
   private provider(value: string): ProviderId {

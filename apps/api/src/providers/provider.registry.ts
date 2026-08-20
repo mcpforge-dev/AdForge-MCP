@@ -7,6 +7,11 @@ import type {
   ProviderRegistryEntry,
 } from "./provider.types.js";
 import { TestProviderAdapter } from "./adapters/test.provider.js";
+import {
+  GoogleAdsAdapter,
+  googleAdsDefinition,
+} from "./adapters/google.ads.js";
+import { MetaAdsAdapter, metaAdsDefinition } from "./adapters/meta.ads.js";
 
 @Injectable()
 export class ProviderRegistry {
@@ -14,43 +19,22 @@ export class ProviderRegistry {
   private readonly entries: ProviderRegistryEntry[];
 
   public constructor() {
+    const google = new GoogleAdsAdapter(this.config);
+    const meta = new MetaAdsAdapter(this.config);
     this.entries = [
-      configuredEntry(
-        {
-          id: "GOOGLE_ADS",
-          displayName: "Google Ads",
-          oauth: true,
-          pkce: false,
-          accountDiscovery: true,
-          refresh: true,
-          read: false,
-          write: false,
-          scopes: ["https://www.googleapis.com/auth/adwords"],
-        },
-        Boolean(
-          this.config.providerGoogleClientId &&
-          this.config.providerGoogleClientSecret &&
-          this.config.providerGoogleRedirectUri,
+      {
+        definition: googleAdsDefinition(
+          Boolean(google.definition.status === "available"),
         ),
-      ),
-      configuredEntry(
-        {
-          id: "META_ADS",
-          displayName: "Meta Ads",
-          oauth: true,
-          pkce: false,
-          accountDiscovery: true,
-          refresh: true,
-          read: false,
-          write: false,
-          scopes: ["ads_read", "business_management"],
-        },
-        Boolean(
-          this.config.providerMetaClientId &&
-          this.config.providerMetaClientSecret &&
-          this.config.providerMetaRedirectUri,
+        adapter: google,
+      },
+      {
+        definition: metaAdsDefinition(
+          this.config,
+          Boolean(meta.definition.status === "available"),
         ),
-      ),
+        adapter: meta,
+      },
       configuredEntry(
         {
           id: "YANDEX_DIRECT",
@@ -129,18 +113,6 @@ export class ProviderRegistry {
   }
 }
 
-function configuredEntry(
-  definition: Omit<ProviderDefinition, "status">,
-  configured: boolean,
-): ProviderRegistryEntry {
-  return {
-    definition: {
-      ...definition,
-      status: configured ? "available" : "configuration_required",
-    },
-  };
-}
-
 function testProviderDefinition(): ProviderDefinition {
   return {
     id: "TEST_PROVIDER",
@@ -153,5 +125,17 @@ function testProviderDefinition(): ProviderDefinition {
     write: false,
     status: "test_only",
     scopes: ["test.accounts.read"],
+  };
+}
+
+function configuredEntry(
+  definition: Omit<ProviderDefinition, "status">,
+  configured: boolean,
+): ProviderRegistryEntry {
+  return {
+    definition: {
+      ...definition,
+      status: configured ? "available" : "configuration_required",
+    },
   };
 }

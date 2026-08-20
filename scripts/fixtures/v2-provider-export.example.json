@@ -1,0 +1,17 @@
+{
+  "connections": [
+    {
+      "provider": "GOOGLE_ADS",
+      "workspace_id": "workspace-example",
+      "credential_present": true,
+      "accounts": [{ "external_account_id": "1234567890" }]
+    },
+    {
+      "provider": "META_ADS",
+      "workspace_id": "workspace-example",
+      "credential_present": false,
+      "reconnect_required": true,
+      "accounts": []
+    }
+  ]
+}

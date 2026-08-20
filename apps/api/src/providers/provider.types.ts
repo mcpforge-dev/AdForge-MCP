@@ -1,4 +1,13 @@
-import type { ProviderDefinition, ProviderId } from "@holymedia/contracts";
+import type {
+  ProviderAccountSummary,
+  ProviderCampaign,
+  ProviderDateRange,
+  ProviderDefinition,
+  ProviderHealthView,
+  ProviderId,
+  ProviderMetricSummary,
+  ProviderProvenance,
+} from "@holymedia/contracts";
 
 export type ProviderCredentialPayload = {
   accessToken: string;
@@ -8,7 +17,10 @@ export type ProviderCredentialPayload = {
   scopes: string[];
   externalSubjectId?: string;
   displayName?: string;
-  providerMetadata?: Record<string, string | number | boolean | null>;
+  providerMetadata?: Record<
+    string,
+    string | number | boolean | null | Record<string, string>
+  >;
 };
 
 export type NormalizedProviderAccount = {
@@ -73,6 +85,82 @@ export type ProviderScopeMetadata = {
   grantedScopes: string[];
   missingScopes: string[];
 };
+
+export type ProviderReadContext = {
+  credentials: ProviderCredentialPayload;
+  accountId: string;
+  currency?: string;
+  loginCustomerId?: string;
+};
+
+export function isProviderReadAdapter(
+  value: unknown,
+): value is ProviderOAuthAdapter & ProviderReadAdapter {
+  return Boolean(
+    value && typeof (value as ProviderReadAdapter).getMetrics === "function",
+  );
+}
+
+export interface ProviderReadAdapter {
+  getAccountSummary(
+    context: ProviderReadContext,
+    range?: ProviderDateRange,
+  ): Promise<ProviderAccountSummary>;
+  listCampaigns(
+    context: ProviderReadContext,
+    range?: ProviderDateRange,
+    limit?: number,
+    cursor?: string,
+  ): Promise<{ items: ProviderCampaign[]; nextCursor?: string }>;
+  getMetrics(
+    context: ProviderReadContext,
+    range: ProviderDateRange,
+    campaignId?: string,
+  ): Promise<ProviderMetricSummary>;
+  health(context: ProviderReadContext): Promise<ProviderHealthView>;
+}
+
+export type MetaBusiness = {
+  id: string;
+  name: string | null;
+  verificationStatus?: string | null;
+  provenance: ProviderProvenance;
+};
+
+export type MetaPage = {
+  id: string;
+  name: string | null;
+  category?: string | null;
+  linkedInstagram?: { id: string; username: string | null } | null;
+  provenance: ProviderProvenance;
+};
+
+export interface MetaReadAdapter extends ProviderReadAdapter {
+  listBusinesses(
+    credentials: ProviderCredentialPayload,
+  ): Promise<MetaBusiness[]>;
+  listBusinessAdAccounts(
+    credentials: ProviderCredentialPayload,
+    businessId: string,
+  ): Promise<NormalizedProviderAccount[]>;
+  listBusinessPages(
+    credentials: ProviderCredentialPayload,
+    businessId: string,
+  ): Promise<MetaPage[]>;
+  listPages(credentials: ProviderCredentialPayload): Promise<MetaPage[]>;
+  listPagePosts(
+    credentials: ProviderCredentialPayload,
+    pageId: string,
+    limit?: number,
+  ): Promise<{
+    items: Record<string, unknown>[];
+    provenance: ProviderProvenance;
+  }>;
+  getPageInstagramAccount(
+    credentials: ProviderCredentialPayload,
+    pageId: string,
+  ): Promise<MetaPage>;
+}
 
 export function isProviderId(value: string): value is ProviderId {
   return [
