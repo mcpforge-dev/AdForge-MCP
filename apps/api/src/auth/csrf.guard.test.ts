@@ -8,6 +8,9 @@ function context(request: Record<string, unknown>) {
 }
 
 describe("CsrfGuard", () => {
+  const allowedOrigin =
+    process.env.CORS_ORIGINS?.split(",")[0]?.trim() ?? "http://localhost:3000";
+
   it("allows safe methods", () => {
     const guard = new CsrfGuard();
     expect(
@@ -35,7 +38,7 @@ describe("CsrfGuard", () => {
         context({
           method: "POST",
           headers: {
-            origin: "http://localhost:3000",
+            origin: allowedOrigin,
             "x-csrf-token": "same-token",
           },
           cookies: { hm_v2_csrf: "same-token" },
