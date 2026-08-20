@@ -25,7 +25,7 @@ export async function enqueueProviderDiscovery(
   data: ProviderDiscoveryJobData,
 ) {
   return queue.add("provider.accounts.discover", data, {
-    jobId: `provider-discovery:${data.connectionId}`,
+    jobId: `provider-discovery-${data.connectionId}`,
     attempts: 3,
     backoff: { type: "exponential", delay: 250 },
     removeOnComplete: 50,
