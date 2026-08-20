@@ -11,12 +11,13 @@ export class ProviderRefreshCoordinator {
     enableOfflineQueue: false,
     maxRetriesPerRequest: 1,
   });
+  private connectPromise: Promise<void> | undefined;
 
   public async withLock<T>(
     connectionId: string,
     operation: () => Promise<T>,
   ): Promise<T> {
-    if (this.redis.status === "wait") await this.redis.connect();
+    await this.ensureConnected();
     const key = `v2:provider-refresh:${connectionId}`;
     const token = randomUUID();
     const deadline = Date.now() + 8_000;
@@ -43,5 +44,17 @@ export class ProviderRefreshCoordinator {
 
   public async onModuleDestroy(): Promise<void> {
     await this.redis.quit().catch(() => undefined);
+  }
+
+  private async ensureConnected(): Promise<void> {
+    if (this.redis.status === "ready") return;
+    if (!this.connectPromise) {
+      this.connectPromise = (
+        this.redis.status === "wait" ? this.redis.connect() : Promise.resolve()
+      ).finally(() => {
+        this.connectPromise = undefined;
+      });
+    }
+    await this.connectPromise;
   }
 }
