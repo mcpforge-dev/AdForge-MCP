@@ -29,6 +29,9 @@ class Settings(BaseSettings):
     web_host: str = "127.0.0.1"
     web_port: int = 8765
     web_api_token: str = ""
+    legacy_mcp_token_enabled: bool = False
+    legacy_mcp_workspace_id: str = ""
+    legacy_mcp_allowed_accounts_json: str = ""
     web_max_body_bytes: int = 65536
     database_url: str = ""
     auth_enabled: bool = True
@@ -118,6 +121,11 @@ class Settings(BaseSettings):
     yandex_oauth_state_ttl_seconds: int = 900
     connection_store_path: str = "tokens/connections.json"
     connections_fallback_to_local: bool = True
+    credentials_encryption_key: str = ""
+    # Compatibility default for local fixtures and the first migration boot.
+    # Hosted staging/production env files must set this to false after import.
+    credentials_allow_legacy_plaintext: bool = True
+    credentials_encryption_required: bool = False
     clickhouse_enabled: bool = False
     clickhouse_host: str = "127.0.0.1"
     clickhouse_port: int = 8123
@@ -135,6 +143,7 @@ class Settings(BaseSettings):
         # strict deployments must use workspace-scoped hosted storage only.
         if is_strict_auth_env(self.env):
             self.connections_fallback_to_local = False
+            self.credentials_encryption_required = True
         return self
 
     @property

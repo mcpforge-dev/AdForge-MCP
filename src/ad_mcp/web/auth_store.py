@@ -93,6 +93,7 @@ class McpServicePrincipal:
     workspace_id: str
     scope: str
     allowed_accounts: dict[str, frozenset[str]]
+    expires_at: str | None = None
 
 
 def _now() -> str:
@@ -252,7 +253,28 @@ class AuthStore:
             with self._connect() as connection:
                 for statement in _SCHEMA:
                     self._execute(connection, statement)
+                self._ensure_column(connection, "mcp_service_tokens", "expires_at", "TEXT")
+                self._execute(
+                    connection,
+                    "CREATE INDEX IF NOT EXISTS idx_mcp_service_tokens_expires_at ON mcp_service_tokens (expires_at)",
+                )
             self._schema_ready = True
+
+    def _ensure_column(self, connection, table: str, column: str, definition: str) -> None:
+        if self.driver == "sqlite":
+            columns = {
+                str(row["name"])
+                for row in connection.execute(f"PRAGMA table_info({table})").fetchall()
+            }
+        else:
+            rows = self._query_all(
+                connection,
+                "SELECT column_name FROM information_schema.columns WHERE table_name = ?",
+                (table,),
+            )
+            columns = {str(row.get("column_name")) for row in rows}
+        if column not in columns:
+            self._execute(connection, f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def create_user(
         self,
@@ -1028,11 +1050,14 @@ class AuthStore:
         allowed_accounts: dict[str, list[str] | tuple[str, ...] | set[str]],
         name: str = "Service MCP token",
         scope: str = "adforge:mcp:read",
+        ttl_seconds: int = 90 * 24 * 60 * 60,
     ) -> dict[str, Any]:
         clean_workspace_id = workspace_id.strip()
         clean_name = name.strip() or "Service MCP token"
         if scope.strip() != "adforge:mcp:read":
             raise AuthValidationError("Service MCP tokens support only adforge:mcp:read.")
+        if ttl_seconds < 60 or ttl_seconds > 10 * 365 * 24 * 60 * 60:
+            raise AuthValidationError("Service MCP token TTL is outside the allowed range.")
         normalized_accounts: dict[str, list[str]] = {}
         for provider, account_ids in allowed_accounts.items():
             clean_provider = str(provider or "").strip()
@@ -1052,13 +1077,14 @@ class AuthStore:
             raw_token = f"mcp_service_{secrets.token_urlsafe(32)}"
             token_id = uuid.uuid4().hex
             timestamp = _now()
+            expires_at = (datetime.now(UTC) + timedelta(seconds=ttl_seconds)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
             self._execute(
                 connection,
                 """
                 INSERT INTO mcp_service_tokens
                   (id, workspace_id, token_hash, token_prefix, name, scope, allowed_accounts_json,
-                   status, created_at, last_used_at, revoked_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, NULL, NULL)
+                   status, created_at, expires_at, last_used_at, revoked_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, NULL, NULL)
                 """,
                 (
                     token_id,
@@ -1069,6 +1095,7 @@ class AuthStore:
                     "adforge:mcp:read",
                     json.dumps(normalized_accounts, separators=(",", ":"), sort_keys=True),
                     timestamp,
+                    expires_at,
                 ),
             )
         return {
@@ -1079,6 +1106,7 @@ class AuthStore:
             "allowed_accounts": normalized_accounts,
             "status": "active",
             "created_at": timestamp,
+            "expires_at": expires_at,
             "raw_token": raw_token,
         }
 
@@ -1090,7 +1118,7 @@ class AuthStore:
             row = self._query_one(
                 connection,
                 """
-                SELECT t.id, t.name, t.workspace_id, t.scope, t.allowed_accounts_json
+                SELECT t.id, t.name, t.workspace_id, t.scope, t.allowed_accounts_json, t.expires_at
                 FROM mcp_service_tokens t
                 JOIN workspaces w ON w.id = t.workspace_id
                 WHERE t.token_hash = ?
@@ -1102,6 +1130,14 @@ class AuthStore:
                 (token_hash,),
             )
             if not row:
+                return None
+            expires_at = str(row.get("expires_at") or "").strip() or None
+            if expires_at and (_parse_time(expires_at) is None or _parse_time(expires_at) <= datetime.now(UTC)):
+                self._execute(
+                    connection,
+                    "UPDATE mcp_service_tokens SET status = 'revoked', revoked_at = ? WHERE id = ? AND status = 'active'",
+                    (_now(), str(row["id"])),
+                )
                 return None
             try:
                 raw_allowed = json.loads(str(row.get("allowed_accounts_json") or "{}"))
@@ -1127,7 +1163,26 @@ class AuthStore:
             workspace_id=str(row["workspace_id"]),
             scope="adforge:mcp:read",
             allowed_accounts=allowed_accounts,
+            expires_at=str(row.get("expires_at") or "").strip() or None,
         )
+
+    def backfill_mcp_service_token_expiry(self, grace_seconds: int) -> int:
+        """Give legacy active service tokens a bounded grace period.
+
+        The method never reads or returns token material. It is intended for a
+        one-time migration before legacy non-expiring tokens are rejected.
+        """
+        if grace_seconds < 60:
+            raise AuthValidationError("Service token grace period is too short.")
+        self.ensure_schema()
+        expires_at = (datetime.now(UTC) + timedelta(seconds=grace_seconds)).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+        with self._connect() as connection:
+            cursor = self._execute(
+                connection,
+                "UPDATE mcp_service_tokens SET expires_at = ? WHERE status = 'active' AND revoked_at IS NULL AND expires_at IS NULL",
+                (expires_at,),
+            )
+            return int(cursor.rowcount or 0)
 
     def revoke_mcp_service_token(self, token_id: str) -> None:
         with self._connect() as connection:
@@ -1749,6 +1804,7 @@ _SCHEMA = [
       allowed_accounts_json TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'active',
       created_at TEXT NOT NULL,
+      expires_at TEXT,
       last_used_at TEXT,
       revoked_at TEXT
     )

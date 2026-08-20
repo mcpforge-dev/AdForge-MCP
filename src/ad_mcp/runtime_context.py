@@ -62,7 +62,7 @@ def ensure_current_mcp_tool_access(
     write: bool = False,
 ) -> None:
     access = current_mcp_access()
-    if access is None or access.token_kind != "service":
+    if access is None or access.token_kind not in {"service", "legacy"}:
         return
     if write or "adforge:mcp:read" not in access.scopes:
         raise PermissionError("This service token is restricted to read-only MCP tools.")
@@ -76,7 +76,7 @@ def ensure_current_mcp_tool_access(
 
 def filter_provider_config_for_current_access(provider: str, config: dict) -> dict:
     access = current_mcp_access()
-    if access is None or access.token_kind != "service":
+    if access is None or access.token_kind not in {"service", "legacy"}:
         return config
     allowed_ids = access.allowed_accounts.get(provider)
     if not allowed_ids:

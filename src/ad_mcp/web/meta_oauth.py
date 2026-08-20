@@ -40,7 +40,12 @@ def _b64_decode(payload: str) -> bytes:
 class MetaOAuthService:
     def __init__(self, settings: Settings | None = None, http_client: httpx.Client | None = None) -> None:
         self._settings = settings or Settings()
-        self._store = HostedConnectionStore(self._settings.connection_store_file)
+        self._store = HostedConnectionStore(
+            self._settings.connection_store_file,
+            encryption_key=self._settings.credentials_encryption_key,
+            allow_legacy_plaintext=self._settings.credentials_allow_legacy_plaintext,
+            encryption_required=self._settings.credentials_encryption_required,
+        )
         self._http_client = http_client
 
     def configured(self) -> bool:

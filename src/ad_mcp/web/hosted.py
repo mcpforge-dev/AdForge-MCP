@@ -150,7 +150,12 @@ def _join_url(base_url: str, path: str) -> str:
 class HostedConnectionService:
     def __init__(self, settings: Settings | None = None) -> None:
         self._settings = settings or Settings()
-        self._store = HostedConnectionStore(self._settings.connection_store_file)
+        self._store = HostedConnectionStore(
+            self._settings.connection_store_file,
+            encryption_key=self._settings.credentials_encryption_key,
+            allow_legacy_plaintext=self._settings.credentials_allow_legacy_plaintext,
+            encryption_required=self._settings.credentials_encryption_required,
+        )
         self._meta_oauth = MetaOAuthService(self._settings)
         self._google_oauth = GoogleOAuthService(self._settings)
         self._google_search_console_oauth = GoogleSearchConsoleOAuthService(self._settings)

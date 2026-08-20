@@ -555,7 +555,12 @@ class MetaDashboardService:
         provider_name: str | None = None,
     ) -> dict[str, Any]:
         """Build a browser report from the signed-in user's workspace only."""
-        store = HostedConnectionStore(self._settings.connection_store_file)
+        store = HostedConnectionStore(
+            self._settings.connection_store_file,
+            encryption_key=self._settings.credentials_encryption_key,
+            allow_legacy_plaintext=self._settings.credentials_allow_legacy_plaintext,
+            encryption_required=self._settings.credentials_encryption_required,
+        )
         workspace_id = str(getattr(user, "workspace_id", "") or "").strip() or None
         report_provider = str(provider_name or "meta_ads").strip().lower()
         provider_types = {

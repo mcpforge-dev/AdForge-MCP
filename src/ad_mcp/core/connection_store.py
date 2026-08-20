@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 from ad_mcp.core.config_loader import load_provider_from_connections
+from ad_mcp.core.credential_crypto import CredentialCipher, CredentialEncryptionError
 from ad_mcp.core.secure_files import write_private_json
 from ad_mcp.runtime_context import current_workspace_id, filter_provider_config_for_current_access
 
@@ -108,10 +110,25 @@ def _normalize_account(provider: str, account: dict[str, Any]) -> dict[str, Any]
     return normalized
 
 
-def _runtime_account(provider: str, account: dict[str, Any]) -> dict[str, Any]:
+def _runtime_account(
+    provider: str,
+    account: dict[str, Any],
+    *,
+    cipher: CredentialCipher | None = None,
+    allow_legacy_plaintext: bool = True,
+) -> dict[str, Any]:
     account = _normalize_account(provider, account)
-    credentials = account.get("credentials") if isinstance(account.get("credentials"), dict) else {}
+    encrypted = account.get("credentials_encrypted")
+    if encrypted:
+        if cipher is None:
+            raise CredentialEncryptionError("Encrypted provider credentials require the deployment key.")
+        credentials = cipher.decrypt_dict(str(encrypted))
+    else:
+        credentials = account.get("credentials") if isinstance(account.get("credentials"), dict) else {}
+        if credentials and not allow_legacy_plaintext:
+            raise CredentialEncryptionError("Legacy plaintext provider credentials are disabled.")
     flattened = {key: value for key, value in account.items() if key != "credentials"}
+    flattened.pop("credentials_encrypted", None)
     flattened.update(credentials)
     if provider == "google_ads":
         login_customer_id = _clean_google_customer_id(flattened.get("login_customer_id")) or _clean_google_customer_id(
@@ -122,7 +139,13 @@ def _runtime_account(provider: str, account: dict[str, Any]) -> dict[str, Any]:
     return flattened
 
 
-def _stored_account(provider: str, account: dict[str, Any]) -> dict[str, Any]:
+def _stored_account(
+    provider: str,
+    account: dict[str, Any],
+    *,
+    cipher: CredentialCipher | None = None,
+    encryption_required: bool = False,
+) -> dict[str, Any]:
     account = _normalize_account(provider, account)
     stored: dict[str, Any] = {}
     credentials: dict[str, Any] = {}
@@ -135,7 +158,12 @@ def _stored_account(provider: str, account: dict[str, Any]) -> dict[str, Any]:
     if isinstance(existing_credentials, dict):
         credentials.update(existing_credentials)
     if credentials:
-        stored["credentials"] = credentials
+        if cipher is None:
+            if encryption_required:
+                raise CredentialEncryptionError("Provider credentials encryption key is not configured.")
+            stored["credentials"] = credentials
+        else:
+            stored["credentials_encrypted"] = cipher.encrypt_dict(credentials)
     return stored
 
 
@@ -204,8 +232,48 @@ def _workspace_roots(data: dict[str, Any]) -> list[tuple[str, dict[str, Any]]]:
 
 
 class HostedConnectionStore:
-    def __init__(self, path: Path) -> None:
+    def __init__(
+        self,
+        path: Path,
+        *,
+        encryption_key: str = "",
+        allow_legacy_plaintext: bool | None = None,
+        encryption_required: bool | None = None,
+    ) -> None:
         self.path = path
+        key = encryption_key.strip() or os.getenv("AD_MCP_CREDENTIALS_ENCRYPTION_KEY", "").strip()
+        self._cipher = CredentialCipher(key) if key else None
+        self._allow_legacy_plaintext = (
+            bool(allow_legacy_plaintext)
+            if allow_legacy_plaintext is not None
+            else (
+                os.getenv("AD_MCP_CREDENTIALS_ALLOW_LEGACY_PLAINTEXT", "true").strip().lower()
+                in {"1", "true", "yes", "on"}
+            )
+        )
+        self._encryption_required = bool(encryption_required) if encryption_required is not None else False
+
+    def _credentials_from_record(self, record: dict[str, Any]) -> dict[str, Any]:
+        encrypted = record.get("credentials_encrypted")
+        if encrypted:
+            if self._cipher is None:
+                raise CredentialEncryptionError("Encrypted provider credentials require the deployment key.")
+            return self._cipher.decrypt_dict(str(encrypted))
+        legacy = record.get("credentials")
+        if isinstance(legacy, dict):
+            if not self._allow_legacy_plaintext:
+                raise CredentialEncryptionError("Legacy plaintext provider credentials are disabled.")
+            return dict(legacy)
+        return {}
+
+    def _stored_credentials(self, credentials: dict[str, Any]) -> dict[str, Any]:
+        if not credentials:
+            return {}
+        if self._cipher is None:
+            if self._encryption_required:
+                raise CredentialEncryptionError("Provider credentials encryption key is not configured.")
+            return {"credentials": credentials}
+        return {"credentials_encrypted": self._cipher.encrypt_dict(credentials)}
 
     def read(self) -> dict[str, Any]:
         return _read_json(self.path)
@@ -236,10 +304,24 @@ class HostedConnectionStore:
         connection = (root.get("connections", {}) if isinstance(root.get("connections", {}), dict) else {}).get(provider, {})
         if not isinstance(connection, dict):
             return {"provider": provider, "accounts": []}
-        config = {key: value for key, value in connection.items() if key not in {"accounts", "created_at", "updated_at", "source"}}
+        config = {
+            key: value
+            for key, value in connection.items()
+            if key not in {"accounts", "created_at", "updated_at", "source", "credentials", "credentials_encrypted"}
+        }
+        config.update(self._credentials_from_record(connection))
         config["provider"] = provider
         accounts = connection.get("accounts", [])
-        config["accounts"] = [_runtime_account(provider, account) for account in accounts if isinstance(account, dict)]
+        config["accounts"] = [
+            _runtime_account(
+                provider,
+                account,
+                cipher=self._cipher,
+                allow_legacy_plaintext=self._allow_legacy_plaintext,
+            )
+            for account in accounts
+            if isinstance(account, dict)
+        ]
         return config
 
     def safe_provider_status(self, provider: str, workspace_id: str | None = None) -> dict[str, Any]:
@@ -273,7 +355,14 @@ class HostedConnectionStore:
                     "expires_at": pending.get("expires_at"),
                     "metadata": _safe_pending_metadata(pending.get("metadata")),
                     "accounts": [
-                        safe_account_summary(_runtime_account(provider, account))
+                        safe_account_summary(
+                            _runtime_account(
+                                provider,
+                                account,
+                                cipher=self._cipher,
+                                allow_legacy_plaintext=self._allow_legacy_plaintext,
+                            )
+                        )
                         for account in accounts
                         if isinstance(account, dict)
                     ],
@@ -317,7 +406,12 @@ class HostedConnectionStore:
             connections = {}
             root["connections"] = connections
         previous = connections.get(provider, {}) if isinstance(connections.get(provider, {}), dict) else {}
-        stored = {key: value for key, value in provider_config.items() if key not in {"accounts"}}
+        stored_credentials = {key: value for key, value in provider_config.items() if key in SECRET_KEYS}
+        stored = {
+            key: value
+            for key, value in provider_config.items()
+            if key not in {"accounts"} and key not in SECRET_KEYS
+        }
         stored["provider"] = provider
         stored["source"] = source
         if _clean_scope_id(workspace_id):
@@ -326,7 +420,17 @@ class HostedConnectionStore:
             stored["user_id"] = _clean_scope_id(user_id)
         stored["created_at"] = previous.get("created_at") or _now_iso()
         stored["updated_at"] = _now_iso()
-        stored["accounts"] = [_stored_account(provider, account) for account in provider_config.get("accounts", []) if isinstance(account, dict)]
+        stored.update(self._stored_credentials(stored_credentials))
+        stored["accounts"] = [
+            _stored_account(
+                provider,
+                account,
+                cipher=self._cipher,
+                encryption_required=self._encryption_required,
+            )
+            for account in provider_config.get("accounts", [])
+            if isinstance(account, dict)
+        ]
         connections[provider] = stored
         data["version"] = int(data.get("version") or 1)
         self._write(data)
@@ -358,7 +462,16 @@ class HostedConnectionStore:
             provider_pending = {}
             pending_root[provider] = provider_pending
         pending_id = uuid4().hex
-        stored_accounts = [_stored_account(provider, account) for account in accounts if isinstance(account, dict)]
+        stored_accounts = [
+            _stored_account(
+                provider,
+                account,
+                cipher=self._cipher,
+                encryption_required=self._encryption_required,
+            )
+            for account in accounts
+            if isinstance(account, dict)
+        ]
         provider_pending[pending_id] = {
             "provider": provider,
             "source": source,
@@ -366,7 +479,7 @@ class HostedConnectionStore:
             "user_id": _clean_scope_id(user_id),
             "created_at": _now_iso(),
             "expires_at": _expires_iso(ttl_seconds),
-            "credentials": dict(credentials),
+            **self._stored_credentials(dict(credentials)),
             "metadata": _safe_pending_metadata(metadata),
             "accounts": stored_accounts,
         }
@@ -440,7 +553,14 @@ class HostedConnectionStore:
         for account in accounts:
             if not isinstance(account, dict):
                 continue
-            summary = safe_account_summary(_runtime_account(provider, account))
+            summary = safe_account_summary(
+                _runtime_account(
+                    provider,
+                    account,
+                    cipher=self._cipher,
+                    allow_legacy_plaintext=self._allow_legacy_plaintext,
+                )
+            )
             summary["already_connected"] = self._account_identity(provider, summary.get("account_id")) in existing_ids
             safe_accounts.append(summary)
         return {
@@ -464,12 +584,17 @@ class HostedConnectionStore:
         if not selected_ids:
             raise ValueError("At least one account_id must be selected.")
         pending = self._pending(provider, pending_id, workspace_id=workspace_id)
-        credentials = pending.get("credentials", {}) if isinstance(pending.get("credentials"), dict) else {}
+        credentials = self._credentials_from_record(pending)
         selected_accounts: list[dict[str, Any]] = []
         for stored_account in pending.get("accounts", []):
             if not isinstance(stored_account, dict):
                 continue
-            runtime_account = _runtime_account(provider, stored_account)
+            runtime_account = _runtime_account(
+                provider,
+                stored_account,
+                cipher=self._cipher,
+                allow_legacy_plaintext=self._allow_legacy_plaintext,
+            )
             account_id = str(runtime_account.get("account_id", "") or "").strip()
             if account_id in selected_ids and not _account_selection_disabled(runtime_account):
                 account = dict(runtime_account)
@@ -594,7 +719,12 @@ def load_runtime_provider_configs(
     settings: "Settings",
     workspace_id: str | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str]]:
-    store = HostedConnectionStore(settings.connection_store_file)
+    store = HostedConnectionStore(
+        settings.connection_store_file,
+        encryption_key=settings.credentials_encryption_key,
+        allow_legacy_plaintext=settings.credentials_allow_legacy_plaintext,
+        encryption_required=settings.credentials_encryption_required,
+    )
     scoped_workspace_id = _clean_scope_id(workspace_id) or current_workspace_id()
     configs: dict[str, dict[str, Any]] = {}
     sources: dict[str, str] = {}

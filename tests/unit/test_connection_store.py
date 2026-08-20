@@ -5,7 +5,11 @@ import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import pytest
+from cryptography.fernet import Fernet
+
 from ad_mcp.core.connection_store import HostedConnectionStore, load_runtime_provider_configs
+from ad_mcp.core.credential_crypto import CredentialEncryptionError
 from ad_mcp.settings import Settings
 
 
@@ -50,6 +54,33 @@ def test_connection_store_file_is_private_on_posix(tmp_path: Path) -> None:
     if os.name == "nt":
         return
     assert store.path.stat().st_mode & 0o777 == 0o600
+
+
+def test_connection_store_encrypts_credentials_at_rest_and_requires_key(tmp_path: Path) -> None:
+    key = Fernet.generate_key().decode("ascii")
+    path = tmp_path / "tokens" / "connections.json"
+    store = HostedConnectionStore(path, encryption_key=key, allow_legacy_plaintext=False, encryption_required=True)
+
+    store.save_provider_config(
+        "meta_ads",
+        {
+            "provider": "meta_ads",
+            "accounts": [{"account_id": "act_123", "access_token": "access-token", "app_secret": "app-secret"}],
+        },
+    )
+
+    raw = path.read_text(encoding="utf-8")
+    assert "access-token" not in raw
+    assert "app-secret" not in raw
+    assert "credentials_encrypted" in raw
+    assert store.provider_config("meta_ads")["accounts"][0]["access_token"] == "access-token"
+
+    with pytest.raises(CredentialEncryptionError):
+        HostedConnectionStore(
+            path,
+            encryption_key=Fernet.generate_key().decode("ascii"),
+            allow_legacy_plaintext=False,
+        ).provider_config("meta_ads")
 
 
 def test_runtime_provider_configs_prefer_hosted_store_over_local_config(tmp_path: Path) -> None:

@@ -371,6 +371,16 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 {"WWW-Authenticate": 'Bearer realm="HolyMedia MCP"'},
             )
             return False
+        # The legacy bearer is an operator credential, not a tenant identity.
+        # Browser/API data routes must use a workspace-bound session; otherwise
+        # a global token could reach the unscoped dashboard service.
+        if not operator_route:
+            self._send_json(
+                {"error": "Для доступа к данным нужна workspace-сессия.", "code": "session_required"},
+                HTTPStatus.UNAUTHORIZED,
+                {"WWW-Authenticate": 'Session realm="HolyMedia MCP"'},
+            )
+            return False
         return True
 
     def _dashboard_service(self) -> MetaDashboardService:
@@ -411,7 +421,17 @@ class AdsWebHandler(BaseHTTPRequestHandler):
             return True
         request_token = _extract_request_token(self.headers)
         if request_token and self.settings.web_api_token.strip() and _request_token_is_valid(self.headers, self.settings):
-            return True
+            operator_route = (
+                route.startswith("/api/diagnostics")
+                or route.startswith("/api/beta/")
+                or route in {"/api/hosted/oauth/diagnostics", "/api/hosted/oauth/readiness"}
+                or route.endswith("/oauth/diagnostics")
+                or route.endswith("/oauth/readiness")
+            )
+            if not operator_route:
+                request_token = ""
+            else:
+                return True
         if not self._session_user():
             return True
         if self._request_origin() in self._allowed_origins():

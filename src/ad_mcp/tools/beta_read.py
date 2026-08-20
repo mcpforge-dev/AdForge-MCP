@@ -220,7 +220,12 @@ def build_beta_read_tools(
     policy_manager: PolicyManager,
     settings: Settings,
 ) -> dict[str, callable]:
-    store = HostedConnectionStore(settings.connection_store_file)
+    store = HostedConnectionStore(
+        settings.connection_store_file,
+        encryption_key=settings.credentials_encryption_key,
+        allow_legacy_plaintext=settings.credentials_allow_legacy_plaintext,
+        encryption_required=settings.credentials_encryption_required,
+    )
 
     def list_connected_platforms() -> dict:
         provider_configs, provider_sources = _refresh_runtime_connections(registry, settings)

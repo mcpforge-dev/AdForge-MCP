@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import secrets
 
 from mcp.server.auth.provider import AccessToken
@@ -23,15 +24,34 @@ class StaticBearerTokenVerifier:
     async def verify_token(self, token: str) -> AccessToken | None:
         clear_current_mcp_access()
         if self._token and secrets.compare_digest(token, self._token):
+            if not self._settings or not self._settings.legacy_mcp_token_enabled:
+                return None
+            workspace_id = self._settings.legacy_mcp_workspace_id.strip()
+            try:
+                raw_allowed = json.loads(self._settings.legacy_mcp_allowed_accounts_json or "{}")
+            except json.JSONDecodeError:
+                return None
+            if not workspace_id or not isinstance(raw_allowed, dict):
+                return None
+            allowed_accounts = {
+                str(provider): frozenset(str(account_id).strip() for account_id in account_ids if str(account_id).strip())
+                for provider, account_ids in raw_allowed.items()
+                if isinstance(account_ids, list) and account_ids
+            }
+            if not allowed_accounts:
+                return None
+            set_current_workspace_id(workspace_id)
             set_current_mcp_access(
                 McpAccessContext(
-                    token_kind="beta",
-                    workspace_id=None,
-                    scopes=frozenset({MCP_SCOPE}),
-                    allowed_accounts={},
+                    token_kind="legacy",
+                    workspace_id=workspace_id,
+                    scopes=frozenset({MCP_SCOPE, MCP_READ_SCOPE}),
+                    allowed_accounts=allowed_accounts,
+                    read_only=True,
+                    principal_id="legacy-web-api-token",
                 )
             )
-            return AccessToken(token=token, client_id="adforge-beta-client", scopes=[MCP_SCOPE])
+            return AccessToken(token=token, client_id="adforge-legacy-scoped-client", scopes=[MCP_SCOPE, MCP_READ_SCOPE])
         if not self._settings:
             return None
         store = self._auth_store or AuthStore(self._settings)

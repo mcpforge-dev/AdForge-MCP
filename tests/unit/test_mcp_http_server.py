@@ -21,14 +21,22 @@ def _test_client(app):
 
 
 @pytest.mark.asyncio
-async def test_static_bearer_token_verifier_accepts_only_expected_token() -> None:
-    verifier = StaticBearerTokenVerifier("secret-token")
+async def test_static_bearer_token_verifier_requires_explicit_scope_mapping(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        legacy_mcp_token_enabled=True,
+        legacy_mcp_workspace_id="workspace-a",
+        legacy_mcp_allowed_accounts_json='{"google_ads":["1234567890"]}',
+    )
+    verifier = StaticBearerTokenVerifier("secret-token", settings=settings)
 
     accepted = await verifier.verify_token("secret-token")
     rejected = await verifier.verify_token("wrong-token")
 
     assert accepted is not None
-    assert accepted.client_id == "adforge-beta-client"
+    assert accepted.client_id == "adforge-legacy-scoped-client"
     assert rejected is None
 
 
@@ -130,7 +138,7 @@ def test_public_mcp_url_can_be_overridden_for_reverse_proxy(tmp_path) -> None:
 
 
 @pytest.mark.asyncio
-async def test_mcp_verifier_accepts_user_token_and_preserves_beta_fallback(tmp_path) -> None:
+async def test_mcp_verifier_accepts_user_token_and_denies_unscoped_beta_fallback(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
         env="production",
@@ -149,8 +157,7 @@ async def test_mcp_verifier_accepts_user_token_and_preserves_beta_fallback(tmp_p
     user_access = await verifier.verify_token(raw_token)
     wrong_access = await verifier.verify_token("wrong-token")
 
-    assert beta_access is not None
-    assert beta_access.client_id == "adforge-beta-client"
+    assert beta_access is None
     assert user_access is not None
     assert user_access.client_id == f"adforge-user:{user.id}"
     assert wrong_access is None

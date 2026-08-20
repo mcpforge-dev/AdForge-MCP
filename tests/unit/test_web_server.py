@@ -11,6 +11,8 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import HTTPRedirectHandler, Request, build_opener, urlopen
 
+from cryptography.fernet import Fernet
+
 from ad_mcp.core.connection_store import HostedConnectionStore
 from ad_mcp.settings import Settings
 from ad_mcp.web.auth_store import AuthStore
@@ -1081,6 +1083,8 @@ def test_hosted_connections_are_isolated_between_user_sessions_and_profile_count
         database_url=f"sqlite:///{(tmp_path / 'auth.db').as_posix()}",
         connection_store_path="tokens/connections.json",
         connections_fallback_to_local=False,
+        credentials_encryption_key=Fernet.generate_key().decode("ascii"),
+        credentials_allow_legacy_plaintext=True,
     )
     store = AuthStore(settings)
     store.ensure_schema()

@@ -124,7 +124,12 @@ def _check_payload(status: str, message: str, **extra: Any) -> dict[str, Any]:
 class DiagnosticsService:
     def __init__(self, settings: Settings | None = None) -> None:
         self.settings = settings or Settings()
-        self.store = HostedConnectionStore(self.settings.connection_store_file)
+        self.store = HostedConnectionStore(
+            self.settings.connection_store_file,
+            encryption_key=self.settings.credentials_encryption_key,
+            allow_legacy_plaintext=self.settings.credentials_allow_legacy_plaintext,
+            encryption_required=self.settings.credentials_encryption_required,
+        )
         self.hosted = HostedConnectionService(self.settings)
 
     def overview(self, *, live: bool = False) -> dict[str, Any]:
