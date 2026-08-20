@@ -60,7 +60,7 @@ jobs:
       - name: API readiness integration smoke
         shell: bash
         run: |
-          node apps/api/dist/main.js > api.log 2>&1 &
+          node apps/api/dist/main.js > /tmp/holymedia-v2-api.log 2>&1 &
           api_pid=$!
           trap 'kill "$api_pid" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
@@ -70,22 +70,22 @@ jobs:
             fi
             sleep 1
           done
-          cat api.log
+          cat /tmp/holymedia-v2-api.log
           exit 1
       - name: Worker job integration smoke
         shell: bash
         run: |
-          node apps/worker/dist/main.js > worker.log 2>&1 &
+          node apps/worker/dist/main.js > /tmp/holymedia-v2-worker.log 2>&1 &
           worker_pid=$!
           trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
           for attempt in {1..30}; do
-            if grep -q 'foundation job processed' worker.log; then
-              cat worker.log
+            if grep -q 'foundation job processed' /tmp/holymedia-v2-worker.log; then
+              cat /tmp/holymedia-v2-worker.log
               exit 0
             fi
             sleep 1
           done
-          cat worker.log
+          cat /tmp/holymedia-v2-worker.log
           exit 1
       - run: pnpm security:secrets
       - run: pnpm security:deps
