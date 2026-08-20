@@ -430,13 +430,26 @@ class HostedConnectionStore:
     def pending_selection(self, provider: str, pending_id: str, workspace_id: str | None = None) -> dict[str, Any]:
         pending = self._pending(provider, pending_id, workspace_id=workspace_id)
         accounts = pending.get("accounts", [])
+        existing = self.provider_config(provider, workspace_id=workspace_id).get("accounts", [])
+        existing_ids = {
+            self._account_identity(provider, account.get("account_id"))
+            for account in existing
+            if isinstance(account, dict) and self._account_identity(provider, account.get("account_id"))
+        }
+        safe_accounts: list[dict[str, Any]] = []
+        for account in accounts:
+            if not isinstance(account, dict):
+                continue
+            summary = safe_account_summary(_runtime_account(provider, account))
+            summary["already_connected"] = self._account_identity(provider, summary.get("account_id")) in existing_ids
+            safe_accounts.append(summary)
         return {
             "provider": provider,
             "pending_id": pending_id,
             "status": "pending_account_selection",
             "expires_at": pending.get("expires_at"),
             "metadata": _safe_pending_metadata(pending.get("metadata")),
-            "accounts": [safe_account_summary(_runtime_account(provider, account)) for account in accounts if isinstance(account, dict)],
+            "accounts": safe_accounts,
         }
 
     def select_pending_accounts(
@@ -493,9 +506,30 @@ class HostedConnectionStore:
                     selected_accounts.append(account)
         if not selected_accounts:
             raise ValueError("Selected account_ids were not found in pending OAuth discovery.")
+        selected_by_id = {
+            self._account_identity(provider, account.get("account_id")): account
+            for account in selected_accounts
+            if self._account_identity(provider, account.get("account_id"))
+        }
+        merged_accounts: list[dict[str, Any]] = []
+        existing_accounts = self.provider_config(provider, workspace_id=workspace_id).get("accounts", [])
+        for existing in existing_accounts:
+            if not isinstance(existing, dict):
+                continue
+            account_id = self._account_identity(provider, existing.get("account_id"))
+            if not account_id:
+                continue
+            if account_id in selected_by_id:
+                merged_accounts.append(selected_by_id.pop(account_id))
+                continue
+            refreshed = dict(existing)
+            refreshed.update(credentials)
+            refreshed["status"] = refreshed.get("status") or "connected"
+            merged_accounts.append(refreshed)
+        merged_accounts.extend(selected_by_id.values())
         status = self.save_provider_config(
             provider,
-            {"provider": provider, "accounts": selected_accounts},
+            {"provider": provider, "accounts": merged_accounts},
             source="dashboard_oauth",
             workspace_id=workspace_id,
             user_id=user_id,
@@ -503,6 +537,12 @@ class HostedConnectionStore:
         # Completing an OAuth selection makes older pending records for the same provider stale.
         self._remove_all_pending(provider, workspace_id=workspace_id)
         return {"provider": provider, "status": "connected", "accounts": status["accounts"]}
+
+    @staticmethod
+    def _account_identity(provider: str, value: Any) -> str:
+        if provider == "google_ads":
+            return _clean_google_customer_id(value) or str(value or "").strip()
+        return str(value or "").strip()
 
     def _pending(self, provider: str, pending_id: str, workspace_id: str | None = None) -> dict[str, Any]:
         data = self.read()

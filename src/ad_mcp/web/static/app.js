@@ -2773,6 +2773,7 @@
         ${expired && !pending ? renderExpiredCallout() : ""}
         <div class="platform-card__actions">
           <button type="button" class="btn btn--primary btn--small" data-oauth="${escAttr(platform.provider)}" ${canConnect ? "" : "disabled"}>${connectLabel}</button>
+          ${accounts.length && canConnect ? `<button type="button" class="btn btn--secondary btn--small" data-add-account="${escAttr(platform.provider)}">Добавить кабинет</button>` : ""}
           ${manualMetaOnly ? `<button type="button" class="btn btn--secondary btn--small" data-manual-meta-request>${state.manualMetaRequest ? "Открыть заявку" : "Оставить заявку на подключение вручную"}</button>` : ""}
           ${accounts.length ? `<button type="button" class="btn btn--danger btn--small" data-disconnect="${escAttr(platform.provider)}">Отключить</button>` : ""}
         </div>
@@ -2868,7 +2869,7 @@
 
   function renderPendingPanel(pending) {
     const accounts = pending.accounts || [];
-    const activeAccounts = accounts.filter((account) => !isPendingAccountDisabled(account));
+    const activeAccounts = accounts.filter((account) => !isPendingAccountDisabled(account) && !isPendingAccountAlreadyConnected(account));
     const manualGoogle = isGoogleManualCustomerEntry(pending);
     const options = accounts.length
       ? accounts.map(renderPendingOption).join("")
@@ -2959,16 +2960,21 @@
     return archived || disabled || account?.status === "archived";
   }
 
+  function isPendingAccountAlreadyConnected(account) {
+    return account?.already_connected === true || String(account?.already_connected || "").toLowerCase() === "true";
+  }
+
   function renderPendingOption(account) {
     const id = account.account_id || account.customer_id || account.advertiser_id || account.direct_client_login || "";
     const disabled = isPendingAccountDisabled(account);
+    const alreadyConnected = isPendingAccountAlreadyConnected(account);
     const reason = account.disabled_reason || (disabled ? "Архивный/отключённый кабинет" : "");
     return `
-      <label class="pending-option ${disabled ? "pending-option--disabled" : ""}">
-        <input type="checkbox" name="account_id" value="${escAttr(id)}" ${disabled ? "disabled" : "checked"}>
+      <label class="pending-option ${disabled ? "pending-option--disabled" : ""} ${alreadyConnected ? "pending-option--connected" : ""}">
+        <input type="checkbox" name="account_id" value="${escAttr(id)}" ${disabled || alreadyConnected ? "disabled" : "checked"}>
         <span>
           <span class="pending-option__name">${esc(account.name || id || "Аккаунт")}</span>
-          <span class="pending-option__id">${esc(id)}${reason ? ` · ${esc(reason)}` : ""}</span>
+          <span class="pending-option__id">${esc(id)}${alreadyConnected ? " · Уже подключён" : reason ? ` · ${esc(reason)}` : ""}</span>
         </span>
       </label>
     `;
@@ -2977,6 +2983,9 @@
   function bindConnectionActions() {
     el.connectionsList.querySelectorAll("[data-oauth]").forEach((btn) =>
       btn.addEventListener("click", () => startOAuth(btn.dataset.oauth, btn)),
+    );
+    el.connectionsList.querySelectorAll("[data-add-account]").forEach((btn) =>
+      btn.addEventListener("click", () => startOAuth(btn.dataset.addAccount, btn)),
     );
     el.connectionsList.querySelectorAll("[data-manual-meta-request]").forEach((btn) =>
       btn.addEventListener("click", () => openManualMetaRequest()),

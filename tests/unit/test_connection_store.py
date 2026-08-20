@@ -398,6 +398,34 @@ def test_select_pending_accounts_clears_stale_provider_pending_records(tmp_path:
     assert store.safe_provider_status("yandex_direct")["accounts"][0]["account_id"] == "client-login"
 
 
+def test_select_pending_accounts_adds_new_account_without_dropping_existing_workspace_account(tmp_path: Path) -> None:
+    store = HostedConnectionStore(tmp_path / "connections.json")
+    workspace_id = "workspace-one"
+    store.save_provider_config(
+        "meta_ads",
+        {"accounts": [{"account_id": "act_111", "name": "Existing", "access_token": "old-token"}]},
+        workspace_id=workspace_id,
+    )
+    pending = store.save_oauth_pending(
+        "meta_ads",
+        [
+            {"account_id": "act_111", "name": "Existing"},
+            {"account_id": "act_222", "name": "New"},
+        ],
+        credentials={"access_token": "fresh-token"},
+        workspace_id=workspace_id,
+    )
+
+    safe_pending = store.pending_selection("meta_ads", pending["pending_id"], workspace_id=workspace_id)
+    selected = store.select_pending_accounts("meta_ads", pending["pending_id"], ["act_222"], workspace_id=workspace_id)
+    stored = store.provider_config("meta_ads", workspace_id=workspace_id)
+
+    assert [account["already_connected"] for account in safe_pending["accounts"]] == [True, False]
+    assert [account["account_id"] for account in selected["accounts"]] == ["act_111", "act_222"]
+    assert [account["account_id"] for account in stored["accounts"]] == ["act_111", "act_222"]
+    assert all(account["access_token"] == "fresh-token" for account in stored["accounts"])
+
+
 def test_oauth_pending_metadata_is_safe_and_archived_accounts_are_not_selected(tmp_path: Path) -> None:
     store = HostedConnectionStore(tmp_path / "connections.json")
     pending = store.save_oauth_pending(
