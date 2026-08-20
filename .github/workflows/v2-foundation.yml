@@ -53,10 +53,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm lint
       - run: pnpm typecheck
-      - run: pnpm test
-      - run: pnpm build
       - run: pnpm migrate:validate
       - run: pnpm --filter @holymedia/database prisma:deploy
+      - run: pnpm test
+      - run: pnpm build
       - name: API readiness integration smoke
         shell: bash
         run: |
@@ -87,5 +87,41 @@ jobs:
           done
           cat /tmp/holymedia-v2-worker.log
           exit 1
+      - name: API dependency degradation smoke
+        shell: bash
+        run: |
+          node apps/api/dist/main.js > /tmp/holymedia-v2-degradation-api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          wait_ready() {
+            for attempt in {1..30}; do
+              if curl --fail --silent http://127.0.0.1:4000/ready > /tmp/ready.json; then
+                return 0
+              fi
+              sleep 1
+            done
+            cat /tmp/holymedia-v2-degradation-api.log
+            return 1
+          }
+          assert_not_ready() {
+            local status
+            status=$(curl --silent --output /tmp/ready-degraded.json --write-out '%{http_code}' http://127.0.0.1:4000/ready || true)
+            test "$status" != "200"
+          }
+          wait_ready
+
+          postgres_id=$(docker ps --filter ancestor=postgres:18-alpine --format '{{.ID}}' | head -n 1)
+          test -n "$postgres_id"
+          docker stop "$postgres_id"
+          assert_not_ready
+          docker start "$postgres_id"
+          wait_ready
+
+          redis_id=$(docker ps --filter ancestor=redis:7.4-alpine --format '{{.ID}}' | head -n 1)
+          test -n "$redis_id"
+          docker stop "$redis_id"
+          assert_not_ready
+          docker start "$redis_id"
+          wait_ready
       - run: pnpm security:secrets
       - run: pnpm security:deps

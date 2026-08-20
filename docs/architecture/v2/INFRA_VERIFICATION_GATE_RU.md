@@ -10,3 +10,5 @@
 - применение Prisma migrations на PostgreSQL.
 
 Phase 2 добавляет этот gate в CI через PostgreSQL и Redis service containers. Локальная проверка Compose остаётся обязательной перед staging rollout, даже если CI проходит.
+
+При недоступности PostgreSQL или Redis endpoint `/ready` возвращает `503` с общим статусом `not_ready`; `/health` остаётся liveness-проверкой процесса и не подтверждает доступность зависимостей. После восстановления зависимости readiness снова должен вернуться к `200`.

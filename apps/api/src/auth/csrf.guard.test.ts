@@ -43,4 +43,20 @@ describe("CsrfGuard", () => {
       ),
     ).toBe(true);
   });
+
+  it("rejects an origin outside the configured allowlist", () => {
+    const guard = new CsrfGuard();
+    expect(() =>
+      guard.canActivate(
+        context({
+          method: "POST",
+          headers: {
+            origin: "https://attacker.example",
+            "x-csrf-token": "same-token",
+          },
+          cookies: { hm_v2_csrf: "same-token" },
+        }),
+      ),
+    ).toThrow("CSRF validation failed.");
+  });
 });
