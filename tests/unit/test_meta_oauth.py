@@ -125,6 +125,18 @@ def test_meta_oauth_ads_management_is_added_only_by_explicit_feature_flag(tmp_pa
     ]
 
 
+def test_manual_meta_oauth_stays_read_only_when_ads_management_is_enabled(tmp_path) -> None:
+    service = MetaOAuthService(
+        _settings(tmp_path, meta_ads_management_oauth_enabled=True),
+        _FakeMetaHTTP(),
+    )
+
+    url = service.authorization_url(manual_request_id="request-1", include_ads_management=False)
+    query = parse_qs(urlparse(url).query)
+
+    assert query["scope"] == ["ads_read,business_management,pages_show_list,pages_read_engagement"]
+
+
 def test_meta_oauth_callback_discovers_accounts_and_select_saves_credentials(tmp_path) -> None:
     http = _FakeMetaHTTP()
     service = MetaOAuthService(_settings(tmp_path), http)

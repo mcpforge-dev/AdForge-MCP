@@ -389,6 +389,7 @@ class HostedConnectionService:
                 workspace_id=workspace_id,
                 user_id=user_id,
                 manual_request_id=request_id,
+                include_ads_management=False,
             ),
         }
 

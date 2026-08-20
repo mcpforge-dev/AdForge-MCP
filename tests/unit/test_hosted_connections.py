@@ -15,8 +15,15 @@ class _FakeManualMetaOAuth:
         self.authorization_args = None
         self.selection_args = None
 
-    def authorization_url(self, workspace_id=None, user_id=None, *, manual_request_id=None):
-        self.authorization_args = (workspace_id, user_id, manual_request_id)
+    def authorization_url(
+        self,
+        workspace_id=None,
+        user_id=None,
+        *,
+        manual_request_id=None,
+        include_ads_management=True,
+    ):
+        self.authorization_args = (workspace_id, user_id, manual_request_id, include_ads_management)
         return "https://www.facebook.com/dialog/oauth?safe=1"
 
     def pending_selection(self, pending_id, workspace_id=None):
@@ -70,7 +77,7 @@ def test_manual_meta_oauth_is_bound_to_request_workspace_and_requested_account(t
     selected = service.manual_meta_oauth_select(request, "pending-1")
 
     assert authorization["status"] == "oauth_ready"
-    assert fake_oauth.authorization_args == ("workspace-client", "user-client", "request-1")
+    assert fake_oauth.authorization_args == ("workspace-client", "user-client", "request-1", False)
     assert [account["account_id"] for account in pending["accounts"]] == ["act_111"]
     assert fake_oauth.selection_args == ("pending-1", ["act_111"], "workspace-client", "user-client")
     assert selected["accounts"][0]["account_id"] == "act_111"

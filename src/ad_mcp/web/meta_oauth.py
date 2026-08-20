@@ -62,10 +62,14 @@ class MetaOAuthService:
         user_id: str | None = None,
         *,
         manual_request_id: str | None = None,
+        include_ads_management: bool = True,
     ) -> str:
         self._ensure_configured()
         redirect_uri = self.redirect_uri()
         state_id = uuid4().hex
+        requested_permissions = self.requested_permissions()
+        if not include_ads_management:
+            requested_permissions = [permission for permission in requested_permissions if permission != "ads_management"]
         state = self._sign_state(
             {
                 "provider": META_PROVIDER,
@@ -75,6 +79,7 @@ class MetaOAuthService:
                 "workspace_id": workspace_id,
                 "user_id": user_id,
                 "manual_request_id": manual_request_id,
+                "requested_permissions": requested_permissions,
             }
         )
         self._store.save_oauth_state(
@@ -89,7 +94,7 @@ class MetaOAuthService:
                 "client_id": self._settings.meta_oauth_app_id.strip(),
                 "redirect_uri": redirect_uri,
                 "state": state,
-                "scope": ",".join(self.requested_permissions()),
+                "scope": ",".join(requested_permissions),
                 "response_type": "code",
             }
         )
@@ -115,7 +120,12 @@ class MetaOAuthService:
         permissions = self._fetch_permissions(token)
         businesses, business_warning = self._discover_optional(self._fetch_businesses, token)
         pages, pages_warning = self._discover_optional(self._fetch_pages, token)
-        requested_permissions = self.requested_permissions()
+        state_permissions = state_payload.get("requested_permissions")
+        requested_permissions = (
+            [str(item) for item in state_permissions if str(item).strip()]
+            if isinstance(state_permissions, list)
+            else self.requested_permissions()
+        )
         granted_permissions = sorted(
             str(item.get("permission"))
             for item in permissions
