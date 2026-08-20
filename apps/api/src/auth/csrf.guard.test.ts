@@ -1,0 +1,46 @@
+import { describe, expect, it } from "vitest";
+import { CsrfGuard } from "./csrf.guard.js";
+
+function context(request: Record<string, unknown>) {
+  return {
+    switchToHttp: () => ({ getRequest: () => request }),
+  } as never;
+}
+
+describe("CsrfGuard", () => {
+  it("allows safe methods", () => {
+    const guard = new CsrfGuard();
+    expect(
+      guard.canActivate(context({ method: "GET", headers: {}, cookies: {} })),
+    ).toBe(true);
+  });
+
+  it("rejects a state-changing request without a matching proof", () => {
+    const guard = new CsrfGuard();
+    expect(() =>
+      guard.canActivate(
+        context({
+          method: "POST",
+          headers: { origin: "http://localhost:3000" },
+          cookies: { hm_v2_csrf: "cookie-token" },
+        }),
+      ),
+    ).toThrow("CSRF validation failed.");
+  });
+
+  it("accepts the same CSRF token from cookie and header", () => {
+    const guard = new CsrfGuard();
+    expect(
+      guard.canActivate(
+        context({
+          method: "POST",
+          headers: {
+            origin: "http://localhost:3000",
+            "x-csrf-token": "same-token",
+          },
+          cookies: { hm_v2_csrf: "same-token" },
+        }),
+      ),
+    ).toBe(true);
+  });
+});

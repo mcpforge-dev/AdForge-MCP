@@ -7,9 +7,15 @@ const environmentSchema = z.enum([
   "production",
 ]);
 
+const booleanFromEnv = z.preprocess(
+  (value) =>
+    typeof value === "string" ? value.trim().toLowerCase() === "true" : value,
+  z.boolean(),
+);
+
 const rawConfigSchema = z.object({
   NODE_ENV: environmentSchema.default("development"),
-  V2_CONFIG_STRICT: z.coerce.boolean().default(false),
+  V2_CONFIG_STRICT: booleanFromEnv.default(false),
   API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
   WEB_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
   DATABASE_URL: z
@@ -18,6 +24,18 @@ const rawConfigSchema = z.object({
     .default("postgresql://holymedia:change-me@localhost:5433/holymedia_v2"),
   REDIS_URL: z.string().url().default("redis://localhost:6380"),
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
+  SESSION_HASH_SECRET: z.string().default("dev-session-hash-secret-change-me"),
+  COOKIE_DOMAIN: z.string().optional(),
+  SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
+  EMAIL_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
+  ARGON2_MEMORY_KIB: z.coerce
+    .number()
+    .int()
+    .min(8192)
+    .max(262144)
+    .default(19456),
+  ARGON2_TIME_COST: z.coerce.number().int().min(2).max(10).default(2),
+  ARGON2_PARALLELISM: z.coerce.number().int().min(1).max(4).default(1),
   LOG_LEVEL: z
     .enum(["fatal", "error", "warn", "info", "debug", "trace", "silent"])
     .default("info"),
@@ -33,6 +51,13 @@ export type AppConfig = {
   databaseUrl: string;
   redisUrl: string;
   corsOrigins: string[];
+  sessionHashSecret: string;
+  cookieDomain: string | undefined;
+  sessionTtlDays: number;
+  emailTokenTtlMinutes: number;
+  argon2MemoryKib: number;
+  argon2TimeCost: number;
+  argon2Parallelism: number;
   logLevel: z.infer<typeof rawConfigSchema.shape.LOG_LEVEL>;
 };
 
@@ -50,7 +75,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
   if (
     configStrict &&
     (value.DATABASE_URL.includes("change-me") ||
-      value.REDIS_URL.includes("localhost"))
+      value.REDIS_URL.includes("localhost") ||
+      value.SESSION_HASH_SECRET.includes("change-me") ||
+      value.SESSION_HASH_SECRET.length < 32)
   ) {
     throw new Error(
       "Production-like v2 configuration requires explicit DATABASE_URL and REDIS_URL.",
@@ -72,6 +99,13 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     databaseUrl: value.DATABASE_URL,
     redisUrl: value.REDIS_URL,
     corsOrigins,
+    sessionHashSecret: value.SESSION_HASH_SECRET,
+    cookieDomain: value.COOKIE_DOMAIN,
+    sessionTtlDays: value.SESSION_TTL_DAYS,
+    emailTokenTtlMinutes: value.EMAIL_TOKEN_TTL_MINUTES,
+    argon2MemoryKib: value.ARGON2_MEMORY_KIB,
+    argon2TimeCost: value.ARGON2_TIME_COST,
+    argon2Parallelism: value.ARGON2_PARALLELISM,
     logLevel: value.LOG_LEVEL,
   };
 }

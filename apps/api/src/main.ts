@@ -7,6 +7,7 @@ import {
 } from "@nestjs/platform-fastify";
 import { DocumentBuilder, SwaggerModule } from "@nestjs/swagger";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import helmet from "@fastify/helmet";
 import { loadConfig } from "@holymedia/config";
 import { createLogger, requestId } from "@holymedia/observability";
@@ -27,6 +28,7 @@ async function bootstrap(): Promise<void> {
   );
 
   await app.register(helmet, { contentSecurityPolicy: false });
+  await app.register(cookie);
   await app.register(cors, {
     origin: config.corsOrigins,
     credentials: true,

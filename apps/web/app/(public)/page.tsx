@@ -1,9 +1,16 @@
+import Link from "next/link";
+
 export default function PublicHomePage() {
   return (
-    <main>
-      <p>HolyMedia MCP v2 foundation</p>
-      <h1>Production foundation is ready.</h1>
-      <p>Public and private route groups are reserved for the next phases.</p>
+    <main className="home-shell">
+      <p className="eyebrow">HolyMedia MCP v2</p>
+      <h1>Управляйте рабочими пространствами безопасно.</h1>
+      <p className="muted">
+        Identity foundation: sessions, workspace membership, roles and audit.
+      </p>
+      <Link className="primary-button link-button" href="/auth">
+        Войти или создать аккаунт
+      </Link>
     </main>
   );
 }

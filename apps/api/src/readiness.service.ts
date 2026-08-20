@@ -1,25 +1,25 @@
-import { Injectable, ServiceUnavailableException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import type { ReadinessResponse, ServiceStatus } from "@holymedia/contracts";
 import { loadConfig, type AppConfig } from "@holymedia/config";
-import {
-  checkDatabase,
-  closeDatabase,
-  createDatabase,
-  type DatabaseHandle,
-} from "@holymedia/database";
+import { checkDatabase } from "@holymedia/database";
 import { createLogger, type Logger } from "@holymedia/observability";
 import { Redis } from "ioredis";
+import { DatabaseService } from "./infrastructure/database.service.js";
 
 @Injectable()
 export class ReadinessService {
   private readonly config: AppConfig;
-  private readonly database: DatabaseHandle;
   private readonly redis: Redis;
   private readonly logger: Logger;
 
-  public constructor() {
+  public constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+  ) {
     this.config = loadConfig();
-    this.database = createDatabase(this.config.databaseUrl);
     this.redis = new Redis(this.config.redisUrl, {
       lazyConnect: true,
       enableOfflineQueue: false,
@@ -35,7 +35,7 @@ export class ReadinessService {
     try {
       dependencies.postgres = {
         status: "ok",
-        latencyMs: await checkDatabase(this.database),
+        latencyMs: await checkDatabase(this.database.handle),
       };
     } catch (error) {
       dependencies.postgres = { status: "not_ready" };
@@ -82,6 +82,5 @@ export class ReadinessService {
 
   public async close(): Promise<void> {
     await this.redis.quit().catch(() => undefined);
-    await closeDatabase(this.database);
   }
 }

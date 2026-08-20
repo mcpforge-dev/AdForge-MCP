@@ -8,6 +8,184 @@ datasource db {
   relationMode = "foreignKeys"
 }
 
+enum WorkspaceRole {
+  OWNER
+  ADMIN
+  MEMBER
+  VIEWER
+}
+
+enum AuditActorType {
+  HUMAN
+  SERVICE
+}
+
+model User {
+  id                String               @id @default(uuid()) @db.Uuid
+  email             String               @unique @db.VarChar(320)
+  name              String               @db.VarChar(160)
+  passwordHash      String               @map("password_hash") @db.VarChar(255)
+  emailVerifiedAt   DateTime?            @map("email_verified_at")
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+  memberships       WorkspaceMembership[]
+  sessions          Session[]
+  emailVerifications EmailVerification[]
+  passwordResets    PasswordReset[]
+  invitationsSent   WorkspaceInvitation[] @relation("inviter")
+  auditEvents       AuditEvent[]
+
+  @@index([email])
+  @@map("users")
+}
+
+model Workspace {
+  id           String               @id @default(uuid()) @db.Uuid
+  name         String               @db.VarChar(160)
+  slug         String               @unique @db.VarChar(120)
+  createdAt    DateTime             @default(now()) @map("created_at")
+  updatedAt    DateTime             @updatedAt @map("updated_at")
+  memberships  WorkspaceMembership[]
+  invitations  WorkspaceInvitation[]
+  auditEvents  AuditEvent[]
+  identities   ServiceIdentity[]
+
+  @@index([createdAt])
+  @@map("workspaces")
+}
+
+model WorkspaceMembership {
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  userId      String        @map("user_id") @db.Uuid
+  role        WorkspaceRole @default(MEMBER)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId, workspaceId])
+  @@index([workspaceId, role])
+  @@map("workspace_memberships")
+}
+
+model Permission {
+  id          String           @id @default(uuid()) @db.Uuid
+  key         String           @unique @db.VarChar(120)
+  description String           @db.VarChar(255)
+  roleLinks   RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  role         WorkspaceRole @map("role")
+  permissionId String        @map("permission_id") @db.Uuid
+  permission   Permission    @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([role, permissionId])
+  @@index([permissionId])
+  @@map("role_permissions")
+}
+
+model Session {
+  id           String    @id @default(uuid()) @db.Uuid
+  userId       String    @map("user_id") @db.Uuid
+  tokenDigest  String    @unique @map("token_digest") @db.VarChar(128)
+  createdAt    DateTime  @default(now()) @map("created_at")
+  expiresAt    DateTime  @map("expires_at")
+  lastSeenAt   DateTime  @default(now()) @map("last_seen_at")
+  revokedAt    DateTime? @map("revoked_at")
+  userAgent    String?   @map("user_agent") @db.VarChar(512)
+  ipHash       String?   @map("ip_hash") @db.VarChar(128)
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, revokedAt])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+model EmailVerification {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenDigest String    @unique @map("token_digest") @db.VarChar(128)
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+  @@map("email_verifications")
+}
+
+model PasswordReset {
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenDigest String    @unique @map("token_digest") @db.VarChar(128)
+  expiresAt   DateTime  @map("expires_at")
+  usedAt      DateTime? @map("used_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, usedAt])
+  @@index([expiresAt])
+  @@map("password_resets")
+}
+
+model WorkspaceInvitation {
+  id         String        @id @default(uuid()) @db.Uuid
+  workspaceId String       @map("workspace_id") @db.Uuid
+  inviterId  String        @map("inviter_id") @db.Uuid
+  email      String        @db.VarChar(320)
+  role       WorkspaceRole @default(MEMBER)
+  tokenDigest String       @unique @map("token_digest") @db.VarChar(128)
+  expiresAt  DateTime      @map("expires_at")
+  acceptedAt DateTime?     @map("accepted_at")
+  revokedAt  DateTime?     @map("revoked_at")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inviter    User          @relation("inviter", fields: [inviterId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, email])
+  @@index([workspaceId, expiresAt])
+  @@map("workspace_invitations")
+}
+
+model ServiceIdentity {
+  id          String     @id @default(uuid()) @db.Uuid
+  workspaceId String?    @map("workspace_id") @db.Uuid
+  name        String     @db.VarChar(160)
+  createdAt   DateTime   @default(now()) @map("created_at")
+  revokedAt   DateTime?  @map("revoked_at")
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, revokedAt])
+  @@map("service_identities")
+}
+
+model AuditEvent {
+  id           String         @id @default(uuid()) @db.Uuid
+  workspaceId  String?        @map("workspace_id") @db.Uuid
+  actorUserId  String?        @map("actor_user_id") @db.Uuid
+  actorType    AuditActorType @default(HUMAN) @map("actor_type")
+  eventType    String         @map("event_type") @db.VarChar(120)
+  success      Boolean        @default(true)
+  targetType   String?        @map("target_type") @db.VarChar(120)
+  targetId     String?        @map("target_id") @db.VarChar(160)
+  requestId    String?        @map("request_id") @db.VarChar(128)
+  metadata     Json?
+  createdAt    DateTime       @default(now()) @map("created_at")
+  workspace    Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actorUser    User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, createdAt])
+  @@index([actorUserId, createdAt])
+  @@index([eventType, createdAt])
+  @@map("audit_events")
+}
+
 model SystemMetadata {
   id        String   @id @default(uuid()) @db.Uuid
   key       String   @unique @db.VarChar(160)

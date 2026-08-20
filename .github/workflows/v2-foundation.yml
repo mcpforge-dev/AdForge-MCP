@@ -11,6 +11,36 @@ permissions:
 jobs:
   quality:
     runs-on: ubuntu-latest
+    env:
+      NODE_ENV: test
+      V2_INTEGRATION_TESTS: "true"
+      DATABASE_URL: postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2
+      REDIS_URL: redis://127.0.0.1:6379
+      SESSION_HASH_SECRET: ci-only-session-hash-secret-01234567890123456789
+      CORS_ORIGINS: http://127.0.0.1:3000
+    services:
+      postgres:
+        image: postgres:18-alpine
+        env:
+          POSTGRES_DB: holymedia_v2
+          POSTGRES_USER: holymedia
+          POSTGRES_PASSWORD: change-me-local-only
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U holymedia -d holymedia_v2"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+      redis:
+        image: redis:7.4-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
     steps:
       - uses: actions/checkout@v4
       - uses: pnpm/action-setup@v4
@@ -26,5 +56,36 @@ jobs:
       - run: pnpm test
       - run: pnpm build
       - run: pnpm migrate:validate
+      - run: pnpm --filter @holymedia/database prisma:deploy
+      - name: API readiness integration smoke
+        shell: bash
+        run: |
+          node apps/api/dist/main.js > api.log 2>&1 &
+          api_pid=$!
+          trap 'kill "$api_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if curl --fail --silent http://127.0.0.1:4000/ready > /tmp/ready.json; then
+              cat /tmp/ready.json
+              exit 0
+            fi
+            sleep 1
+          done
+          cat api.log
+          exit 1
+      - name: Worker job integration smoke
+        shell: bash
+        run: |
+          node apps/worker/dist/main.js > worker.log 2>&1 &
+          worker_pid=$!
+          trap 'kill "$worker_pid" 2>/dev/null || true' EXIT
+          for attempt in {1..30}; do
+            if grep -q 'foundation job processed' worker.log; then
+              cat worker.log
+              exit 0
+            fi
+            sleep 1
+          done
+          cat worker.log
+          exit 1
       - run: pnpm security:secrets
       - run: pnpm security:deps
