@@ -1,0 +1,84 @@
+services:
+  postgres:
+    image: postgres:18-alpine
+    environment:
+      POSTGRES_DB: holymedia_v2
+      POSTGRES_USER: holymedia
+      POSTGRES_PASSWORD: change-me-local-only
+    ports:
+      - "5433:5432"
+    volumes:
+      - v2-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U holymedia -d holymedia_v2"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  redis:
+    image: redis:7.4-alpine
+    ports:
+      - "6380:6379"
+    volumes:
+      - v2-redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.v2
+    environment:
+      NODE_ENV: development
+      V2_CONFIG_STRICT: "true"
+      API_PORT: "4000"
+      DATABASE_URL: postgresql://holymedia:change-me-local-only@postgres:5432/holymedia_v2
+      REDIS_URL: redis://redis:6379
+      CORS_ORIGINS: http://localhost:3000
+    command:
+      [
+        "sh",
+        "-c",
+        "pnpm --filter @holymedia/database prisma:deploy && pnpm --filter @holymedia/api start",
+      ]
+    ports:
+      - "4000:4000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.v2
+    environment:
+      NODE_ENV: development
+      V2_CONFIG_STRICT: "true"
+      REDIS_URL: redis://redis:6379
+    command: ["pnpm", "--filter", "@holymedia/worker", "start"]
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.v2
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    command: ["pnpm", "--filter", "@holymedia/web", "start"]
+    ports:
+      - "3000:3000"
+    depends_on:
+      api:
+        condition: service_started
+
+volumes:
+  v2-postgres:
+  v2-redis:

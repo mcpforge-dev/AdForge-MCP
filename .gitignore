@@ -21,5 +21,14 @@ logs/*
 # Local-machine agent config and data (project skills ARE committed)
 .claude/settings.local.json
 .codex/hooks.json
+.turbo/
+.next/
+coverage/
+src/generated/
+**/src/generated/
+**/*.tsbuildinfo
 .impeccable/
 .openhands/
+.agents/
+.claude/
+.codex/

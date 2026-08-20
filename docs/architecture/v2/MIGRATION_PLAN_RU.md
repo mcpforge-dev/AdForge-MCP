@@ -4,7 +4,7 @@ No phase below is authorized by this Phase 0 document. Each phase needs its own 
 
 ## Phase 1: foundation
 
-Create pnpm workspace, Next app, Nest API, worker skeleton, shared contracts, Docker Compose, local observability, CI gates and migration tool. Keep v1 untouched.
+In progress on branch `v2/phase-1-foundation`: pnpm workspace, Next app, Nest API, worker skeleton, shared contracts, Docker Compose, local observability, CI gates and Prisma migration foundation. Keep v1 untouched.
 
 ## Phase 2: identity and tenancy
 
@@ -24,7 +24,7 @@ Versioned MCP gateway, service tokens, tool registry, policy engine, preview/con
 
 ## Phase 6: Hermes
 
-Locate or separate current bot runtime, make it an API consumer with scoped read token, preserve thread/reply behavior, add free deterministic analytics and rate limits. No direct DB/provider secret access.
+Hermes v1 source is unavailable. No code migration is planned. Implement a clean v2 Hermes application as an API consumer with scoped read token, preserve documented thread/reply behavior, add free deterministic analytics and rate limits. No direct DB/provider secret access.
 
 ## Phase 7: web/SEO/dashboard/reports
 
@@ -53,4 +53,3 @@ Canary or route-by-route cutover only after sign-off. Keep v1 live and rollback-
 ## Data migration controls
 
 `dry_run -> backup -> import metadata -> import encrypted credentials -> reconcile counts -> FK validation -> provider smoke -> report comparison -> approval`. Every step is idempotent and emits counts/IDs only, never secrets. Rollback is route rollback plus restoration of the pre-migration backup, not destructive reverse SQL on production.
-

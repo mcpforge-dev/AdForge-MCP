@@ -1,0 +1,17 @@
+.git
+.venv
+node_modules
+**/node_modules
+.next
+**/.next
+dist
+**/dist
+outputs
+logs
+secrets
+tokens
+.env
+.env.*
+!.env.v2.example
+connections.json
+**/connections.json
