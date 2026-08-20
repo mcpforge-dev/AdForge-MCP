@@ -217,6 +217,60 @@ select:focus {
 .invite-form select {
   width: 140px;
 }
+.connections-panel {
+  margin-top: 18px;
+}
+.section-heading,
+.provider-row,
+.provider-actions,
+.account-row {
+  display: flex;
+  align-items: center;
+}
+.section-heading,
+.provider-row {
+  justify-content: space-between;
+  gap: 18px;
+}
+.provider-list {
+  display: grid;
+  gap: 12px;
+}
+.provider-row {
+  flex-wrap: wrap;
+  border-top: 1px solid #26303d;
+  padding-top: 14px;
+}
+.provider-row > div:first-child {
+  display: grid;
+  gap: 4px;
+}
+.provider-row small,
+.provider-details small {
+  color: #8e99aa;
+}
+.provider-actions {
+  gap: 8px;
+}
+.provider-details {
+  display: grid;
+  flex-basis: 100%;
+  gap: 8px;
+  padding: 10px 0 2px;
+}
+.account-row {
+  gap: 8px;
+  min-height: 36px;
+  padding: 6px 0;
+  border-top: 1px solid #202835;
+}
+.account-row input {
+  width: auto;
+  min-height: auto;
+}
+.account-row small {
+  margin-left: auto;
+}
 
 @media (max-width: 720px) {
   main {
@@ -234,6 +288,19 @@ select:focus {
     flex-direction: column;
   }
   .invite-form select {
+    width: 100%;
+  }
+  .section-heading,
+  .provider-row {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .account-row {
+    align-items: flex-start;
+    flex-wrap: wrap;
+  }
+  .account-row small {
+    margin-left: 28px;
     width: 100%;
   }
 }

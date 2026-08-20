@@ -8,3 +8,5 @@
 | production  | secret manager/runtime env | dedicated v2 DB     | dedicated v2 Redis   | not created in Phase 1 |
 
 No environment inherits v1 secrets or storage. Production-like config rejects placeholder/local dependency URLs. The configuration package exposes parsed values only; credentials are not logged.
+
+Provider OAuth client variables (`PROVIDER_GOOGLE_*`, `PROVIDER_META_*`) are application secrets and exist only in the runtime secret store. Provider credentials use the separate `PROVIDER_CREDENTIAL_ENCRYPTION_KEYS` key ring and `PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION`; the CI value is test-only and must never be reused in staging or production.

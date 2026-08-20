@@ -4,7 +4,7 @@ services:
     environment:
       POSTGRES_DB: holymedia_v2
       POSTGRES_USER: holymedia
-      POSTGRES_PASSWORD: change-me-local-only
+      POSTGRES_PASSWORD: local-only-password
     ports:
       - "5433:5432"
     volumes:
@@ -35,9 +35,12 @@ services:
       NODE_ENV: development
       V2_CONFIG_STRICT: "true"
       API_PORT: "4000"
-      DATABASE_URL: postgresql://holymedia:change-me-local-only@postgres:5432/holymedia_v2
+      DATABASE_URL: postgresql://holymedia:local-only-password@postgres:5432/holymedia_v2
       REDIS_URL: redis://redis:6379
       CORS_ORIGINS: http://localhost:3000
+      SESSION_HASH_SECRET: compose-only-session-hash-secret-01234567890123456789
+      PROVIDER_CREDENTIAL_ENCRYPTION_KEYS: 1:QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=
+      PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
     command:
       [
         "sh",
@@ -59,7 +62,11 @@ services:
     environment:
       NODE_ENV: development
       V2_CONFIG_STRICT: "true"
+      DATABASE_URL: postgresql://holymedia:local-only-password@postgres:5432/holymedia_v2
       REDIS_URL: redis://redis:6379
+      SESSION_HASH_SECRET: compose-only-session-hash-secret-01234567890123456789
+      PROVIDER_CREDENTIAL_ENCRYPTION_KEYS: 1:QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=
+      PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
     command: ["pnpm", "--filter", "@holymedia/worker", "start"]
     depends_on:
       redis:

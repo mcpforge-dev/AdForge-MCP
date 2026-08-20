@@ -20,6 +20,24 @@ enum AuditActorType {
   SERVICE
 }
 
+enum ProviderId {
+  GOOGLE_ADS
+  META_ADS
+  YANDEX_DIRECT
+  TIKTOK_ADS
+  TEST_PROVIDER
+}
+
+enum ProviderConnectionStatus {
+  PENDING
+  CONNECTED
+  DEGRADED
+  REAUTH_REQUIRED
+  REVOKED
+  DISCONNECTED
+  ERROR
+}
+
 model User {
   id                String               @id @default(uuid()) @db.Uuid
   email             String               @unique @db.VarChar(320)
@@ -34,6 +52,8 @@ model User {
   passwordResets    PasswordReset[]
   invitationsSent   WorkspaceInvitation[] @relation("inviter")
   auditEvents       AuditEvent[]
+  connections       ProviderConnection[]
+  oauthStates       OAuthState[]
 
   @@index([email])
   @@map("users")
@@ -49,6 +69,9 @@ model Workspace {
   invitations  WorkspaceInvitation[]
   auditEvents  AuditEvent[]
   identities   ServiceIdentity[]
+  connections  ProviderConnection[]
+  providerAccounts ProviderAccount[]
+  oauthStates  OAuthState[]
 
   @@index([createdAt])
   @@map("workspaces")
@@ -195,4 +218,93 @@ model SystemMetadata {
 
   @@index([updatedAt])
   @@map("system_metadata")
+}
+
+model ProviderConnection {
+  id                String                   @id @default(uuid()) @db.Uuid
+  workspaceId       String                   @map("workspace_id") @db.Uuid
+  provider          ProviderId
+  status            ProviderConnectionStatus @default(PENDING)
+  externalSubjectId String?                  @map("external_subject_id") @db.VarChar(255)
+  displayName       String?                  @map("display_name") @db.VarChar(255)
+  createdBy         String                   @map("created_by") @db.Uuid
+  createdAt         DateTime                 @default(now()) @map("created_at")
+  updatedAt         DateTime                 @updatedAt @map("updated_at")
+  connectedAt       DateTime?                @map("connected_at")
+  disconnectedAt    DateTime?                @map("disconnected_at")
+  lastSuccessAt     DateTime?                @map("last_success_at")
+  lastErrorAt       DateTime?                @map("last_error_at")
+  lastErrorCode     String?                  @map("last_error_code") @db.VarChar(120)
+  credentialVersion Int                      @default(0) @map("credential_version")
+  metadata          Json?
+  workspace         Workspace                @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  creator           User                     @relation(fields: [createdBy], references: [id], onDelete: Restrict)
+  credential        ProviderCredential?
+  accounts          ProviderAccount[]
+  oauthStates       OAuthState[]
+
+  @@unique([workspaceId, provider])
+  @@unique([id, workspaceId, provider])
+  @@index([workspaceId, status])
+  @@index([createdBy])
+  @@map("provider_connections")
+}
+
+model ProviderCredential {
+  id                   String             @id @default(uuid()) @db.Uuid
+  connectionId         String             @unique @map("connection_id") @db.Uuid
+  encryptedPayload     String             @map("encrypted_payload") @db.Text
+  encryptionVersion    Int                @map("encryption_version")
+  createdAt            DateTime           @default(now()) @map("created_at")
+  updatedAt            DateTime           @updatedAt @map("updated_at")
+  connection           ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+
+  @@index([encryptionVersion])
+  @@map("provider_credentials")
+}
+
+model ProviderAccount {
+  id                String             @id @default(uuid()) @db.Uuid
+  connectionId      String             @map("connection_id") @db.Uuid
+  workspaceId       String             @map("workspace_id") @db.Uuid
+  provider          ProviderId
+  externalAccountId String             @map("external_account_id") @db.VarChar(255)
+  displayName       String             @map("display_name") @db.VarChar(255)
+  currency          String?            @db.VarChar(16)
+  timezone          String?            @db.VarChar(80)
+  status            String?            @db.VarChar(80)
+  enabled           Boolean            @default(false)
+  metadata          Json?
+  discoveredAt      DateTime           @default(now()) @map("discovered_at")
+  lastSeenAt        DateTime           @default(now()) @map("last_seen_at")
+  connection        ProviderConnection @relation(fields: [connectionId, workspaceId, provider], references: [id, workspaceId, provider], onDelete: Cascade)
+  workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, provider, externalAccountId])
+  @@index([connectionId, enabled])
+  @@index([workspaceId, provider, status])
+  @@map("provider_accounts")
+}
+
+model OAuthState {
+  id                    String             @id @default(uuid()) @db.Uuid
+  stateDigest           String             @unique @map("state_digest") @db.VarChar(128)
+  userId                String             @map("user_id") @db.Uuid
+  workspaceId           String             @map("workspace_id") @db.Uuid
+  provider              ProviderId
+  sessionId             String             @map("session_id") @db.Uuid
+  codeVerifierCiphertext String?           @map("code_verifier_ciphertext") @db.Text
+  codeVerifierEncryptionVersion Int?       @map("code_verifier_encryption_version")
+  codeChallenge         String?            @map("code_challenge") @db.VarChar(128)
+  expiresAt              DateTime           @map("expires_at")
+  consumedAt            DateTime?          @map("consumed_at")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace             Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection            ProviderConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  connectionId          String?            @map("connection_id") @db.Uuid
+
+  @@index([workspaceId, provider, expiresAt])
+  @@index([userId, sessionId, expiresAt])
+  @@map("oauth_states")
 }

@@ -1,19 +1,13 @@
 import { Queue, Worker, type Job } from "bullmq";
 import { loadConfig } from "@holymedia/config";
 import { createLogger } from "@holymedia/observability";
+import {
+  PROVIDER_DISCOVERY_QUEUE,
+  redisConnection,
+  type ProviderDiscoveryJobData,
+} from "./provider-discovery.job.js";
 
 const queueName = "holymedia-v2-foundation";
-
-function redisConnection(url: string) {
-  const parsed = new URL(url);
-  return {
-    host: parsed.hostname,
-    port: Number(parsed.port || 6379),
-    username: parsed.username || undefined,
-    password: parsed.password || undefined,
-    maxRetriesPerRequest: null,
-  };
-}
 
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
@@ -31,6 +25,22 @@ async function bootstrap(): Promise<void> {
         processedAt: new Date().toISOString(),
         emittedAt: job.data.emittedAt,
       };
+    },
+    { connection, concurrency: 2 },
+  );
+  const discoveryWorker = new Worker<ProviderDiscoveryJobData>(
+    PROVIDER_DISCOVERY_QUEUE,
+    async (job) => {
+      logger.info(
+        {
+          jobId: job.id,
+          workspaceId: job.data.workspaceId,
+          connectionId: job.data.connectionId,
+          provider: job.data.provider,
+        },
+        "provider discovery job processed",
+      );
+      return { processedAt: new Date().toISOString() };
     },
     { connection, concurrency: 2 },
   );
@@ -59,6 +69,7 @@ async function bootstrap(): Promise<void> {
 
   const close = async () => {
     await worker.close();
+    await discoveryWorker.close();
     await queue.close();
   };
   process.once("SIGTERM", () => void close());

@@ -25,6 +25,18 @@ const rawConfigSchema = z.object({
   REDIS_URL: z.string().url().default("redis://localhost:6380"),
   CORS_ORIGINS: z.string().default("http://localhost:3000"),
   SESSION_HASH_SECRET: z.string().default("dev-session-hash-secret-change-me"),
+  PROVIDER_CREDENTIAL_ENCRYPTION_KEYS: z.string().optional(),
+  PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .default(1),
+  PROVIDER_GOOGLE_CLIENT_ID: z.string().optional(),
+  PROVIDER_GOOGLE_CLIENT_SECRET: z.string().optional(),
+  PROVIDER_GOOGLE_REDIRECT_URI: z.string().url().optional(),
+  PROVIDER_META_CLIENT_ID: z.string().optional(),
+  PROVIDER_META_CLIENT_SECRET: z.string().optional(),
+  PROVIDER_META_REDIRECT_URI: z.string().url().optional(),
   COOKIE_DOMAIN: z.string().optional(),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
   EMAIL_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
@@ -52,6 +64,14 @@ export type AppConfig = {
   redisUrl: string;
   corsOrigins: string[];
   sessionHashSecret: string;
+  providerCredentialEncryptionKeys: string | undefined;
+  providerCredentialCurrentKeyVersion: number;
+  providerGoogleClientId: string | undefined;
+  providerGoogleClientSecret: string | undefined;
+  providerGoogleRedirectUri: string | undefined;
+  providerMetaClientId: string | undefined;
+  providerMetaClientSecret: string | undefined;
+  providerMetaRedirectUri: string | undefined;
   cookieDomain: string | undefined;
   sessionTtlDays: number;
   emailTokenTtlMinutes: number;
@@ -77,10 +97,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     (value.DATABASE_URL.includes("change-me") ||
       value.REDIS_URL.includes("localhost") ||
       value.SESSION_HASH_SECRET.includes("change-me") ||
-      value.SESSION_HASH_SECRET.length < 32)
+      value.SESSION_HASH_SECRET.length < 32 ||
+      !value.PROVIDER_CREDENTIAL_ENCRYPTION_KEYS)
   ) {
     throw new Error(
-      "Production-like v2 configuration requires explicit DATABASE_URL and REDIS_URL.",
+      "Production-like v2 configuration requires explicit database, Redis, session and provider credential settings.",
     );
   }
 
@@ -100,6 +121,15 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     redisUrl: value.REDIS_URL,
     corsOrigins,
     sessionHashSecret: value.SESSION_HASH_SECRET,
+    providerCredentialEncryptionKeys: value.PROVIDER_CREDENTIAL_ENCRYPTION_KEYS,
+    providerCredentialCurrentKeyVersion:
+      value.PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION,
+    providerGoogleClientId: value.PROVIDER_GOOGLE_CLIENT_ID,
+    providerGoogleClientSecret: value.PROVIDER_GOOGLE_CLIENT_SECRET,
+    providerGoogleRedirectUri: value.PROVIDER_GOOGLE_REDIRECT_URI,
+    providerMetaClientId: value.PROVIDER_META_CLIENT_ID,
+    providerMetaClientSecret: value.PROVIDER_META_CLIENT_SECRET,
+    providerMetaRedirectUri: value.PROVIDER_META_REDIRECT_URI,
     cookieDomain: value.COOKIE_DOMAIN,
     sessionTtlDays: value.SESSION_TTL_DAYS,
     emailTokenTtlMinutes: value.EMAIL_TOKEN_TTL_MINUTES,

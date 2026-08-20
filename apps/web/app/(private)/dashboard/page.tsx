@@ -10,6 +10,29 @@ type Member = {
   role: string;
   user: { name: string; email: string; emailVerifiedAt: string | null };
 };
+type Provider = {
+  id: string;
+  displayName: string;
+  status: string;
+  oauth: boolean;
+};
+type ProviderAccount = {
+  id: string;
+  externalAccountId: string;
+  displayName: string;
+  enabled: boolean;
+  status: string | null;
+};
+type Connection = {
+  id: string;
+  provider: string;
+  displayName: string | null;
+  status: string;
+  requestedScopes: string[];
+  grantedScopes: string[];
+  missingScopes: string[];
+  accounts: ProviderAccount[];
+};
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -23,6 +46,8 @@ export default function DashboardPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [active, setActive] = useState<Workspace | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
+  const [providers, setProviders] = useState<Provider[]>([]);
+  const [connections, setConnections] = useState<Connection[]>([]);
   const [error, setError] = useState("");
 
   async function loadWorkspaces() {
@@ -50,12 +75,93 @@ export default function DashboardPage() {
     if (response.ok) setMembers((await response.json()) as Member[]);
   }
 
+  async function loadConnections(workspace: Workspace) {
+    const [providerResponse, connectionResponse] = await Promise.all([
+      fetch(`${API}/api/v1/providers`, { credentials: "include" }),
+      fetch(`${API}/api/v1/workspaces/${workspace.id}/connections`, {
+        credentials: "include",
+      }),
+    ]);
+    if (providerResponse.ok)
+      setProviders((await providerResponse.json()) as Provider[]);
+    if (connectionResponse.ok)
+      setConnections((await connectionResponse.json()) as Connection[]);
+  }
+
   useEffect(() => {
     void loadWorkspaces();
   }, []);
   useEffect(() => {
     if (active) void loadMembers(active);
   }, [active]);
+  useEffect(() => {
+    if (active) void loadConnections(active);
+  }, [active]);
+
+  async function startProvider(provider: string) {
+    if (!active) return;
+    const token = await csrf();
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/connections/${provider}/oauth/start`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "x-csrf-token": token },
+      },
+    );
+    if (!response.ok) {
+      setError("Не удалось начать подключение провайдера.");
+      return;
+    }
+    const data = (await response.json()) as { authorizationUrl: string };
+    window.location.assign(data.authorizationUrl);
+  }
+
+  async function disconnect(connectionId: string) {
+    if (!active) return;
+    const token = await csrf();
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/connections/${connectionId}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "x-csrf-token": token },
+      },
+    );
+    if (response.ok) await loadConnections(active);
+    else setError("Не удалось отключить провайдера.");
+  }
+
+  async function discover(connectionId: string) {
+    if (!active) return;
+    const token = await csrf();
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/connections/${connectionId}/accounts/discover`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: { "x-csrf-token": token },
+      },
+    );
+    if (response.ok) await loadConnections(active);
+    else setError("Не удалось обновить список рекламных кабинетов.");
+  }
+
+  async function toggleAccount(accountId: string, enabled: boolean) {
+    if (!active) return;
+    const token = await csrf();
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/provider-accounts/${accountId}`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "content-type": "application/json", "x-csrf-token": token },
+        body: JSON.stringify({ enabled }),
+      },
+    );
+    if (response.ok) await loadConnections(active);
+    else setError("Не удалось изменить доступ рекламного кабинета.");
+  }
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -182,6 +288,87 @@ export default function DashboardPage() {
               </button>
             </form>
           )}
+        </div>
+      </section>
+      <section className="panel connections-panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Providers</p>
+            <h2>Подключения рекламных платформ</h2>
+          </div>
+          <span className="muted">Доступы хранятся отдельно для workspace</span>
+        </div>
+        <div className="provider-list">
+          {providers.map((provider) => {
+            const connection = connections.find(
+              (item) => item.provider === provider.id,
+            );
+            return (
+              <div className="provider-row" key={provider.id}>
+                <div>
+                  <strong>{provider.displayName}</strong>
+                  <small>
+                    {connection
+                      ? `${connection.status} · аккаунтов: ${connection.accounts.length}`
+                      : provider.status}
+                  </small>
+                </div>
+                <div className="provider-actions">
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={!provider.oauth}
+                    onClick={() => void startProvider(provider.id)}
+                  >
+                    {connection ? "Переподключить" : "Подключить"}
+                  </button>
+                  {connection && (
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void disconnect(connection.id)}
+                    >
+                      Отключить
+                    </button>
+                  )}
+                </div>
+                {connection && (
+                  <div className="provider-details">
+                    <small>
+                      Разрешения: {connection.grantedScopes.length}/
+                      {connection.requestedScopes.length}
+                      {connection.missingScopes.length
+                        ? ` · не хватает: ${connection.missingScopes.join(", ")}`
+                        : ""}
+                    </small>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void discover(connection.id)}
+                    >
+                      Обновить кабинеты
+                    </button>
+                    {connection.accounts.map((account) => (
+                      <label className="account-row" key={account.id}>
+                        <input
+                          type="checkbox"
+                          checked={account.enabled}
+                          onChange={(event) =>
+                            void toggleAccount(account.id, event.target.checked)
+                          }
+                        />
+                        <span>{account.displayName}</span>
+                        <small>
+                          {account.externalAccountId} ·{" "}
+                          {account.status ?? "unknown"}
+                        </small>
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       </section>
       {error && <p className="error">{error}</p>}

@@ -18,6 +18,13 @@ import { InvitationController } from "./workspaces/invitation.controller.js";
 import { WorkspaceAuthorizationGuard } from "./auth/workspace-authorization.guard.js";
 import { WorkspaceController } from "./workspaces/workspace.controller.js";
 import { WorkspaceService } from "./workspaces/workspace.service.js";
+import { ProviderController } from "./providers/provider.controller.js";
+import { CredentialVaultService } from "./providers/credential-vault.service.js";
+import { OAuthStateService } from "./providers/oauth-state.service.js";
+import { ProviderRefreshCoordinator } from "./providers/refresh-coordinator.service.js";
+import { ProviderRegistry } from "./providers/provider.registry.js";
+import { ProviderService } from "./providers/provider.service.js";
+import { ProviderMetricsService } from "./providers/provider.metrics.js";
 
 @Module({
   controllers: [
@@ -26,6 +33,7 @@ import { WorkspaceService } from "./workspaces/workspace.service.js";
     MeController,
     WorkspaceController,
     InvitationController,
+    ProviderController,
   ],
   providers: [
     DatabaseService,
@@ -40,6 +48,12 @@ import { WorkspaceService } from "./workspaces/workspace.service.js";
     RedisRateLimitService,
     WorkspaceAuthorizationGuard,
     WorkspaceService,
+    CredentialVaultService,
+    OAuthStateService,
+    ProviderRefreshCoordinator,
+    ProviderRegistry,
+    ProviderService,
+    ProviderMetricsService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

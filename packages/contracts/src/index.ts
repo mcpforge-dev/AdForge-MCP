@@ -20,3 +20,58 @@ export type ApiError = {
     requestId: string;
   };
 };
+
+export type ProviderId =
+  "GOOGLE_ADS" | "META_ADS" | "YANDEX_DIRECT" | "TIKTOK_ADS" | "TEST_PROVIDER";
+
+export type ProviderConnectionStatus =
+  | "PENDING"
+  | "CONNECTED"
+  | "DEGRADED"
+  | "REAUTH_REQUIRED"
+  | "REVOKED"
+  | "DISCONNECTED"
+  | "ERROR";
+
+export type ProviderDefinition = {
+  id: ProviderId;
+  displayName: string;
+  oauth: boolean;
+  pkce: boolean;
+  accountDiscovery: boolean;
+  refresh: boolean;
+  read: boolean;
+  write: boolean;
+  status: "available" | "configuration_required" | "test_only";
+  scopes: string[];
+};
+
+export type ProviderAccountView = {
+  id: string;
+  provider: ProviderId;
+  externalAccountId: string;
+  displayName: string;
+  currency: string | null;
+  timezone: string | null;
+  status: string | null;
+  enabled: boolean;
+  discoveredAt: string;
+  lastSeenAt: string;
+};
+
+export type ProviderConnectionView = {
+  id: string;
+  workspaceId: string;
+  provider: ProviderId;
+  status: ProviderConnectionStatus;
+  displayName: string | null;
+  connectedAt: string | null;
+  disconnectedAt: string | null;
+  lastSuccessAt: string | null;
+  lastErrorCode: string | null;
+  credentialVersion: number;
+  requestedScopes: string[];
+  grantedScopes: string[];
+  missingScopes: string[];
+  accounts: ProviderAccountView[];
+};
