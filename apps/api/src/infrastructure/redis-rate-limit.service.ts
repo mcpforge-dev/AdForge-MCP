@@ -23,6 +23,9 @@ export class RedisRateLimitService implements OnModuleDestroy {
     windowSeconds: number,
   ): Promise<void> {
     try {
+      if (this.redis.status === "wait") {
+        await this.redis.connect();
+      }
       const result = await this.redis
         .multi()
         .incr(key)
