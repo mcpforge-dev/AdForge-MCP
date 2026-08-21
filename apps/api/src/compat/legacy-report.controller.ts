@@ -13,6 +13,7 @@ import type { FastifyReply } from "fastify";
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { CurrentPrincipal } from "../auth/auth.decorators.js";
+import { BillingService } from "../billing/billing.service.js";
 import { ReportService } from "../reports/report.service.js";
 import { WorkspaceService } from "../workspaces/workspace.service.js";
 import { IsDateString, IsOptional, IsString, MaxLength } from "class-validator";
@@ -61,6 +62,7 @@ export class LegacyReportController {
   public constructor(
     @Inject(ReportService) private readonly reports: ReportService,
     @Inject(WorkspaceService) private readonly workspaces: WorkspaceService,
+    @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
   @Get("collect-report")
@@ -68,10 +70,9 @@ export class LegacyReportController {
     @CurrentPrincipal() principal: HumanPrincipal,
     @Query() query: LegacyReportQuery,
   ) {
-    return this.reports.performance(
-      await this.workspaceId(principal),
-      this.input(query),
-    );
+    const workspaceId = await this.workspaceId(principal);
+    await this.billing.requireFeature(workspaceId, "reports");
+    return this.reports.performance(workspaceId, this.input(query));
   }
 
   @Post("collect-report")
@@ -79,10 +80,9 @@ export class LegacyReportController {
     @CurrentPrincipal() principal: HumanPrincipal,
     @Body() body: LegacyReportBody,
   ) {
-    return this.reports.performance(
-      await this.workspaceId(principal),
-      this.input(body),
-    );
+    const workspaceId = await this.workspaceId(principal);
+    await this.billing.requireFeature(workspaceId, "reports");
+    return this.reports.performance(workspaceId, this.input(body));
   }
 
   @Get("collect-report.docx")
@@ -91,8 +91,10 @@ export class LegacyReportController {
     @Query() query: LegacyReportQuery,
     @Res() reply: FastifyReply,
   ) {
+    const workspaceId = await this.workspaceId(principal);
+    await this.billing.requireFeature(workspaceId, "reports");
     const report = await this.reports.performanceDocx(
-      await this.workspaceId(principal),
+      workspaceId,
       this.input(query),
     );
     reply
@@ -113,8 +115,10 @@ export class LegacyReportController {
     @Body() body: LegacyReportBody,
     @Res() reply: FastifyReply,
   ) {
+    const workspaceId = await this.workspaceId(principal);
+    await this.billing.requireFeature(workspaceId, "reports");
     const report = await this.reports.performanceDocx(
-      await this.workspaceId(principal),
+      workspaceId,
       this.input(body),
     );
     reply
