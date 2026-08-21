@@ -47,6 +47,19 @@ describe("CsrfGuard", () => {
     ).toBe(true);
   });
 
+  it("allows bearer-authenticated machine requests without browser CSRF cookies", () => {
+    const guard = new CsrfGuard();
+    expect(
+      guard.canActivate(
+        context({
+          method: "POST",
+          headers: { authorization: "Bearer hmst_test_token" },
+          cookies: {},
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("rejects an origin outside the configured allowlist", () => {
     const guard = new CsrfGuard();
     expect(() =>

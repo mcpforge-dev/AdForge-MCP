@@ -355,10 +355,19 @@ try {
       2,
     ),
   );
-} catch {
+} catch (error) {
   await client.query("ROLLBACK").catch(() => undefined);
+  const diagnostic =
+    error && typeof error === "object"
+      ? error
+      : { message: String(error) };
+  const code = typeof diagnostic.code === "string" ? diagnostic.code : "unknown";
+  const message =
+    typeof diagnostic.message === "string"
+      ? diagnostic.message.replace(/(password|token|secret|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+      : "unknown migration error";
   console.error(
-    "Migration failed; transaction rolled back. Inspect the rehearsal database and sanitized validation report.",
+    `Migration failed; transaction rolled back. code=${code}; message=${message.slice(0, 240)}`,
   );
   process.exitCode = 1;
 } finally {

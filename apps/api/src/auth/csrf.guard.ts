@@ -22,6 +22,13 @@ export class CsrfGuard implements CanActivate {
     ).toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return true;
 
+    // Bearer-authenticated machine clients do not send browser cookies, so a
+    // cookie CSRF proof would reject MCP and other server-to-server calls.
+    // Their protection is the bearer token itself, CORS for browser callers,
+    // and the endpoint's server-side authorization checks.
+    const authorization = this.header(request, "authorization");
+    if (authorization && /^Bearer\s+\S+$/i.test(authorization)) return true;
+
     const origin = this.header(request, "origin");
     if (origin && !this.origins.includes(origin)) {
       throw new ForbiddenException("CSRF validation failed.");
