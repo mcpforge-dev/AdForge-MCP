@@ -1,7 +1,13 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
 import type {
   ProviderCampaign,
   ProviderDateRange,
+  ProviderMoney,
   ProviderMetricSummary,
   ProviderProvenance,
 } from "@holymedia/contracts";
@@ -31,6 +37,15 @@ export type PerformanceReportInput = {
   accountId: string;
   startDate: string;
   endDate: string;
+  previousStartDate?: string;
+  previousEndDate?: string;
+};
+
+export type PerformanceMetricChange = {
+  current: unknown;
+  previous: unknown;
+  absolute: number | null;
+  percent: number | null;
 };
 
 export type PerformanceReport = {
@@ -47,6 +62,11 @@ export type PerformanceReport = {
   metrics: ProviderMetricSummary;
   campaigns: ProviderCampaign[];
   insights: string[];
+  comparison?: {
+    period: ProviderDateRange;
+    metrics: ProviderMetricSummary;
+    changes: Record<string, PerformanceMetricChange>;
+  };
   provenance: {
     summary: ProviderProvenance;
     campaigns: ProviderProvenance[];
@@ -79,7 +99,20 @@ export class ReportService {
       endDate: input.endDate.slice(0, 10),
       ...(account.timezone ? { timezone: account.timezone } : {}),
     };
-    const [summary, metrics, campaigns] = await Promise.all([
+    if (Boolean(input.previousStartDate) !== Boolean(input.previousEndDate)) {
+      throw new BadRequestException(
+        "Both previous period dates are required for comparison.",
+      );
+    }
+    const previousPeriod =
+      input.previousStartDate && input.previousEndDate
+        ? {
+            startDate: input.previousStartDate.slice(0, 10),
+            endDate: input.previousEndDate.slice(0, 10),
+            ...(account.timezone ? { timezone: account.timezone } : {}),
+          }
+        : undefined;
+    const [summary, metrics, campaigns, previousMetrics] = await Promise.all([
       this.providers.readAccountSummary(
         workspaceId,
         account.connectionId,
@@ -99,6 +132,14 @@ export class ReportService {
         period,
         500,
       ),
+      previousPeriod
+        ? this.providers.readMetrics(
+            workspaceId,
+            account.connectionId,
+            account.id,
+            previousPeriod,
+          )
+        : Promise.resolve(null),
     ]);
     const report: PerformanceReport = {
       reportType: "performance",
@@ -119,7 +160,17 @@ export class ReportService {
         campaigns: campaigns.items.map((campaign) => campaign.provenance),
       },
     };
+    if (previousMetrics && previousPeriod) {
+      report.comparison = {
+        period: previousPeriod,
+        metrics: previousMetrics,
+        changes: this.metricChanges(metrics, previousMetrics),
+      };
+    }
     report.insights = this.reportFindings(metrics);
+    if (report.comparison) {
+      report.insights.push(...this.comparisonFindings(report.comparison));
+    }
     return report;
   }
 
@@ -304,6 +355,23 @@ export class ReportService {
               heading: HeadingLevel.HEADING_2,
             }),
             this.table(["Показатель", "Значение"], metricRows, [3200, 6000]),
+            ...(report.comparison
+              ? [
+                  new Paragraph({
+                    text: "Сравнение с предыдущим периодом",
+                    heading: HeadingLevel.HEADING_2,
+                  }),
+                  new Paragraph({
+                    text: `${report.period.startDate} — ${report.period.endDate} против ${report.comparison.period.startDate} — ${report.comparison.period.endDate}.`,
+                    spacing: { after: 140 },
+                  }),
+                  this.table(
+                    ["Показатель", "Текущий", "Предыдущий", "Изменение"],
+                    this.comparisonRows(report.comparison),
+                    [2800, 2200, 2200, 2000],
+                  ),
+                ]
+              : []),
             new Paragraph({
               text: "Кампании",
               heading: HeadingLevel.HEADING_2,
@@ -367,6 +435,115 @@ export class ReportService {
       );
     }
     return findings.slice(0, 4);
+  }
+
+  private comparisonFindings(
+    comparison: NonNullable<PerformanceReport["comparison"]>,
+  ): string[] {
+    const findings: string[] = [];
+    for (const [key, change] of Object.entries(comparison.changes)) {
+      if (change.percent === null || Math.abs(change.percent) < 5) continue;
+      const label = this.metricLabel(key);
+      const direction = change.percent > 0 ? "вырос" : "снизился";
+      findings.push(
+        `${label} ${direction} на ${this.formatPercentValue(Math.abs(change.percent))} к предыдущему периоду.`,
+      );
+      if (findings.length === 2) break;
+    }
+    return findings;
+  }
+
+  private metricChanges(
+    current: ProviderMetricSummary,
+    previous: ProviderMetricSummary,
+  ): Record<string, PerformanceMetricChange> {
+    const keys = [
+      "spend",
+      "impressions",
+      "clicks",
+      "ctr",
+      "cpc",
+      "cpm",
+      "conversions",
+      "costPerConversion",
+    ] as const;
+    return Object.fromEntries(
+      keys.map((key) => {
+        const currentValue = current[key];
+        const previousValue = previous[key];
+        const currentNumber = this.metricNumber(currentValue);
+        const previousNumber = this.metricNumber(previousValue);
+        const absolute =
+          currentNumber !== null && previousNumber !== null
+            ? currentNumber - previousNumber
+            : null;
+        return [
+          key,
+          {
+            current: currentValue,
+            previous: previousValue,
+            absolute,
+            percent:
+              absolute !== null &&
+              previousNumber !== null &&
+              previousNumber !== 0
+                ? (absolute / Math.abs(previousNumber)) * 100
+                : null,
+          },
+        ];
+      }),
+    );
+  }
+
+  private comparisonRows(
+    comparison: NonNullable<PerformanceReport["comparison"]>,
+  ): string[][] {
+    return Object.entries(comparison.changes).map(([key, change]) => [
+      this.metricLabel(key),
+      this.formatComparisonValue(key, change.current),
+      this.formatComparisonValue(key, change.previous),
+      change.percent === null
+        ? "Нет сравнения"
+        : `${change.percent >= 0 ? "+" : ""}${this.formatPercentValue(change.percent)}`,
+    ]);
+  }
+
+  private formatComparisonValue(key: string, value: unknown): string {
+    if (["spend", "cpc", "cpm", "costPerConversion"].includes(key)) {
+      return this.formatMoney((value as ProviderMoney | null) ?? null);
+    }
+    if (key === "ctr") return this.formatPercent(this.metricNumber(value));
+    return this.formatMetric(this.metricNumber(value));
+  }
+
+  private metricLabel(key: string): string {
+    return (
+      {
+        spend: "Расход",
+        impressions: "Показы",
+        clicks: "Клики",
+        ctr: "CTR",
+        cpc: "Средняя стоимость клика",
+        cpm: "CPM",
+        conversions: "Конверсии",
+        costPerConversion: "Стоимость конверсии",
+      }[key] ?? key
+    );
+  }
+
+  private metricNumber(value: unknown): number | null {
+    if (typeof value === "number" && Number.isFinite(value)) return value;
+    if (value && typeof value === "object" && "amount" in value) {
+      const amount = Number((value as { amount?: unknown }).amount);
+      return Number.isFinite(amount) ? amount : null;
+    }
+    return null;
+  }
+
+  private formatPercentValue(value: number): string {
+    return `${new Intl.NumberFormat("ru-RU", {
+      maximumFractionDigits: 2,
+    }).format(value)}%`;
   }
 
   private formatMetric(value: number | string | null | undefined): string {

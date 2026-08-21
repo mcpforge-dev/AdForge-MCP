@@ -64,6 +64,8 @@ describe("V2 performance reports", () => {
       accountId: "1234567890",
       startDate: "2026-01-01",
       endDate: "2026-01-07",
+      previousStartDate: "2025-12-25",
+      previousEndDate: "2025-12-31",
     });
     expect(report.account.externalAccountId).toBe("1234567890");
     expect(report.metrics.spend?.amount).toBe("10");
@@ -71,6 +73,8 @@ describe("V2 performance reports", () => {
     expect(report.insights).toEqual(
       expect.arrayContaining([expect.stringContaining("Расход")]),
     );
+    expect(report.comparison?.period.startDate).toBe("2025-12-25");
+    expect(report.comparison?.changes["spend"]?.absolute).toBe(0);
     const document = await service.performanceDocx("workspace-a", {
       accountId: "1234567890",
       startDate: "2026-01-01",

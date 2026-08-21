@@ -25,6 +25,10 @@ type LegacyReportQuery = {
   startDate?: string;
   end_date?: string;
   endDate?: string;
+  previous_start_date?: string;
+  previousStartDate?: string;
+  previous_end_date?: string;
+  previousEndDate?: string;
 };
 
 class LegacyReportBody {
@@ -53,6 +57,22 @@ class LegacyReportBody {
   @IsOptional()
   @IsDateString()
   public endDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public previous_start_date?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public previousStartDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public previous_end_date?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public previousEndDate?: string;
 }
 
 /** Compatibility facade for the original report skill download routes. */
@@ -144,11 +164,20 @@ export class LegacyReportController {
     const accountId = query.account_id ?? query.accountId;
     const startDate = query.start_date ?? query.startDate;
     const endDate = query.end_date ?? query.endDate;
+    const previousStartDate =
+      query.previous_start_date ?? query.previousStartDate;
+    const previousEndDate = query.previous_end_date ?? query.previousEndDate;
     if (!accountId || !startDate || !endDate) {
       throw new BadRequestException(
         "account_id, start_date and end_date are required.",
       );
     }
-    return { accountId, startDate, endDate };
+    return {
+      accountId,
+      startDate,
+      endDate,
+      ...(previousStartDate ? { previousStartDate } : {}),
+      ...(previousEndDate ? { previousEndDate } : {}),
+    };
   }
 }

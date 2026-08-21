@@ -1,4 +1,10 @@
-import { IsDateString, IsString, MaxLength, MinLength } from "class-validator";
+import {
+  IsDateString,
+  IsOptional,
+  IsString,
+  MaxLength,
+  MinLength,
+} from "class-validator";
 
 export class PerformanceReportDto {
   @IsString()
@@ -11,4 +17,12 @@ export class PerformanceReportDto {
 
   @IsDateString()
   public endDate!: string;
+
+  @IsOptional()
+  @IsDateString()
+  public previousStartDate?: string;
+
+  @IsOptional()
+  @IsDateString()
+  public previousEndDate?: string;
 }

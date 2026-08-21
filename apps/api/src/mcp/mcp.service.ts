@@ -449,10 +449,13 @@ export class McpService {
         await this.billing.requireFeature(principal.workspaceId, "reports");
         const account = await this.account(principal, args);
         const dates = range(args) ?? defaultReportRange();
+        const previousDates = reportPreviousRange(args, dates);
         return this.reports.performance(principal.workspaceId, {
           accountId: account.id,
           startDate: dates.startDate,
           endDate: dates.endDate,
+          previousStartDate: previousDates.startDate,
+          previousEndDate: previousDates.endDate,
         });
       }
       case "run_diagnostics":
@@ -1532,6 +1535,29 @@ function defaultReportRange() {
     .toISOString()
     .slice(0, 10);
   return { startDate, endDate };
+}
+
+function reportPreviousRange(
+  args: JsonObject,
+  current: { startDate: string; endDate: string },
+) {
+  if (args.previous_start_date || args.previousStartDate) {
+    return requiredRange(args, "previous");
+  }
+  const start = Date.parse(`${current.startDate}T00:00:00.000Z`);
+  const end = Date.parse(`${current.endDate}T00:00:00.000Z`);
+  if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) {
+    return { startDate: current.startDate, endDate: current.endDate };
+  }
+  const days = Math.floor((end - start) / 86_400_000) + 1;
+  const previousEnd = new Date(start - 86_400_000);
+  const previousStart = new Date(
+    previousEnd.getTime() - (days - 1) * 86_400_000,
+  );
+  return {
+    startDate: previousStart.toISOString().slice(0, 10),
+    endDate: previousEnd.toISOString().slice(0, 10),
+  };
 }
 
 function capabilityUnavailable(tool: string, context: JsonObject = {}) {
