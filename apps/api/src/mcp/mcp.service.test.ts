@@ -64,7 +64,19 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
     commit: async () => ({ status: "blocked" }),
   } as never;
   const siteAnalysis = { analyze: async () => ({ status: 200 }) } as never;
-  return new McpService(database, providers, reports, previews, siteAnalysis);
+  const billing = {
+    currentSubscription: async () => null,
+    usage: async () => [],
+    entitlements: async () => [],
+  } as never;
+  return new McpService(
+    database,
+    providers,
+    reports,
+    previews,
+    siteAnalysis,
+    billing,
+  );
 }
 
 describe("MCP V1-compatible policy", () => {
@@ -83,12 +95,44 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
+    expect(service.tools()).toHaveLength(140);
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );
     expect(service.tools().map((tool) => tool.name)).not.toContain(
       "commit_change",
     );
+  });
+
+  it("exposes every exact V1 tool name", () => {
+    const service = serviceWithAccounts([account]);
+    const names = service.tools().map((tool) => tool.name);
+    expect(names).toContain("collect_report_skill");
+    expect(names).toContain("commit_meta_app_review_preview");
+    expect(names).toContain("get_meta_page");
+    expect(names).toContain("update_targeting_preview");
+  });
+
+  it("rejects secrets in compatibility preview payloads", async () => {
+    const service = serviceWithAccounts([account]);
+    await expect(
+      service.call(
+        {
+          kind: "service",
+          tokenId: "token",
+          serviceIdentityId: "identity",
+          workspaceId: "workspace-a",
+          scopes: ["adforge:mcp:read"],
+          accountIds: [],
+        },
+        "create_campaign_from_brief",
+        {
+          provider: "google_ads",
+          account_id: "1234567890",
+          refresh_token: "must-not-be-stored",
+        },
+      ),
+    ).rejects.toThrow("must not contain credentials");
   });
 
   it("does not allow an account outside a service-token restriction", async () => {

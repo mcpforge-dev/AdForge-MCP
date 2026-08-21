@@ -8,7 +8,36 @@ import type { ServiceTokenPrincipal } from "../service-tokens/service-token.serv
 
 const READ_SCOPE = "adforge:mcp:read";
 const WRITE_SCOPE = "adforge:mcp:write";
-const OPERATIONS = new Set(["change_name", "pause", "resume", "change_budget"]);
+const OPERATIONS = new Set([
+  "archive_entities",
+  "archive_object",
+  "change_budget",
+  "change_name",
+  "clone_ad",
+  "clone_adset",
+  "clone_campaign",
+  "configure_schedule",
+  "create_ab_test_ads",
+  "create_ad",
+  "create_ad_group",
+  "create_adset",
+  "create_audience",
+  "create_audience_variant",
+  "create_campaign",
+  "create_creative",
+  "create_keyword",
+  "create_object",
+  "pause",
+  "replace_creative",
+  "resume",
+  "update_ad",
+  "update_adset",
+  "update_campaign",
+  "update_object",
+  "update_placements",
+  "update_status",
+  "update_targeting",
+]);
 
 type PreviewInput = {
   provider: "GOOGLE_ADS" | "META_ADS";
@@ -214,11 +243,19 @@ export class McpPreviewService {
         after: budget,
       };
     }
+    if (operation === "pause" || operation === "resume") {
+      return {
+        object_id: objectId.trim(),
+        field: "status",
+        before: null,
+        after: operation === "pause" ? "PAUSED" : "ENABLED",
+      };
+    }
     return {
       object_id: objectId.trim(),
-      field: "status",
+      operation,
       before: null,
-      after: operation === "pause" ? "PAUSED" : "ENABLED",
+      after: payload,
     };
   }
 
