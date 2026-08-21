@@ -107,7 +107,7 @@ services:
       PORT: "3000"
       NEXT_PUBLIC_API_BASE_URL: http://localhost:4000
     working_dir: /workspace/apps/web
-    command: ["pnpm", "start"]
+    command: ["./node_modules/.bin/next", "start"]
     ports:
       - "3000:3000"
     healthcheck:
