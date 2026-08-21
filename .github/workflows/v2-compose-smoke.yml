@@ -47,6 +47,17 @@ jobs:
             sleep 2
           done
 
+      - name: Capture PostgreSQL health diagnostics
+        if: failure()
+        shell: bash
+        run: |
+          set +e
+          postgres_id=$(docker compose ps -q postgres)
+          status=$(docker inspect -f '{{.State.Status}} / {{.State.Health.Status}}' "$postgres_id" 2>/dev/null || true)
+          details=$(docker inspect -f '{{range .State.Health.Log}}{{.ExitCode}}: {{.Output}}{{"\n"}}{{end}}' "$postgres_id" 2>/dev/null | tail -n 10 | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
+          echo "::error title=PostgreSQL health status::$status"
+          echo "::error title=PostgreSQL healthcheck output::$details"
+
       - name: Wait for Redis health
         shell: bash
         run: |
