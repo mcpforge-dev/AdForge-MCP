@@ -8,7 +8,8 @@ services:
     ports:
       - "5433:5432"
     volumes:
-      - v2-postgres:/var/lib/postgresql/data
+      # PostgreSQL 18 stores PGDATA under /var/lib/postgresql/<major>/docker.
+      - v2-postgres:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U holymedia -d holymedia_v2"]
       interval: 5s
