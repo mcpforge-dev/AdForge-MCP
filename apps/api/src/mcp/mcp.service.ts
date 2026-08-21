@@ -1,5 +1,9 @@
 import { ForbiddenException, Inject, Injectable } from "@nestjs/common";
 import type { ProviderId } from "@holymedia/contracts";
+import type {
+  ProviderCampaign,
+  ProviderMetricSummary,
+} from "@holymedia/contracts";
 import { ProviderService } from "../providers/provider.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
@@ -42,6 +46,27 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "get_page_post",
   "get_page_post_engagement",
   "get_page_instagram_account",
+  "compare_periods",
+  "get_spend_overview",
+  "get_executive_summary",
+  "get_status_summary",
+  "get_top_performers",
+  "rank_top_entities",
+  "find_wasting_spend",
+  "get_campaign_structure",
+  "get_account_object",
+  "list_account_objects",
+  "list_objects",
+  "list_detailed_ad_report_types",
+  "get_detailed_ad_report_types",
+  "list_operator_skills",
+  "list_supported_campaign_types",
+  "list_supported_audience_types",
+  "list_supported_dimensions",
+  "get_breakdown_preset",
+  "get_beta_diagnostics",
+  "describe_auth",
+  "describe_auth_strategy",
 ] as const;
 
 type JsonObject = Record<string, unknown>;
@@ -383,6 +408,212 @@ export class McpService {
           text(args.page_id || args.pageId),
         );
       }
+      case "compare_periods": {
+        const account = await this.account(principal, args);
+        const current = requiredRange(args, "current");
+        const previous = requiredRange(args, "previous");
+        const [currentMetrics, previousMetrics] = await Promise.all([
+          this.providers.readMetrics(
+            principal.workspaceId,
+            account.connectionId,
+            account.id,
+            current,
+          ),
+          this.providers.readMetrics(
+            principal.workspaceId,
+            account.connectionId,
+            account.id,
+            previous,
+          ),
+        ]);
+        return {
+          provider: account.provider,
+          account_id: account.externalAccountId,
+          current_period: current,
+          previous_period: previous,
+          metrics: compareMetrics(currentMetrics, previousMetrics),
+        };
+      }
+      case "get_spend_overview": {
+        const account = await this.account(principal, args);
+        const dates = range(args) ?? defaultReportRange();
+        const metrics = await this.providers.readMetrics(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+        );
+        return {
+          provider: account.provider,
+          account_id: account.externalAccountId,
+          period: dates,
+          spend: metrics.spend,
+          clicks: metrics.clicks,
+          impressions: metrics.impressions,
+          conversions: metrics.conversions,
+          provenance: this.provenance(metrics),
+        };
+      }
+      case "get_executive_summary": {
+        const account = await this.account(principal, args);
+        const dates = range(args) ?? defaultReportRange();
+        const metrics = await this.providers.readMetrics(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+        );
+        const campaigns = await this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+          100,
+        );
+        return this.executiveSummary(account, dates, metrics, campaigns.items);
+      }
+      case "get_status_summary": {
+        const account = await this.account(principal, args);
+        const campaigns = await this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          range(args),
+          500,
+        );
+        const counts = campaigns.items.reduce<Record<string, number>>(
+          (result, campaign) => {
+            const status = campaign.status ?? "UNKNOWN";
+            result[status] = (result[status] ?? 0) + 1;
+            return result;
+          },
+          {},
+        );
+        return { account_id: account.externalAccountId, campaigns: counts };
+      }
+      case "get_top_performers":
+      case "rank_top_entities": {
+        const account = await this.account(principal, args);
+        const dates = range(args) ?? defaultReportRange();
+        const campaigns = await this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+          500,
+        );
+        const metric = text(args.metric) || "conversions";
+        return {
+          account_id: account.externalAccountId,
+          period: dates,
+          metric,
+          items: [...campaigns.items]
+            .sort(
+              (left, right) =>
+                metricValue(right, metric) - metricValue(left, metric),
+            )
+            .slice(0, Math.min(Math.max(Number(args.limit) || 10, 1), 100)),
+          provenance: campaigns.items[0]?.provenance ?? null,
+        };
+      }
+      case "find_wasting_spend": {
+        const account = await this.account(principal, args);
+        const dates = range(args) ?? defaultReportRange();
+        const campaigns = await this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dates,
+          500,
+        );
+        const items = campaigns.items.filter(
+          (campaign) =>
+            moneyValue(campaign.metrics?.spend) > 0 &&
+            !metricValue(campaign, "conversions"),
+        );
+        return { account_id: account.externalAccountId, period: dates, items };
+      }
+      case "get_campaign_structure": {
+        const account = await this.account(principal, args);
+        const campaigns = await this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          range(args),
+          500,
+        );
+        const campaignId = text(args.campaign_id || args.campaignId);
+        return campaignId
+          ? (campaigns.items.find((campaign) => campaign.id === campaignId) ??
+              null)
+          : campaigns.items;
+      }
+      case "get_account_object": {
+        const account = await this.account(principal, args);
+        return this.providers.readAccountSummary(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          range(args),
+        );
+      }
+      case "list_account_objects":
+      case "list_objects": {
+        const account = await this.account(principal, args);
+        return this.providers.readCampaigns(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          range(args),
+          typeof args.limit === "number" ? args.limit : 100,
+          text(args.cursor) || undefined,
+        );
+      }
+      case "list_detailed_ad_report_types":
+      case "get_detailed_ad_report_types":
+        return {
+          supported: false,
+          data_status: "unsupported",
+          reason:
+            "Detailed ad, ad group and keyword entities are not normalized in V2 yet.",
+        };
+      case "list_operator_skills":
+        return {
+          items: [
+            "account_reads",
+            "campaign_reads",
+            "period_comparison",
+            "performance_report",
+          ],
+          read_only: true,
+        };
+      case "list_supported_campaign_types":
+        return { provider: providerId(args.provider), items: ["campaign"] };
+      case "list_supported_audience_types":
+        return { provider: providerId(args.provider), items: [] };
+      case "list_supported_dimensions":
+        return {
+          provider: providerId(args.provider),
+          items: ["account", "campaign", "date"],
+        };
+      case "get_breakdown_preset":
+        return {
+          provider: providerId(args.provider),
+          supported: ["account", "campaign", "date"],
+        };
+      case "get_beta_diagnostics":
+        return {
+          status: "ok",
+          read_only: true,
+          workspace_id: principal.workspaceId,
+        };
+      case "describe_auth":
+      case "describe_auth_strategy":
+        return {
+          authentication: "scoped HolyMedia service token",
+          authorization: "server-side workspace and account allowlist",
+          writes: "disabled in V2 MCP compatibility surface",
+        };
       default:
         throw new ForbiddenException(
           "Tool is not available in this V2 compatibility build.",
@@ -441,6 +672,44 @@ export class McpService {
     return { provider, items };
   }
 
+  private provenance(metrics: ProviderMetricSummary) {
+    return metrics ? "provider_read_adapter" : "unknown";
+  }
+
+  private executiveSummary(
+    account: { provider: ProviderId; externalAccountId: string },
+    dates: { startDate: string; endDate: string },
+    metrics: ProviderMetricSummary,
+    campaigns: ProviderCampaign[],
+  ) {
+    const top = [...campaigns].sort(
+      (left, right) => metricValue(right, "spend") - metricValue(left, "spend"),
+    )[0];
+    const conclusions: string[] = [];
+    if ((metrics.conversions ?? 0) > 0 && (metrics.clicks ?? 0) > 0)
+      conclusions.push(
+        "В периоде есть клики и конверсии; оценка эффективности опирается на реальные provider metrics.",
+      );
+    if (metrics.spend === null)
+      conclusions.push(
+        "Расход недоступен в ответе провайдера, поэтому финансовый вывод ограничен.",
+      );
+    if (!campaigns.length)
+      conclusions.push("Кампании за выбранный период не найдены.");
+    return {
+      provider: account.provider,
+      account_id: account.externalAccountId,
+      period: dates,
+      metrics,
+      top_spend_campaign: top ?? null,
+      conclusions,
+      data_sufficiency:
+        metrics.spend !== null && campaigns.length > 0
+          ? "sufficient"
+          : "limited",
+    };
+  }
+
   private async account(principal: ServiceTokenPrincipal, args: JsonObject) {
     const provider = providerId(args.provider);
     const requested = text(args.account_id || args.accountId);
@@ -465,6 +734,66 @@ export class McpService {
     }
     return account;
   }
+}
+
+function requiredRange(args: JsonObject, prefix: "current" | "previous") {
+  const startDate = text(
+    args[`${prefix}_start_date`] || args[`${prefix}StartDate`],
+  );
+  const endDate = text(args[`${prefix}_end_date`] || args[`${prefix}EndDate`]);
+  if (!startDate || !endDate)
+    throw new ForbiddenException(
+      `${prefix}_start_date and ${prefix}_end_date are required.`,
+    );
+  return { startDate, endDate };
+}
+
+function moneyValue(value: { amount: string } | null | undefined): number {
+  const parsed = Number(value?.amount ?? 0);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function metricValue(campaign: ProviderCampaign, key: string): number {
+  const metrics = campaign.metrics;
+  if (key === "spend") return moneyValue(metrics?.spend);
+  const value = metrics?.[key as keyof ProviderMetricSummary];
+  return typeof value === "number" ? value : Number(value ?? 0) || 0;
+}
+
+function compareMetrics(
+  current: ProviderMetricSummary,
+  previous: ProviderMetricSummary,
+) {
+  const keys = ["impressions", "clicks", "ctr", "conversions"] as const;
+  const result: Record<
+    string,
+    {
+      current: unknown;
+      previous: unknown;
+      absolute: number | null;
+      percent: number | null;
+    }
+  > = {};
+  for (const key of keys) {
+    const currentValue = current[key];
+    const previousValue = previous[key];
+    const absolute =
+      typeof currentValue === "number" && typeof previousValue === "number"
+        ? currentValue - previousValue
+        : null;
+    result[key] = {
+      current: currentValue,
+      previous: previousValue,
+      absolute,
+      percent:
+        absolute !== null &&
+        typeof previousValue === "number" &&
+        previousValue !== 0
+          ? (absolute / previousValue) * 100
+          : null,
+    };
+  }
+  return result;
 }
 
 function defaultReportRange() {
