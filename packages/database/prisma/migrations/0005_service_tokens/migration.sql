@@ -21,8 +21,8 @@ ALTER TABLE "service_tokens" ADD CONSTRAINT "service_tokens_service_identity_id_
   FOREIGN KEY ("service_identity_id") REFERENCES "service_identities"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 INSERT INTO "permissions" ("id", "key", "description") VALUES
-  ('00000000-0000-0000-0000-000000000005', 'mcp.tokens.manage', 'Create, inspect and revoke workspace service tokens');
+  ('00000000-0000-0000-0000-000000000009', 'mcp.tokens.manage', 'Create, inspect and revoke workspace service tokens');
 
 INSERT INTO "role_permissions" ("role", "permission_id") VALUES
-  ('OWNER', '00000000-0000-0000-0000-000000000005'),
-  ('ADMIN', '00000000-0000-0000-0000-000000000005');
+  ('OWNER', '00000000-0000-0000-0000-000000000009'),
+  ('ADMIN', '00000000-0000-0000-0000-000000000009');

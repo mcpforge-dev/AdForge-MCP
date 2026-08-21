@@ -321,6 +321,24 @@ export class AuthService {
     return this.publicUser(user);
   }
 
+  public async updateProfile(
+    principal: HumanPrincipal,
+    name: string,
+    request: RequestWithAuth,
+  ): Promise<PublicUser> {
+    const normalizedName = name.trim();
+    const user = await this.database.client.user.update({
+      where: { id: principal.userId },
+      data: { name: normalizedName },
+    });
+    await this.record({
+      eventType: "profile_updated",
+      request,
+      actorUserId: principal.userId,
+    });
+    return this.publicUser(user);
+  }
+
   public async logout(
     principal: HumanPrincipal,
     request: RequestWithAuth,

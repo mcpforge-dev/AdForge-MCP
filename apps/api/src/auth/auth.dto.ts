@@ -70,6 +70,13 @@ export class ChangePasswordDto {
   public newPassword!: string;
 }
 
+export class UpdateProfileDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  public name!: string;
+}
+
 export class CreateWorkspaceDto {
   @IsString()
   @MinLength(2)

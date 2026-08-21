@@ -39,10 +39,17 @@ import { ReportController } from "./reports/report.controller.js";
 import { ReportService } from "./reports/report.service.js";
 import { LegacyReportController } from "./compat/legacy-report.controller.js";
 import { LegacySiteAnalysisController } from "./compat/legacy-site-analysis.controller.js";
+import { LegacyProfileController } from "./compat/legacy-profile.controller.js";
 import { SiteAnalysisController } from "./site-analysis/site-analysis.controller.js";
 import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
 import { BillingController } from "./billing/billing.controller.js";
 import { BillingService } from "./billing/billing.service.js";
+import {
+  AdminManualConnectionRequestController,
+  ManualConnectionRequestController,
+} from "./compat/manual-connection-request.controller.js";
+import { ManualConnectionRequestService } from "./compat/manual-connection-request.service.js";
+import { LegacyDiagnosticsController } from "./compat/legacy-diagnostics.controller.js";
 
 @Module({
   controllers: [
@@ -61,8 +68,12 @@ import { BillingService } from "./billing/billing.service.js";
     ReportController,
     LegacyReportController,
     LegacySiteAnalysisController,
+    LegacyProfileController,
     SiteAnalysisController,
     BillingController,
+    ManualConnectionRequestController,
+    AdminManualConnectionRequestController,
+    LegacyDiagnosticsController,
   ],
   providers: [
     DatabaseService,
@@ -88,6 +99,7 @@ import { BillingService } from "./billing/billing.service.js";
     ReportService,
     SiteAnalysisService,
     BillingService,
+    ManualConnectionRequestService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

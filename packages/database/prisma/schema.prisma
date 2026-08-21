@@ -60,6 +60,15 @@ enum PaymentAttemptStatus {
   FAILED
 }
 
+enum ManualConnectionRequestStatus {
+  NEW
+  IN_PROGRESS
+  WAITING_FOR_CLIENT
+  READY_FOR_CONNECTION
+  COMPLETED
+  CANCELED
+}
+
 model User {
   id                String               @id @default(uuid()) @db.Uuid
   email             String               @unique @db.VarChar(320)
@@ -76,6 +85,7 @@ model User {
   auditEvents       AuditEvent[]
   connections       ProviderConnection[]
   oauthStates       OAuthState[]
+  manualConnectionRequests ManualConnectionRequest[]
 
   @@index([email])
   @@map("users")
@@ -98,6 +108,7 @@ model Workspace {
   billingOrders BillingOrder[]
   usageRecords UsageRecord[]
   entitlements Entitlement[]
+  manualConnectionRequests ManualConnectionRequest[]
 
   @@index([createdAt])
   @@map("workspaces")
@@ -264,6 +275,31 @@ model SystemMetadata {
 
   @@index([updatedAt])
   @@map("system_metadata")
+}
+
+model ManualConnectionRequest {
+  id                String                         @id @default(uuid()) @db.Uuid
+  workspaceId       String                         @map("workspace_id") @db.Uuid
+  userId            String                         @map("user_id") @db.Uuid
+  provider          ProviderId                     @default(META_ADS)
+  companyName       String                         @map("company_name") @db.VarChar(160)
+  metaBusinessId    String?                        @map("meta_business_id") @db.VarChar(64)
+  metaAdAccountId   String                         @map("meta_ad_account_id") @db.VarChar(64)
+  metaPageId        String?                        @map("meta_page_id") @db.VarChar(64)
+  instagramUsername String?                        @map("instagram_username") @db.VarChar(80)
+  contactPreference String                         @default("email") @map("contact_preference") @db.VarChar(24)
+  clientNote        String                         @default("") @map("client_note") @db.VarChar(2000)
+  status            ManualConnectionRequestStatus @default(NEW)
+  specialistNote    String                         @default("") @map("specialist_note") @db.VarChar(2000)
+  assignedTo        String?                        @map("assigned_to") @db.Uuid
+  createdAt         DateTime                       @default(now()) @map("created_at")
+  updatedAt         DateTime                       @updatedAt @map("updated_at")
+  workspace         Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user              User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([userId, provider, status])
+  @@map("manual_connection_requests")
 }
 
 model Plan {
