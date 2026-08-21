@@ -24,15 +24,12 @@ jobs:
         run: docker compose build
 
       - name: Start the full Compose stack
+        run: docker compose up -d
+
+      - name: Verify API and web readiness
         shell: bash
         run: |
           set -euo pipefail
-          cleanup() {
-            docker compose down -v --remove-orphans
-          }
-          trap cleanup EXIT
-          docker compose up -d
-
           for attempt in {1..60}; do
             if curl --fail --silent http://127.0.0.1:4000/health >/tmp/v2-health.json \
               && curl --fail --silent http://127.0.0.1:4000/ready >/tmp/v2-ready.json \
@@ -46,6 +43,15 @@ jobs:
             fi
             sleep 2
           done
+
+      - name: Verify service health and Redis
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(docker compose exec -T redis redis-cli ping)" = "PONG"
+          grep -q '"status":"ok"' /tmp/v2-health.json
+          grep -q '"status":"ok"' /tmp/v2-ready.json
+          grep -q '"status":"ok"' /tmp/v2-web-health.json
 
           for attempt in {1..30}; do
             all_ready=true
@@ -72,11 +78,10 @@ jobs:
             sleep 2
           done
 
-          test "$(docker compose exec -T redis redis-cli ping)" = "PONG"
-          grep -q '"status":"ok"' /tmp/v2-health.json
-          grep -q '"status":"ok"' /tmp/v2-ready.json
-          grep -q '"status":"ok"' /tmp/v2-web-health.json
-
+      - name: Verify BullMQ worker job
+        shell: bash
+        run: |
+          set -euo pipefail
           for attempt in {1..30}; do
             if docker compose logs --no-color worker | grep -q 'foundation job processed'; then
               break
@@ -87,6 +92,14 @@ jobs:
             fi
             sleep 1
           done
+
+      - name: Graceful shutdown and clean teardown
+        if: always()
+        shell: bash
+        run: |
+          docker compose stop worker api web || true
+          docker compose ps || true
+          docker compose down -v --remove-orphans
           docker compose stop worker api web
           docker compose ps
           docker compose down -v --remove-orphans
