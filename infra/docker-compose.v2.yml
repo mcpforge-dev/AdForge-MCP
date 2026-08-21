@@ -49,6 +49,18 @@ services:
       ]
     ports:
       - "4000:4000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,6 +80,18 @@ services:
       PROVIDER_CREDENTIAL_ENCRYPTION_KEYS: 1:QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=
       PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
     command: ["pnpm", "--filter", "@holymedia/worker", "start"]
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "import('ioredis').then(async ({ default: Redis }) => { const redis = new Redis(process.env.REDIS_URL); await redis.ping(); await redis.quit(); }).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
     depends_on:
       redis:
         condition: service_healthy
@@ -83,9 +107,21 @@ services:
     command: ["pnpm", "--filter", "@holymedia/web", "start"]
     ports:
       - "3000:3000"
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 10s
     depends_on:
       api:
-        condition: service_started
+        condition: service_healthy
 
 volumes:
   v2-postgres:

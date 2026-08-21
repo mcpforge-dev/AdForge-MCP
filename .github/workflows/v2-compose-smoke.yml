@@ -1,0 +1,72 @@
+name: HolyMedia MCP v2 full-stack Compose smoke
+
+on:
+  push:
+    branches: ["v2/phase-4.5-verification"]
+  pull_request:
+    branches: ["v2/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compose-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      COMPOSE_FILE: infra/docker-compose.v2.yml
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the full Compose stack
+        run: docker compose build
+
+      - name: Start the full Compose stack
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup() {
+            docker compose down -v --remove-orphans
+          }
+          trap cleanup EXIT
+          docker compose up -d
+
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:4000/health >/tmp/v2-health.json \
+              && curl --fail --silent http://127.0.0.1:4000/ready >/tmp/v2-ready.json \
+              && curl --fail --silent http://127.0.0.1:3000/api/health >/tmp/v2-web-health.json; then
+              break
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker compose ps
+              docker compose logs --no-color api web worker
+              exit 1
+            fi
+            sleep 2
+          done
+
+          test "$(docker compose exec -T redis redis-cli ping)" = "PONG"
+          grep -q '"status":"ok"' /tmp/v2-health.json
+          grep -q '"status":"ok"' /tmp/v2-ready.json
+          grep -q '"status":"ok"' /tmp/v2-web-health.json
+
+          for service in postgres redis api worker web; do
+            container_id=$(docker compose ps -q "$service")
+            test -n "$container_id"
+            status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$container_id")
+            case "$status" in
+              healthy|running) ;;
+              *)
+                docker compose ps
+                docker compose logs --no-color "$service"
+                exit 1
+                ;;
+            esac
+          done
+
+          docker compose logs --no-color worker | grep -q 'foundation job processed'
+          docker compose stop worker api web
+          docker compose ps
+          docker compose down -v --remove-orphans
