@@ -26,7 +26,10 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
   const providers = {
     listProviders: () => [{ id: "GOOGLE_ADS", displayName: "Google Ads" }],
   } as never;
-  return new McpService(database, providers);
+  const reports = {
+    performance: async () => ({ reportType: "performance" }),
+  } as never;
+  return new McpService(database, providers, reports);
 }
 
 describe("MCP V1-compatible policy", () => {
@@ -44,8 +47,12 @@ describe("MCP V1-compatible policy", () => {
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools().map((tool) => tool.name)).toContain("get_basic_metrics");
-    expect(service.tools().map((tool) => tool.name)).not.toContain("commit_change");
+    expect(service.tools().map((tool) => tool.name)).toContain(
+      "get_basic_metrics",
+    );
+    expect(service.tools().map((tool) => tool.name)).not.toContain(
+      "commit_change",
+    );
   });
 
   it("does not allow an account outside a service-token restriction", async () => {

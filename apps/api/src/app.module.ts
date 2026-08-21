@@ -35,6 +35,9 @@ import {
 } from "./compat/legacy-auth.controller.js";
 import { LegacyMcpTokenController } from "./compat/legacy-mcp-token.controller.js";
 import { LegacyHostedController } from "./compat/legacy-hosted.controller.js";
+import { ReportController } from "./reports/report.controller.js";
+import { ReportService } from "./reports/report.service.js";
+import { LegacyReportController } from "./compat/legacy-report.controller.js";
 
 @Module({
   controllers: [
@@ -50,6 +53,8 @@ import { LegacyHostedController } from "./compat/legacy-hosted.controller.js";
     LegacyMeController,
     LegacyMcpTokenController,
     LegacyHostedController,
+    ReportController,
+    LegacyReportController,
   ],
   providers: [
     DatabaseService,
@@ -72,6 +77,7 @@ import { LegacyHostedController } from "./compat/legacy-hosted.controller.js";
     ProviderMetricsService,
     ServiceTokenService,
     McpService,
+    ReportService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

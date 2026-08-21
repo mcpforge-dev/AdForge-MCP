@@ -3,6 +3,7 @@ import type { ProviderId } from "@holymedia/contracts";
 import { ProviderService } from "../providers/provider.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
+import { ReportService } from "../reports/report.service.js";
 
 const providerAliases: Record<string, ProviderId> = {
   google_ads: "GOOGLE_ADS",
@@ -26,6 +27,8 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "get_campaign_statuses",
   "get_basic_metrics",
   "get_performance_report",
+  "generate_monthly_ads_report",
+  "collect_report_skill",
   "run_diagnostics",
   "run_connection_diagnostics",
   "get_meta_oauth_permissions",
@@ -71,6 +74,7 @@ export class McpService {
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(ProviderService) private readonly providers: ProviderService,
+    @Inject(ReportService) private readonly reports: ReportService,
   ) {}
 
   public tools() {
@@ -207,6 +211,16 @@ export class McpService {
             100,
           ),
         };
+      }
+      case "generate_monthly_ads_report":
+      case "collect_report_skill": {
+        const account = await this.account(principal, args);
+        const dates = range(args) ?? defaultReportRange();
+        return this.reports.performance(principal.workspaceId, {
+          accountId: account.id,
+          startDate: dates.startDate,
+          endDate: dates.endDate,
+        });
       }
       case "run_diagnostics":
         return {
@@ -451,4 +465,12 @@ export class McpService {
     }
     return account;
   }
+}
+
+function defaultReportRange() {
+  const endDate = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const startDate = new Date(Date.now() - 30 * 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+  return { startDate, endDate };
 }
