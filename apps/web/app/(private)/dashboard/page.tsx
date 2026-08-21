@@ -44,6 +44,13 @@ type ManualRequest = {
   specialist_note: string;
   created_at: string;
 };
+type PendingMetaAccount = {
+  id: string;
+  external_account_id: string;
+  name: string;
+  status: string | null;
+  enabled: boolean;
+};
 type ServiceToken = {
   id: string;
   name: string;
@@ -127,6 +134,9 @@ export default function DashboardPage() {
   const [adminManualRequests, setAdminManualRequests] = useState<
     ManualRequest[]
   >([]);
+  const [pendingMetaAccounts, setPendingMetaAccounts] = useState<
+    Record<string, PendingMetaAccount[]>
+  >({});
   const [supportAccess, setSupportAccess] = useState(false);
   const [readResult, setReadResult] = useState<unknown>(null);
   const [siteResult, setSiteResult] = useState<unknown>(null);
@@ -192,6 +202,49 @@ export default function DashboardPage() {
     }
     const data = (await response.json()) as { authorization_url: string };
     window.location.assign(data.authorization_url);
+  }
+
+  async function loadPendingMeta(requestId: string) {
+    const response = await fetch(
+      `${API}/api/admin/connection-requests/meta/pending?request_id=${encodeURIComponent(requestId)}`,
+      { credentials: "include" },
+    );
+    if (!response.ok) {
+      setError("Не удалось получить найденные кабинеты Meta.");
+      return;
+    }
+    const data = (await response.json()) as {
+      pending: PendingMetaAccount[];
+    };
+    setPendingMetaAccounts((current) => ({
+      ...current,
+      [requestId]: data.pending,
+    }));
+  }
+
+  async function selectManualMeta(requestId: string, accountId: string) {
+    const response = await fetch(
+      `${API}/api/admin/connection-requests/meta/select`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({ request_id: requestId, pending_id: accountId }),
+      },
+    );
+    if (!response.ok) {
+      setError("Не удалось добавить кабинет Meta в workspace клиента.");
+      return;
+    }
+    setPendingMetaAccounts((current) => {
+      const next = { ...current };
+      delete next[requestId];
+      return next;
+    });
+    await loadManualRequests();
   }
 
   async function loadWorkspaces() {
@@ -1097,21 +1150,60 @@ export default function DashboardPage() {
                 (item) => supportAccess || item.workspace_id === active?.id,
               )
               .map((item) => (
-                <div className="member-row" key={item.id}>
-                  <span>
-                    <strong>{item.company_name}</strong>
-                    <small>
-                      {item.meta_ad_account_id} · {item.status}
+                <div className="provider-details" key={item.id}>
+                  <div className="member-row">
+                    <span>
+                      <strong>{item.company_name}</strong>
+                      <small>
+                        {item.meta_ad_account_id} · {item.status}
+                      </small>
+                    </span>
+                    <div className="provider-actions">
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={item.status.toUpperCase() === "COMPLETED"}
+                        onClick={() => void startManualMeta(item.id)}
+                      >
+                        Войти в Meta и подключить
+                      </button>
+                      {item.status.toUpperCase() !== "COMPLETED" && (
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          onClick={() => void loadPendingMeta(item.id)}
+                        >
+                          Загрузить найденные кабинеты
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                  {pendingMetaAccounts[item.id]?.map((account) => (
+                    <div className="account-row" key={account.id}>
+                      <span>
+                        <strong>{account.name}</strong>
+                        <small>
+                          {account.external_account_id} ·{" "}
+                          {account.status ?? "неизвестно"}
+                        </small>
+                      </span>
+                      <button
+                        className="primary-button"
+                        type="button"
+                        disabled={account.enabled}
+                        onClick={() =>
+                          void selectManualMeta(item.id, account.id)
+                        }
+                      >
+                        {account.enabled ? "Уже добавлен" : "Добавить кабинет"}
+                      </button>
+                    </div>
+                  ))}
+                  {pendingMetaAccounts[item.id]?.length === 0 && (
+                    <small className="muted">
+                      Кабинеты не найдены. Проверьте доступ пользователя в Meta.
                     </small>
-                  </span>
-                  <button
-                    className="primary-button"
-                    type="button"
-                    disabled={item.status === "COMPLETED"}
-                    onClick={() => void startManualMeta(item.id)}
-                  >
-                    Войти в Meta и подключить
-                  </button>
+                  )}
                 </div>
               ))}
           </div>
