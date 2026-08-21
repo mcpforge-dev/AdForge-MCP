@@ -25,6 +25,10 @@ import { ProviderRefreshCoordinator } from "./providers/refresh-coordinator.serv
 import { ProviderRegistry } from "./providers/provider.registry.js";
 import { ProviderService } from "./providers/provider.service.js";
 import { ProviderMetricsService } from "./providers/provider.metrics.js";
+import { ServiceTokenController } from "./service-tokens/service-token.controller.js";
+import { ServiceTokenService } from "./service-tokens/service-token.service.js";
+import { McpController } from "./mcp/mcp.controller.js";
+import { McpService } from "./mcp/mcp.service.js";
 
 @Module({
   controllers: [
@@ -34,6 +38,8 @@ import { ProviderMetricsService } from "./providers/provider.metrics.js";
     WorkspaceController,
     InvitationController,
     ProviderController,
+    ServiceTokenController,
+    McpController,
   ],
   providers: [
     DatabaseService,
@@ -54,6 +60,8 @@ import { ProviderMetricsService } from "./providers/provider.metrics.js";
     ProviderRegistry,
     ProviderService,
     ProviderMetricsService,
+    ServiceTokenService,
+    McpService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

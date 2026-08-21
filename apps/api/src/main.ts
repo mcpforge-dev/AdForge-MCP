@@ -60,6 +60,11 @@ async function bootstrap(): Promise<void> {
     exclude: [
       { path: "health", method: RequestMethod.GET },
       { path: "ready", method: RequestMethod.GET },
+      { path: "mcp", method: RequestMethod.GET },
+      { path: "mcp", method: RequestMethod.POST },
+      // These paths are part of the existing V1 OAuth contract. Provider
+      // consoles must keep calling them after the V2 cutover.
+      { path: "oauth/:provider/callback", method: RequestMethod.GET },
     ],
   });
   app.useGlobalFilters(new ApiExceptionFilter());

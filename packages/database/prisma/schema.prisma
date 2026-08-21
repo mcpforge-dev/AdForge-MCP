@@ -183,9 +183,29 @@ model ServiceIdentity {
   createdAt   DateTime   @default(now()) @map("created_at")
   revokedAt   DateTime?  @map("revoked_at")
   workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  tokens      ServiceToken[]
 
   @@index([workspaceId, revokedAt])
   @@map("service_identities")
+}
+
+model ServiceToken {
+  id                String          @id @default(uuid()) @db.Uuid
+  serviceIdentityId String          @map("service_identity_id") @db.Uuid
+  tokenDigest       String          @unique @map("token_digest") @db.VarChar(128)
+  tokenPrefix       String          @map("token_prefix") @db.VarChar(32)
+  name              String          @db.VarChar(160)
+  scopes            Json
+  accountIds        Json?           @map("account_ids")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  expiresAt         DateTime?       @map("expires_at")
+  revokedAt         DateTime?       @map("revoked_at")
+  lastUsedAt        DateTime?       @map("last_used_at")
+  serviceIdentity   ServiceIdentity @relation(fields: [serviceIdentityId], references: [id], onDelete: Cascade)
+
+  @@index([serviceIdentityId, revokedAt])
+  @@index([expiresAt])
+  @@map("service_tokens")
 }
 
 model AuditEvent {

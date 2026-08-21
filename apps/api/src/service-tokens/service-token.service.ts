@@ -1,0 +1,201 @@
+import { createHash, randomBytes } from "node:crypto";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+} from "@nestjs/common";
+import { AuditService } from "../audit/audit.service.js";
+import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
+import { DatabaseService } from "../infrastructure/database.service.js";
+import type { CreateServiceTokenDto } from "./service-token.dto.js";
+
+const READ_SCOPE = "adforge:mcp:read";
+const WRITE_SCOPE = "adforge:mcp:write";
+
+export type ServiceTokenPrincipal = {
+  kind: "service";
+  tokenId: string;
+  serviceIdentityId: string;
+  workspaceId: string;
+  scopes: string[];
+  accountIds: string[];
+};
+
+export function hashServiceToken(token: string): string {
+  return createHash("sha256").update(token, "utf8").digest("hex");
+}
+
+function normalizeScopes(scopes: string[] | undefined): string[] {
+  const values = [
+    ...new Set((scopes ?? [READ_SCOPE]).map((scope) => scope.trim()).filter(Boolean)),
+  ];
+  if (
+    values.length === 0 ||
+    values.some((scope) => ![READ_SCOPE, WRITE_SCOPE].includes(scope))
+  ) {
+    throw new BadRequestException("Unsupported service token scope.");
+  }
+  if (values.includes(WRITE_SCOPE) && !values.includes(READ_SCOPE)) {
+    values.unshift(READ_SCOPE);
+  }
+  return values;
+}
+
+function jsonStrings(value: unknown): string[] {
+  return Array.isArray(value) && value.every((item) => typeof item === "string")
+    ? value
+    : [];
+}
+
+@Injectable()
+export class ServiceTokenService {
+  public constructor(
+    @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(AuditService) private readonly audit: AuditService,
+  ) {}
+
+  public async create(
+    workspaceId: string,
+    input: CreateServiceTokenDto,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ) {
+    const scopes = normalizeScopes(input.scopes);
+    const accountIds = [...new Set(input.accountIds ?? [])];
+    if (accountIds.length > 0) {
+      const count = await this.database.client.providerAccount.count({
+        where: { workspaceId, id: { in: accountIds } },
+      });
+      if (count !== accountIds.length) {
+        throw new BadRequestException("Account restriction is outside the workspace.");
+      }
+    }
+
+    const rawToken = `hmst_${randomBytes(32).toString("base64url")}`;
+    const now = new Date();
+    const expirationDays = input.expiresInDays ?? 90;
+    const expiresAt = new Date(now.getTime() + expirationDays * 86_400_000);
+    const created = await this.database.client.$transaction(async (tx) => {
+      const identity = await tx.serviceIdentity.create({
+        data: { workspaceId, name: `HolyMedia MCP: ${input.name}` },
+      });
+      const token = await tx.serviceToken.create({
+        data: {
+          serviceIdentityId: identity.id,
+          tokenDigest: hashServiceToken(rawToken),
+          tokenPrefix: rawToken.slice(0, 13),
+          name: input.name.trim(),
+          scopes,
+          ...(accountIds.length ? { accountIds } : {}),
+          expiresAt,
+        },
+      });
+      return { identity, token };
+    });
+    await this.audit.record({
+      eventType: "service_token_created",
+      actorUserId: principal.userId,
+      workspaceId,
+      targetType: "service_token",
+      targetId: created.token.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: { scopes: scopes.join(","), restrictedAccounts: accountIds.length },
+    });
+    return { ...this.toView(created.token, created.identity.id), token: rawToken };
+  }
+
+  public async list(workspaceId: string) {
+    const tokens = await this.database.client.serviceToken.findMany({
+      where: { serviceIdentity: { workspaceId } },
+      include: { serviceIdentity: { select: { id: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+    return tokens.map((token) => this.toView(token, token.serviceIdentity.id));
+  }
+
+  public async revoke(
+    workspaceId: string,
+    tokenId: string,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ) {
+    const token = await this.database.client.serviceToken.findFirst({
+      where: { id: tokenId, serviceIdentity: { workspaceId } },
+    });
+    if (!token) throw new NotFoundException("Service token not found.");
+    await this.database.client.serviceToken.update({
+      where: { id: token.id },
+      data: { revokedAt: new Date() },
+    });
+    await this.audit.record({
+      eventType: "service_token_revoked",
+      actorUserId: principal.userId,
+      workspaceId,
+      targetType: "service_token",
+      targetId: token.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+    });
+    return { success: true as const };
+  }
+
+  public async authenticate(rawToken: string): Promise<ServiceTokenPrincipal | null> {
+    const token = await this.database.client.serviceToken.findUnique({
+      where: { tokenDigest: hashServiceToken(rawToken) },
+      include: {
+        serviceIdentity: {
+          select: { id: true, workspaceId: true, revokedAt: true },
+        },
+      },
+    });
+    if (
+      !token ||
+      token.revokedAt ||
+      token.serviceIdentity.revokedAt ||
+      !token.serviceIdentity.workspaceId
+    ) {
+      return null;
+    }
+    if (token.expiresAt && token.expiresAt <= new Date()) return null;
+    await this.database.client.serviceToken.update({
+      where: { id: token.id },
+      data: { lastUsedAt: new Date() },
+    });
+    return {
+      kind: "service",
+      tokenId: token.id,
+      serviceIdentityId: token.serviceIdentity.id,
+      workspaceId: token.serviceIdentity.workspaceId,
+      scopes: jsonStrings(token.scopes),
+      accountIds: jsonStrings(token.accountIds),
+    };
+  }
+
+  private toView(
+    token: {
+      id: string;
+      tokenPrefix: string;
+      name: string;
+      scopes: unknown;
+      accountIds: unknown;
+      createdAt: Date;
+      expiresAt: Date | null;
+      revokedAt: Date | null;
+      lastUsedAt: Date | null;
+    },
+    serviceIdentityId: string,
+  ) {
+    return {
+      id: token.id,
+      serviceIdentityId,
+      name: token.name,
+      tokenPrefix: token.tokenPrefix,
+      scopes: jsonStrings(token.scopes),
+      accountIds: jsonStrings(token.accountIds),
+      createdAt: token.createdAt.toISOString(),
+      expiresAt: token.expiresAt?.toISOString() ?? null,
+      revokedAt: token.revokedAt?.toISOString() ?? null,
+      lastUsedAt: token.lastUsedAt?.toISOString() ?? null,
+    };
+  }
+}
