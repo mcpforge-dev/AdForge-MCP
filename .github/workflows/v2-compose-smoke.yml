@@ -66,19 +66,7 @@ jobs:
           done
 
       - name: Start the full Compose stack
-        run: docker compose up -d || true
-
-      - name: Diagnose API startup after dependencies
-        if: always()
-        run: docker compose up -d api
-
-      - name: Diagnose worker startup after dependencies
-        if: always()
-        run: docker compose up -d worker
-
-      - name: Diagnose web startup after dependencies
-        if: always()
-        run: docker compose up -d web
+        run: docker compose up -d
           docker compose up -d
 
       - name: Verify API and web readiness
