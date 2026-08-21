@@ -5,6 +5,7 @@ import type { Prisma } from "@holymedia/database";
 import { AuditService } from "../audit/audit.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import { ProviderService } from "../providers/provider.service.js";
 
 const READ_SCOPE = "adforge:mcp:read";
 const WRITE_SCOPE = "adforge:mcp:write";
@@ -54,6 +55,7 @@ export class McpPreviewService {
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(ProviderService) private readonly providers: ProviderService,
   ) {}
 
   public async create(principal: ServiceTokenPrincipal, input: PreviewInput) {
@@ -142,35 +144,101 @@ export class McpPreviewService {
         "Explicit preview confirmation is required.",
       );
 
+    const account = await this.account(principal, preview.accountId);
+    const policyReason = this.commitPolicyReason(preview, account);
     const consumed = await this.database.client.mcpPreview.updateMany({
       where: { id: preview.id, consumedAt: null },
       data: { consumedAt: new Date() },
     });
     if (consumed.count !== 1)
       throw new ForbiddenException("Preview has already been consumed.");
-    await this.audit.record({
-      eventType: "mcp_commit_blocked",
-      actorType: "SERVICE",
-      workspaceId: principal.workspaceId,
-      targetType: "mcp_preview",
-      targetId: preview.id,
-      success: false,
-      metadata: {
-        reason: this.config.previewOnly
-          ? "preview_only"
-          : "provider_write_adapter_unavailable",
-      },
-    });
-    return {
-      status: "blocked",
-      preview_token: "redacted",
-      execution_mode: "simulated_no_write",
-      preview_only: this.config.previewOnly,
-      provider_write_enabled: false,
-      reread: null,
-      message:
-        "HolyMedia MCP работает в режиме чтения и не изменяет рекламные кампании.",
-    };
+    if (policyReason) {
+      await this.audit.record({
+        eventType: "mcp_commit_blocked",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        success: false,
+        metadata: { reason: policyReason },
+      });
+      return {
+        status: "blocked",
+        preview_token: "redacted",
+        execution_mode: "simulated_no_write",
+        preview_only: this.config.previewOnly,
+        provider_write_enabled: false,
+        reread: null,
+        message:
+          "HolyMedia MCP работает в режиме чтения и не изменяет рекламные кампании.",
+      };
+    }
+    try {
+      const payload =
+        preview.payload &&
+        typeof preview.payload === "object" &&
+        !Array.isArray(preview.payload)
+          ? (preview.payload as Record<string, unknown>)
+          : {};
+      const committed = await this.providers.mutateCampaign(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        preview.externalObjectId,
+        preview.operation as "change_name" | "pause" | "resume",
+        payload,
+      );
+      await this.audit.record({
+        eventType: "mcp_commit_completed",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        metadata: {
+          provider: preview.provider,
+          operation: preview.operation,
+        },
+      });
+      return {
+        status: "committed",
+        preview_token: "redacted",
+        execution_mode: "confirmed_write",
+        provider_write_enabled: true,
+        reread: committed.reread,
+      };
+    } catch (error) {
+      await this.audit.record({
+        eventType: "mcp_commit_failed",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        success: false,
+        metadata: { provider: preview.provider, operation: preview.operation },
+      });
+      throw error;
+    }
+  }
+
+  private commitPolicyReason(
+    preview: { provider: string; operation: string; externalObjectId: string },
+    account: { id: string; externalAccountId: string },
+  ): string | null {
+    if (this.config.previewOnly) return "preview_only";
+    if (!this.config.confirmedWriteEnabled) return "confirmed_write_disabled";
+    if (preview.provider !== "META_ADS") return "provider_write_unavailable";
+    if (!this.config.writeOperationAllowlist.includes(preview.operation))
+      return "operation_not_allowlisted";
+    if (!this.config.writeObjectAllowlist.includes(preview.externalObjectId))
+      return "object_not_allowlisted";
+    if (
+      !this.config.writeAccountAllowlist.includes(account.id) &&
+      !this.config.writeAccountAllowlist.includes(account.externalAccountId)
+    )
+      return "account_not_allowlisted";
+    if (!["change_name", "pause", "resume"].includes(preview.operation))
+      return "operation_not_supported";
+    return null;
   }
 
   private async account(principal: ServiceTokenPrincipal, accountId: string) {

@@ -32,7 +32,10 @@ import type {
   SearchConsoleReadAdapter,
   SearchConsoleQueryRow,
 } from "./provider.types.js";
-import { isProviderReadAdapter } from "./provider.types.js";
+import {
+  isProviderMutationAdapter,
+  isProviderReadAdapter,
+} from "./provider.types.js";
 
 @Injectable()
 export class ProviderService {
@@ -585,6 +588,41 @@ export class ProviderService {
       accountId,
     );
     return context.adapter.health(context.read);
+  }
+
+  public async mutateCampaign(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    objectId: string,
+    operation: "change_name" | "pause" | "resume",
+    payload: Record<string, unknown>,
+  ) {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    if (!isProviderMutationAdapter(context.adapter))
+      throw new ProviderError(
+        "provider_not_configured",
+        "Provider mutations are not configured.",
+      );
+    const result = await context.adapter.mutateCampaign(context.read, {
+      objectId,
+      operation,
+      payload,
+    });
+    const reread = await context.adapter.listCampaigns(
+      context.read,
+      undefined,
+      500,
+    );
+    return {
+      result,
+      reread:
+        reread.items.find((campaign) => campaign.id === objectId) ?? null,
+    };
   }
 
   public async metaBusinesses(workspaceId: string, connectionId: string) {

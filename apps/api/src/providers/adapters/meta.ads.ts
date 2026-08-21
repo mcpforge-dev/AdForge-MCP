@@ -26,7 +26,9 @@ import type {
   OAuthExchangeContext,
   OAuthStartContext,
   ProviderCredentialPayload,
+  ProviderMutationAdapter,
   ProviderOAuthAdapter,
+  ProviderCampaignMutation,
   ProviderReadAdapter,
   ProviderReadContext,
 } from "../provider.types.js";
@@ -49,7 +51,7 @@ export const metaAdsDefinition = (
   accountDiscovery: true,
   refresh: true,
   read: configured,
-  write: false,
+  write: configured && config.providerMetaAdsManagementOauthEnabled,
   status: configured ? "available" : "configuration_required",
   scopes: [
     ...CORE_SCOPES,
@@ -60,7 +62,7 @@ export const metaAdsDefinition = (
 type MetaResponse = Record<string, unknown>;
 
 export class MetaAdsAdapter
-  implements ProviderOAuthAdapter, ProviderReadAdapter
+  implements ProviderOAuthAdapter, ProviderReadAdapter, ProviderMutationAdapter
 {
   public readonly definition: ProviderDefinition;
   private readonly config: AppConfig;
@@ -349,6 +351,42 @@ export class MetaAdsAdapter
         provenance: provenance("META_ADS", "Meta Graph API health", "partial"),
       };
     }
+  }
+
+  public async mutateCampaign(
+    context: ProviderReadContext,
+    mutation: ProviderCampaignMutation,
+  ): Promise<{ externalObjectId: string }> {
+    if (!context.credentials.scopes.includes("ads_management"))
+      throw new ProviderError(
+        "insufficient_permissions",
+        "Meta ads_management permission is required.",
+      );
+    const objectId = assertExternalId(mutation.objectId, "campaign id");
+    const body = new URLSearchParams({
+      access_token: context.credentials.accessToken,
+    });
+    if (mutation.operation === "change_name") {
+      const name = String(mutation.payload.new_name ?? "").trim();
+      if (!name || name.length > 255)
+        throw new ProviderError(
+          "provider_response_invalid",
+          "Campaign name is invalid.",
+        );
+      body.set("name", name);
+    } else {
+      body.set("status", mutation.operation === "pause" ? "PAUSED" : "ACTIVE");
+    }
+    await providerJson<MetaResponse>(
+      this.graphUrl(objectId, {}),
+      {
+        method: "POST",
+        headers: { "content-type": "application/x-www-form-urlencoded" },
+        body,
+      },
+      this.config.providerHttpTimeoutMs,
+    );
+    return { externalObjectId: objectId };
   }
 
   public async listBusinesses(

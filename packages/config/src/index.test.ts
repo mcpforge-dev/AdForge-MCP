@@ -17,6 +17,22 @@ describe("v2 configuration", () => {
     expect(config.environment).toBe("test");
   });
 
+  it("parses confirmed-write allowlists without enabling writes", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      V2_PREVIEW_ONLY: "true",
+      V2_CONFIRMED_WRITE_ENABLED: "false",
+      V2_WRITE_ACCOUNT_ALLOWLIST: "act_1, act_2",
+      V2_WRITE_OBJECT_ALLOWLIST: "campaign-1",
+      V2_WRITE_OPERATION_ALLOWLIST: "change_name",
+    });
+    expect(config.previewOnly).toBe(true);
+    expect(config.confirmedWriteEnabled).toBe(false);
+    expect(config.writeAccountAllowlist).toEqual(["act_1", "act_2"]);
+    expect(config.writeObjectAllowlist).toEqual(["campaign-1"]);
+    expect(config.writeOperationAllowlist).toEqual(["change_name"]);
+  });
+
   it("enforces strict configuration for production-like environments", () => {
     expect(() =>
       loadConfig({

@@ -63,6 +63,9 @@ const rawConfigSchema = z.object({
   PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED: booleanFromEnv.default(false),
   V2_PREVIEW_ONLY: booleanFromEnv.default(true),
   V2_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
+  V2_WRITE_ACCOUNT_ALLOWLIST: z.string().default(""),
+  V2_WRITE_OBJECT_ALLOWLIST: z.string().default(""),
+  V2_WRITE_OPERATION_ALLOWLIST: z.string().default(""),
   PROVIDER_TIKTOK_CLIENT_ID: z.string().optional(),
   PROVIDER_TIKTOK_CLIENT_SECRET: z.string().optional(),
   PROVIDER_TIKTOK_REDIRECT_URI: z.string().url().optional(),
@@ -158,6 +161,9 @@ export type AppConfig = {
   providerMetaAdsManagementOauthEnabled: boolean;
   previewOnly: boolean;
   confirmedWriteEnabled: boolean;
+  writeAccountAllowlist: string[];
+  writeObjectAllowlist: string[];
+  writeOperationAllowlist: string[];
   providerTikTokClientId: string | undefined;
   providerTikTokClientSecret: string | undefined;
   providerTikTokRedirectUri: string | undefined;
@@ -371,6 +377,15 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED,
     previewOnly: value.V2_PREVIEW_ONLY,
     confirmedWriteEnabled: value.V2_CONFIRMED_WRITE_ENABLED,
+    writeAccountAllowlist: value.V2_WRITE_ACCOUNT_ALLOWLIST.split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    writeObjectAllowlist: value.V2_WRITE_OBJECT_ALLOWLIST.split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
+    writeOperationAllowlist: value.V2_WRITE_OPERATION_ALLOWLIST.split(",")
+      .map((item) => item.trim())
+      .filter(Boolean),
     providerTikTokClientId: value.PROVIDER_TIKTOK_CLIENT_ID,
     providerTikTokClientSecret: value.PROVIDER_TIKTOK_CLIENT_SECRET,
     providerTikTokRedirectUri: value.PROVIDER_TIKTOK_REDIRECT_URI,

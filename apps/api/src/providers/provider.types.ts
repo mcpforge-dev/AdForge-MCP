@@ -120,6 +120,28 @@ export interface ProviderReadAdapter {
   health(context: ProviderReadContext): Promise<ProviderHealthView>;
 }
 
+export type ProviderCampaignMutation = {
+  objectId: string;
+  operation: "change_name" | "pause" | "resume";
+  payload: Record<string, unknown>;
+};
+
+export interface ProviderMutationAdapter {
+  mutateCampaign(
+    context: ProviderReadContext,
+    mutation: ProviderCampaignMutation,
+  ): Promise<{ externalObjectId: string }>;
+}
+
+export function isProviderMutationAdapter(
+  value: unknown,
+): value is ProviderOAuthAdapter & ProviderMutationAdapter {
+  return Boolean(
+    value &&
+      typeof (value as ProviderMutationAdapter).mutateCampaign === "function",
+  );
+}
+
 export type MetaBusiness = {
   id: string;
   name: string | null;

@@ -98,6 +98,40 @@ describe("Google Ads v2 adapter", () => {
 });
 
 describe("Meta Ads v2 adapter", () => {
+  it("executes only an explicit campaign mutation with ads_management", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true }));
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new MetaAdsAdapter(config);
+    await adapter.mutateCampaign(
+      {
+        credentials: {
+          accessToken: "user-token",
+          scopes: ["ads_read", "ads_management"],
+        },
+        accountId: "act_1",
+      },
+      {
+        objectId: "120251174838720324",
+        operation: "change_name",
+        payload: { new_name: "Review test" },
+      },
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).not.toContain("user-token");
+    expect(String(init.body)).toContain("name=Review+test");
+    expect(String(init.body)).toContain("access_token=user-token");
+  });
+
+  it("rejects mutation without ads_management", async () => {
+    const adapter = new MetaAdsAdapter(config);
+    await expect(
+      adapter.mutateCampaign(
+        { credentials: { accessToken: "token", scopes: ["ads_read"] }, accountId: "act_1" },
+        { objectId: "campaign-1", operation: "pause", payload: {} },
+      ),
+    ).rejects.toThrow("ads_management");
+  });
+
   it("discovers ad accounts and follows Page to Instagram through the Page edge", async () => {
     const fetchMock = vi
       .fn()
