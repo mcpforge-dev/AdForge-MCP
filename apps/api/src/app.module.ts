@@ -59,6 +59,8 @@ import { LegacyGoogleLoginController } from "./compat/legacy-google-login.contro
 import { GoogleLoginService } from "./auth/google-login.service.js";
 import { LegacyAdminController } from "./compat/legacy-admin.controller.js";
 import { LegacyMetaSkillsController } from "./compat/legacy-meta-skills.controller.js";
+import { ProductAnalyticsController } from "./analytics/product-analytics.controller.js";
+import { ProductAnalyticsService } from "./analytics/product-analytics.service.js";
 
 @Module({
   controllers: [
@@ -89,6 +91,7 @@ import { LegacyMetaSkillsController } from "./compat/legacy-meta-skills.controll
     LegacyGoogleLoginController,
     LegacyAdminController,
     LegacyMetaSkillsController,
+    ProductAnalyticsController,
   ],
   providers: [
     DatabaseService,
@@ -118,6 +121,7 @@ import { LegacyMetaSkillsController } from "./compat/legacy-meta-skills.controll
     SiteAnalysisService,
     BillingService,
     ManualConnectionRequestService,
+    ProductAnalyticsService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

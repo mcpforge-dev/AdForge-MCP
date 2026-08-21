@@ -94,6 +94,7 @@ model User {
   serviceIdentities ServiceIdentity[]
   directPermissionGrants UserPermissionGrant[] @relation("permission_grantee")
   issuedPermissionGrants UserPermissionGrant[] @relation("permission_grantor")
+  productEvents      ProductEvent[]
 
   @@index([email])
   @@index([status, createdAt])
@@ -122,6 +123,7 @@ model Workspace {
   mcpPreviews  McpPreview[]
   mcpOAuthClients McpOAuthClient[]
   mcpOAuthCodes McpOAuthAuthorizationCode[]
+  productEvents ProductEvent[]
 
   @@index([createdAt])
   @@map("workspaces")
@@ -371,6 +373,23 @@ model AuditEvent {
   @@index([actorUserId, createdAt])
   @@index([eventType, createdAt])
   @@map("audit_events")
+}
+
+model ProductEvent {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String?  @map("user_id") @db.Uuid
+  eventName   String   @map("event_name") @db.VarChar(120)
+  properties  Json?
+  requestId   String?  @map("request_id") @db.VarChar(128)
+  occurredAt  DateTime @default(now()) @map("occurred_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, occurredAt])
+  @@index([workspaceId, eventName, occurredAt])
+  @@index([userId, occurredAt])
+  @@map("product_events")
 }
 
 model SystemMetadata {
