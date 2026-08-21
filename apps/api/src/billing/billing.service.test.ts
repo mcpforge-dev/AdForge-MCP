@@ -30,4 +30,70 @@ describe("Billing usage", () => {
     await service.recordUsage("workspace-a", "oauth_access_token");
     expect(calls).toBe(0);
   });
+
+  it("atomically rejects an MCP request beyond the plan limit", async () => {
+    const database = {
+      client: {
+        entitlement: { findMany: async () => [] },
+        workspaceSubscription: { findFirst: async () => null },
+        plan: {
+          findUnique: async () => ({
+            features: { mcp: true, monthly_mcp_requests: 500 },
+          }),
+        },
+        $transaction: async (operation: (client: unknown) => Promise<void>) =>
+          operation({
+            usageRecord: {
+              upsert: async () => ({ quantity: 501 }),
+            },
+          }),
+      },
+    } as never;
+    const service = new BillingService(database);
+    await expect(service.consumeMcpRequest("workspace-a")).rejects.toThrow(
+      "Workspace usage limit reached.",
+    );
+  });
+
+  it("keeps migrated legacy workspaces unlimited", async () => {
+    let usageRecorded = 0;
+    const database = {
+      client: {
+        entitlement: {
+          findMany: async () => [
+            { featureKey: "legacy_access", value: true },
+          ],
+        },
+        workspaceSubscription: { findFirst: async () => null },
+        plan: { findUnique: async () => null },
+        usageRecord: { upsert: async () => usageRecorded++ },
+      },
+    } as never;
+    const service = new BillingService(database);
+    await service.consumeMcpRequest("workspace-a");
+    expect(usageRecorded).toBe(1);
+  });
+
+  it("enforces the provider account limit before enabling another account", async () => {
+    const database = {
+      client: {
+        entitlement: { findMany: async () => [] },
+        workspaceSubscription: { findFirst: async () => null },
+        plan: {
+          findUnique: async () => ({ features: { provider_accounts: 1 } }),
+        },
+        $transaction: async (operation: (client: unknown) => Promise<void>) =>
+          operation({
+            providerAccount: {
+              findFirst: async () => ({ enabled: false }),
+              count: async () => 1,
+            },
+          }),
+      },
+    } as never;
+    const service = new BillingService(database);
+    await expect(
+      service.setProviderAccountEnabled("workspace-a", "account-b", true),
+    ).rejects.toThrow("Provider account limit reached.");
+  });
 });

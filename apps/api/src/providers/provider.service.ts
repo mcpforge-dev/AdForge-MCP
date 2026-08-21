@@ -15,6 +15,7 @@ import type { Prisma } from "@holymedia/database";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import { AuditService } from "../audit/audit.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
+import { BillingService } from "../billing/billing.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { RedisRateLimitService } from "../infrastructure/redis-rate-limit.service.js";
 import { hashIp } from "../infrastructure/security.utils.js";
@@ -54,6 +55,7 @@ export class ProviderService {
     private readonly limits: RedisRateLimitService,
     @Inject(ProviderMetricsService)
     private readonly metrics: ProviderMetricsService,
+    @Inject(BillingService) private readonly billing: BillingService,
   ) {}
 
   public listProviders(): ProviderDefinition[] {
@@ -511,11 +513,12 @@ export class ProviderService {
     principal: HumanPrincipal,
     request: RequestWithAuth,
   ): Promise<ProviderAccountView> {
-    const result = await this.database.client.providerAccount.updateMany({
-      where: { id: accountId, workspaceId },
-      data: { enabled },
-    });
-    if (result.count !== 1)
+    const updated = await this.billing.setProviderAccountEnabled(
+      workspaceId,
+      accountId,
+      enabled,
+    );
+    if (!updated)
       throw new NotFoundException("Provider account not found.");
     const account =
       await this.database.client.providerAccount.findUniqueOrThrow({

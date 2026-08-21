@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AuditService } from "../audit/audit.service.js";
+import { BillingService } from "../billing/billing.service.js";
 import { AuthService } from "../auth/auth.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { EmailService } from "../auth/email.service.js";
@@ -51,6 +52,7 @@ describe.skipIf(!integrationEnabled)(
     const states = new OAuthStateService(database, vault);
     const coordinator = new ProviderRefreshCoordinator();
     const metrics = new ProviderMetricsService();
+    const billing = new BillingService(database);
     const providers = new ProviderService(
       database,
       audit,
@@ -60,6 +62,7 @@ describe.skipIf(!integrationEnabled)(
       coordinator,
       limits,
       metrics,
+      billing,
     );
     const suffix = randomUUID();
     const email = `provider-${suffix}@example.test`;

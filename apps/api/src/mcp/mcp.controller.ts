@@ -51,9 +51,9 @@ export class McpController {
       const params = input.params ?? {};
       const name = typeof params.name === "string" ? params.name : "";
       try {
+        await this.billing.consumeMcpRequest(principal.workspaceId);
         const result = await this.mcp.call(principal, name, params.arguments);
         await Promise.allSettled([
-          this.billing.recordUsage(principal.workspaceId, "mcp.requests"),
           this.audit.record({
             eventType: "mcp_tool_executed",
             actorType: "SERVICE",
