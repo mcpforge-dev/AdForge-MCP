@@ -72,6 +72,8 @@ async function bootstrap(): Promise<void> {
       { path: "api/hosted/(.*)", method: RequestMethod.ALL },
       { path: "api/meta/skills", method: RequestMethod.ALL },
       { path: "api/meta/skills/(.*)", method: RequestMethod.ALL },
+      { path: "api/site", method: RequestMethod.ALL },
+      { path: "api/site/(.*)", method: RequestMethod.ALL },
       // These paths are part of the existing V1 OAuth contract. Provider
       // consoles must keep calling them after the V2 cutover.
       { path: "oauth/:provider/callback", method: RequestMethod.GET },

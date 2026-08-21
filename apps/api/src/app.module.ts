@@ -38,6 +38,9 @@ import { LegacyHostedController } from "./compat/legacy-hosted.controller.js";
 import { ReportController } from "./reports/report.controller.js";
 import { ReportService } from "./reports/report.service.js";
 import { LegacyReportController } from "./compat/legacy-report.controller.js";
+import { LegacySiteAnalysisController } from "./compat/legacy-site-analysis.controller.js";
+import { SiteAnalysisController } from "./site-analysis/site-analysis.controller.js";
+import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
 
 @Module({
   controllers: [
@@ -55,6 +58,8 @@ import { LegacyReportController } from "./compat/legacy-report.controller.js";
     LegacyHostedController,
     ReportController,
     LegacyReportController,
+    LegacySiteAnalysisController,
+    SiteAnalysisController,
   ],
   providers: [
     DatabaseService,
@@ -78,6 +83,7 @@ import { LegacyReportController } from "./compat/legacy-report.controller.js";
     ServiceTokenService,
     McpService,
     ReportService,
+    SiteAnalysisService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })
