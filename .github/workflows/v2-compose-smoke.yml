@@ -2,7 +2,7 @@ name: HolyMedia MCP v2 full-stack Compose smoke
 
 on:
   push:
-    branches: ["v2/phase-4.5-verification"]
+    branches: ["v2/**"]
   pull_request:
     branches: ["v2/**"]
   workflow_dispatch:
@@ -69,8 +69,6 @@ jobs:
         run: |
           set -euo pipefail
           docker compose up -d api worker web
-          docker compose up -d
-          docker compose up -d
 
       - name: Verify API and web readiness
         shell: bash
@@ -145,7 +143,4 @@ jobs:
         run: |
           docker compose stop worker api web || true
           docker compose ps || true
-          docker compose down -v --remove-orphans
-          docker compose stop worker api web
-          docker compose ps
           docker compose down -v --remove-orphans
