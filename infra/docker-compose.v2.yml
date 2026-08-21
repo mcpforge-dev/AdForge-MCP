@@ -80,6 +80,7 @@ services:
       SESSION_HASH_SECRET: compose-only-session-hash-secret-01234567890123456789
       PROVIDER_CREDENTIAL_ENCRYPTION_KEYS: 1:QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=
       PROVIDER_CREDENTIAL_CURRENT_KEY_VERSION: "1"
+    working_dir: /workspace/apps/worker
     command: ["pnpm", "--filter", "@holymedia/worker", "start"]
     healthcheck:
       test:
