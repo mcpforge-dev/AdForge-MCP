@@ -18,6 +18,15 @@ from ad_mcp.core.redaction import redact_secret_text
 from ad_mcp.settings import Settings
 
 META_PROVIDER = "meta_ads"
+META_ALLOWED_OAUTH_PERMISSIONS = frozenset(
+    {
+        "ads_read",
+        "business_management",
+        "pages_show_list",
+        "pages_read_engagement",
+        "ads_management",
+    }
+)
 
 
 class MetaOAuthError(OAuthError):
@@ -55,7 +64,10 @@ class MetaOAuthService:
         permissions: list[str] = []
         for item in self._settings.meta_oauth_scopes.split(","):
             permission = item.strip()
-            if permission and permission not in permissions:
+            # Keep the public flow aligned with the permissions configured for
+            # the current App Review. Unknown permissions caused Meta to reject
+            # the entire dialog with Invalid Scopes.
+            if permission in META_ALLOWED_OAUTH_PERMISSIONS and permission not in permissions:
                 permissions.append(permission)
         if self._settings.meta_ads_management_oauth_enabled and "ads_management" not in permissions:
             permissions.append("ads_management")
@@ -121,7 +133,11 @@ class MetaOAuthService:
         token = self._exchange_long_lived_token(short_token) or short_token
         accounts = self._fetch_ad_accounts(token)
         if not accounts:
-            raise MetaOAuthError("Meta OAuth succeeded, but no ad accounts were returned.")
+            raise MetaOAuthError(
+                "Meta авторизация прошла, но рекламный кабинет не найден. "
+                "Проверьте, что этому пользователю выдан доступ к нужному рекламному аккаунту "
+                "в Meta Business Settings, и повторите подключение."
+            )
         permissions = self._fetch_permissions(token)
         businesses, business_warning = self._discover_optional(self._fetch_businesses, token)
         pages, pages_warning = self._discover_optional(self._fetch_pages, token)

@@ -125,6 +125,23 @@ def test_meta_oauth_ads_management_is_added_only_by_explicit_feature_flag(tmp_pa
     ]
 
 
+def test_meta_oauth_filters_permissions_that_are_not_in_current_app_review(tmp_path) -> None:
+    service = MetaOAuthService(
+        _settings(
+            tmp_path,
+            meta_oauth_scopes=(
+                "ads_read,business_management,pages_show_list,pages_read_engagement,"
+                "read_insights,instagram_basic"
+            ),
+        ),
+        _FakeMetaHTTP(),
+    )
+
+    query = parse_qs(urlparse(service.authorization_url()).query)
+
+    assert query["scope"] == ["ads_read,business_management,pages_show_list,pages_read_engagement"]
+
+
 def test_manual_meta_oauth_stays_read_only_when_ads_management_is_enabled(tmp_path) -> None:
     service = MetaOAuthService(
         _settings(tmp_path, meta_ads_management_oauth_enabled=True),

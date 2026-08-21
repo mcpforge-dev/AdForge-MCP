@@ -199,7 +199,8 @@ button { font-family: inherit; }
 .field { display: flex; flex-direction: column; gap: 6px; }
 .field__label { font-size: 13px; font-weight: 500; color: var(--text-muted); }
 
-input[type="password"], input[type="text"], input[type="email"] {
+input[type="password"], input[type="text"], input[type="email"],
+input[type="number"], input[type="tel"], select, textarea {
   background: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: var(--radius-small);
@@ -210,14 +211,52 @@ input[type="password"], input[type="text"], input[type="email"] {
   width: 100%;
 }
 
-input::placeholder { color: var(--text-faint); opacity: 1; }
+textarea {
+  min-height: 104px;
+  line-height: 1.45;
+  resize: vertical;
+}
+
+input::placeholder, textarea::placeholder { color: var(--text-faint); opacity: 1; }
 
 input[type="password"]:focus-visible, input[type="text"]:focus-visible, input[type="email"]:focus-visible,
-input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focus {
+input[type="number"]:focus-visible, input[type="tel"]:focus-visible, select:focus-visible, textarea:focus-visible,
+input[type="password"]:focus, input[type="text"]:focus, input[type="email"]:focus,
+input[type="number"]:focus, input[type="tel"]:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--accent);
   box-shadow: var(--focus-ring);
 }
+
+.field__hint {
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.field__label small {
+  color: var(--text-faint);
+  font-weight: 400;
+}
+
+.stack-form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.stack-form .field { gap: 7px; }
+.stack-form .callout { margin-top: 2px; }
+
+.modal-form-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 4px;
+}
+
+.modal-form-actions .btn { min-width: 142px; }
 
 .password-field {
   position: relative;
@@ -568,7 +607,7 @@ select {
   border: 1px solid var(--border);
   border-radius: var(--radius-small);
   color: var(--text);
-  min-height: 40px;
+  min-height: 44px;
   padding: 9px 38px 9px 12px;
   width: 100%;
 }

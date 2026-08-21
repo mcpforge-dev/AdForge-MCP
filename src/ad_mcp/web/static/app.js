@@ -73,6 +73,7 @@
     section: "overview",
     authMode: "login",
     user: null,
+    registrationRequiresCode: false,
     capabilities: null,
     connections: null,
     manualMetaRequest: null,
@@ -113,6 +114,8 @@
     el.authForm = document.getElementById("auth-form");
     el.authNameField = document.getElementById("auth-name-field");
     el.authName = document.getElementById("auth-name");
+    el.authAccessCodeField = document.getElementById("auth-access-code-field");
+    el.authAccessCode = document.getElementById("auth-access-code");
     el.authEmail = document.getElementById("auth-email");
     el.authPassword = document.getElementById("auth-password");
     el.authConfirmField = document.getElementById("auth-confirm-field");
@@ -411,6 +414,9 @@
           return;
         }
         payload.name = el.authName.value.trim();
+        if (state.registrationRequiresCode) {
+          payload.access_code = el.authAccessCode.value.trim();
+        }
       }
       setLoading(el.authSubmit, true);
       hideAuthError();
@@ -436,6 +442,13 @@
         state.pendingWelcome = "login";
         enterApp();
       } catch (error) {
+        if (state.authMode === "register" && error.code === "registration_code_required") {
+          state.registrationRequiresCode = true;
+          setRegistrationCodeVisibility(true);
+          showAuthError("Введите код регистрации, который выдал менеджер HolyMedia.");
+          el.authAccessCode?.focus();
+          return;
+        }
         showAuthError(humanizeError(error));
       } finally {
         setLoading(el.authSubmit, false);
@@ -481,6 +494,11 @@
     el.authForm.hidden = false;
     el.authSuccess.hidden = true;
     resetPasswordVisibility();
+    if (state.authMode === "register") {
+      void loadRegistrationStatus();
+    } else {
+      setRegistrationCodeVisibility(false);
+    }
     window.setTimeout(() => {
       const target = state.authMode === "register" ? el.authName : el.authEmail;
       target.focus();
@@ -507,6 +525,7 @@
     const isRegister = state.authMode === "register";
     el.authNameField.hidden = !isRegister;
     el.authName.required = isRegister;
+    setRegistrationCodeVisibility(isRegister && state.registrationRequiresCode);
     el.authConfirmField.hidden = !isRegister;
     el.authPasswordConfirm.required = isRegister;
     el.authPassword.autocomplete = isRegister ? "new-password" : "current-password";
@@ -520,6 +539,26 @@
       ? "Аккаунт нужен, чтобы подключить рекламные кабинеты и открыть их вашему AI-клиенту."
       : "Введите email и пароль, чтобы открыть личный кабинет.";
     el.authSubmit.textContent = isRegister ? "Создать аккаунт" : "Войти";
+  }
+
+  async function loadRegistrationStatus() {
+    try {
+      const status = await api("/api/auth/registration-status");
+      state.registrationRequiresCode = Boolean(status.requires_access_code);
+      setRegistrationCodeVisibility(state.authMode === "register" && state.registrationRequiresCode);
+      if (state.authMode === "register" && status.enabled === false) {
+        showAuthError("Регистрация временно закрыта. Обратитесь к менеджеру HolyMedia.");
+      }
+    } catch (error) {
+      // Registration itself remains the source of truth if this public hint is unavailable.
+    }
+  }
+
+  function setRegistrationCodeVisibility(visible) {
+    if (!el.authAccessCodeField || !el.authAccessCode) return;
+    el.authAccessCodeField.hidden = !visible;
+    el.authAccessCode.required = Boolean(visible);
+    if (!visible) el.authAccessCode.value = "";
   }
 
   function showRegistrationSuccess() {

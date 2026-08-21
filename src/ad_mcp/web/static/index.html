@@ -200,6 +200,11 @@
           <span class="field__label">Имя</span>
           <input id="auth-name" type="text" autocomplete="name" placeholder="Ваше имя">
         </label>
+        <label id="auth-access-code-field" class="field" hidden>
+          <span class="field__label">Код регистрации</span>
+          <input id="auth-access-code" type="text" autocomplete="one-time-code" inputmode="text" placeholder="Введите код, который выдал HolyMedia">
+          <span class="field__hint">Код нужен только если регистрация закрыта для общего доступа.</span>
+        </label>
         <label class="field">
           <span class="field__label">Email</span>
           <input id="auth-email" type="email" autocomplete="email" placeholder="name@company.com" required>
