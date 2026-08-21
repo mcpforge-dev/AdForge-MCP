@@ -82,9 +82,9 @@ jobs:
           set -euo pipefail
           export PGPASSWORD=change-me-local-only
           rehearsal_url=postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_rehearsal
-          pg_dump "$rehearsal_url" --format=custom --file=/tmp/holymedia-v2-rehearsal.dump
+          pg_dump "$rehearsal_url" --format=custom --no-owner --no-privileges --file=/tmp/holymedia-v2-rehearsal.dump
           psql "postgresql://holymedia@127.0.0.1:5432/holymedia_v2" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE holymedia_v2_restore'
-          pg_restore --exit-on-error --dbname=postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore /tmp/holymedia-v2-rehearsal.dump
+          pg_restore --exit-on-error --clean --if-exists --no-owner --no-privileges --dbname=postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore /tmp/holymedia-v2-rehearsal.dump
           restored_users=$(psql "postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore" -Atc 'SELECT COUNT(*) FROM users')
           restored_workspaces=$(psql "postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore" -Atc 'SELECT COUNT(*) FROM workspaces')
           test "$restored_users" -ge 1
