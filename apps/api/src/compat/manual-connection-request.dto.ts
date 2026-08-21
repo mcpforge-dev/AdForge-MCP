@@ -2,12 +2,17 @@ import {
   IsIn,
   IsOptional,
   IsString,
+  IsUUID,
   Matches,
   MaxLength,
   MinLength,
 } from "class-validator";
 
 export class CreateManualMetaConnectionRequestDto {
+  @IsOptional()
+  @IsUUID()
+  public workspace_id?: string;
+
   @IsOptional()
   @IsString()
   @MaxLength(160)
@@ -60,4 +65,18 @@ export class UpdateManualConnectionRequestRequestDto extends UpdateManualConnect
   @MinLength(1)
   @MaxLength(64)
   public request_id!: string;
+}
+
+export class ManualConnectionRequestIdDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(64)
+  public request_id!: string;
+}
+
+export class SelectManualConnectionAccountDto extends ManualConnectionRequestIdDto {
+  @IsString()
+  @MinLength(1)
+  @MaxLength(160)
+  public pending_id!: string;
 }

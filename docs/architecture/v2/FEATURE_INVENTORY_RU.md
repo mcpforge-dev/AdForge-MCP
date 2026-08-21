@@ -12,7 +12,7 @@
 | Meta Ads | implemented/partial | OAuth permissions, accounts/campaigns/metrics, Business/Page/posts/Instagram | live V2 verification, missing-permission UX, write adapter |
 | Yandex Direct | partial | OAuth/discovery boundary | real read adapter or explicit unavailable capability |
 | TikTok Ads | partial | OAuth/discovery boundary | real read adapter or explicit unavailable capability |
-| Account selection | implemented | workspace-scoped enable/disable and account allowlists | add-account UX and reconnect preservation E2E |
+| Account selection | implemented | workspace-scoped enable/disable, multi-account add flow and account allowlists | reconnect preservation E2E |
 | MCP HTTP | implemented | `/mcp`, JSON-RPC initialize/tools/list/tools/call, 401 without bearer | protocol conformance and richer error contract |
 | Service tokens | implemented/partial | hash-at-rest, scopes, expiry, revoke, last-used, account restrictions, creator binding | rotation API and migration rehearsal |
 | MCP read analytics | implemented | performance, comparison, executive/status/top performers, skill routes | detailed entity reports |
@@ -23,7 +23,7 @@
 | Hermes | implemented/partial | separate read-only Telegram gateway, deterministic Russian analytics, optional AI boundary | deployment/runtime integration and full V1 scenario parity |
 | Billing/plans | foundation | schema for plans/prices/subscriptions/orders/attempts/usage/entitlements, read API, payment port | checkout/webhook provider and quota enforcement |
 | Product analytics | partial | audit events and provider metrics | privacy-safe product event pipeline |
-| Admin | implemented/partial | workspace-scoped user/status/role/diagnostics and manual requests | full admin UI and specialist OAuth pending flow |
+| Admin | implemented/partial | workspace-scoped user/status/role/diagnostics, manual request UI and specialist OAuth pending flow | full admin UI and end-to-end specialist handoff |
 | Background jobs | foundation | BullMQ, retry/graceful shutdown, discovery queue boundary | actual provider discovery/health jobs |
 | Observability | foundation | structured logs, request IDs, safe errors, provider metrics | OTel exporter, dashboards and alerting |
 

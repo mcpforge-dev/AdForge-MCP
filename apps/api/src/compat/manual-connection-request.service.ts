@@ -8,6 +8,7 @@ import {
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { AuditService } from "../audit/audit.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
+import { ProviderService } from "../providers/provider.service.js";
 import type {
   CreateManualMetaConnectionRequestDto,
   UpdateManualConnectionRequestDto,
@@ -30,6 +31,7 @@ export class ManualConnectionRequestService {
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(AuditService) private readonly audit: AuditService,
+    @Inject(ProviderService) private readonly providers: ProviderService,
   ) {}
 
   public async listForUser(principal: HumanPrincipal) {
@@ -157,6 +159,126 @@ export class ManualConnectionRequestService {
       metadata: { status: input.status },
     });
     return { request: this.view(row) };
+  }
+
+  public async authorizeMeta(
+    principal: HumanPrincipal,
+    requestId: string,
+    request: RequestWithAuth,
+  ) {
+    const current = await this.authorizedRequest(principal, requestId);
+    const started = await this.providers.startOAuth(
+      current.workspaceId,
+      "META_ADS",
+      principal,
+      request,
+    );
+    await this.database.client.manualConnectionRequest.update({
+      where: { id: current.id },
+      data: { status: "IN_PROGRESS", assignedTo: principal.userId },
+    });
+    await this.audit.record({
+      eventType: "manual_connection_oauth_started",
+      actorUserId: principal.userId,
+      workspaceId: current.workspaceId,
+      targetType: "manual_connection_request",
+      targetId: current.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: { provider: "META_ADS" },
+    });
+    return {
+      request_id: current.id,
+      authorization_url: started.authorizationUrl,
+    };
+  }
+
+  public async pendingMeta(principal: HumanPrincipal, requestId: string) {
+    const current = await this.authorizedRequest(principal, requestId);
+    const connection = await this.database.client.providerConnection.findFirst({
+      where: { workspaceId: current.workspaceId, provider: "META_ADS" },
+      include: { accounts: { orderBy: { displayName: "asc" } } },
+    });
+    return {
+      request_id: current.id,
+      pending: (connection?.accounts ?? []).map((account) => ({
+        id: account.id,
+        external_account_id: account.externalAccountId,
+        name: account.displayName,
+        status: account.status,
+        enabled: account.enabled,
+      })),
+      data_status: connection ? "live" : "empty",
+      source_api: "v2_provider_framework",
+      real_data: Boolean(connection),
+      fetched_at: new Date().toISOString(),
+    };
+  }
+
+  public async selectMeta(
+    principal: HumanPrincipal,
+    requestId: string,
+    pendingId: string,
+    request: RequestWithAuth,
+  ) {
+    const current = await this.authorizedRequest(principal, requestId);
+    const account = await this.database.client.providerAccount.findFirst({
+      where: {
+        workspaceId: current.workspaceId,
+        provider: "META_ADS",
+        OR: [{ id: pendingId }, { externalAccountId: pendingId }],
+      },
+    });
+    if (!account) throw new NotFoundException("Meta account is not available.");
+    const selected = await this.database.client.providerAccount.update({
+      where: { id: account.id },
+      data: { enabled: true },
+    });
+    await this.database.client.manualConnectionRequest.update({
+      where: { id: current.id },
+      data: { status: "COMPLETED", assignedTo: principal.userId },
+    });
+    await this.audit.record({
+      eventType: "manual_connection_account_selected",
+      actorUserId: principal.userId,
+      workspaceId: current.workspaceId,
+      targetType: "provider_account",
+      targetId: selected.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: { provider: "META_ADS" },
+    });
+    return {
+      request_id: current.id,
+      account: {
+        id: selected.id,
+        external_account_id: selected.externalAccountId,
+        name: selected.displayName,
+        enabled: selected.enabled,
+      },
+    };
+  }
+
+  private async authorizedRequest(
+    principal: HumanPrincipal,
+    requestId: string,
+  ) {
+    const current =
+      await this.database.client.manualConnectionRequest.findUnique({
+        where: { id: requestId },
+      });
+    if (!current) throw new NotFoundException("Connection request not found.");
+    const membership =
+      await this.database.client.workspaceMembership.findUnique({
+        where: {
+          workspaceId_userId: {
+            workspaceId: current.workspaceId,
+            userId: principal.userId,
+          },
+        },
+        select: { role: true },
+      });
+    if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
+      throw new ForbiddenException("Admin access required.");
+    return current;
   }
 
   private view(row: {

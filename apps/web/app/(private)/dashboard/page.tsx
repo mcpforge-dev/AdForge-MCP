@@ -34,6 +34,16 @@ type Connection = {
   missingScopes: string[];
   accounts: ProviderAccount[];
 };
+type ManualRequest = {
+  id: string;
+  workspace_id: string;
+  provider: string;
+  company_name: string;
+  meta_ad_account_id: string;
+  status: string;
+  specialist_note: string;
+  created_at: string;
+};
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -58,10 +68,60 @@ export default function DashboardPage() {
   const [members, setMembers] = useState<Member[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
+  const [manualRequests, setManualRequests] = useState<ManualRequest[]>([]);
+  const [adminManualRequests, setAdminManualRequests] = useState<
+    ManualRequest[]
+  >([]);
   const [readResult, setReadResult] = useState<unknown>(null);
   const [siteResult, setSiteResult] = useState<unknown>(null);
   const [siteUrl, setSiteUrl] = useState("");
   const [error, setError] = useState("");
+
+  async function loadManualRequests() {
+    const [response, adminResponse] = await Promise.all([
+      fetch(`${API}/api/connection-requests`, {
+        credentials: "include",
+      }),
+      active && ["OWNER", "ADMIN"].includes(active.role)
+        ? fetch(`${API}/api/admin/connection-requests`, {
+            credentials: "include",
+          })
+        : Promise.resolve(null),
+    ]);
+    if (response.ok) {
+      const data = (await response.json()) as { requests: ManualRequest[] };
+      setManualRequests(data.requests);
+    }
+    if (adminResponse?.ok) {
+      const data = (await adminResponse.json()) as {
+        requests: ManualRequest[];
+      };
+      setAdminManualRequests(data.requests);
+    } else if (!active || !["OWNER", "ADMIN"].includes(active.role)) {
+      setAdminManualRequests([]);
+    }
+  }
+
+  async function startManualMeta(requestId: string) {
+    const response = await fetch(
+      `${API}/api/admin/connection-requests/meta/authorize-url`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({ request_id: requestId }),
+      },
+    );
+    if (!response.ok) {
+      setError("Не удалось начать подключение Meta по заявке.");
+      return;
+    }
+    const data = (await response.json()) as { authorization_url: string };
+    window.location.assign(data.authorization_url);
+  }
 
   async function loadWorkspaces() {
     const response = await fetch(`${API}/api/v1/workspaces`, {
@@ -108,6 +168,7 @@ export default function DashboardPage() {
     if (!active) return;
     void loadMembers(active);
     void loadConnections(active);
+    void loadManualRequests();
   }, [active]);
 
   async function startProvider(provider: string) {
@@ -295,6 +356,37 @@ export default function DashboardPage() {
     setError("");
   }
 
+  async function requestManualMeta(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active) return;
+    const form = new FormData(event.currentTarget);
+    const response = await fetch(`${API}/api/connection-requests/meta`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": await csrf(),
+      },
+      body: JSON.stringify({
+        workspace_id: active.id,
+        company_name: form.get("company_name"),
+        ad_account_id: form.get("ad_account_id"),
+        business_id: form.get("business_id") || undefined,
+        page_id: form.get("page_id") || undefined,
+        instagram_username: form.get("instagram_username") || undefined,
+        contact_preference: form.get("contact_preference"),
+        client_note: form.get("client_note") || undefined,
+      }),
+    });
+    if (!response.ok) {
+      setError("Не удалось отправить заявку на ручное подключение Meta.");
+      return;
+    }
+    event.currentTarget.reset();
+    setError("");
+    await loadManualRequests();
+  }
+
   async function logout() {
     await fetch(`${API}/api/v1/auth/logout`, {
       method: "POST",
@@ -478,6 +570,91 @@ export default function DashboardPage() {
             );
           })}
         </div>
+      </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Meta onboarding</p>
+            <h2>Подключение Meta с помощью специалиста</h2>
+          </div>
+          <span className="muted">
+            Не передавайте пароли, токены и секреты. Специалист поможет пройти
+            официальную авторизацию Meta.
+          </span>
+        </div>
+        <form onSubmit={requestManualMeta} className="invite-form">
+          <input name="company_name" required placeholder="Название компании" />
+          <input
+            name="ad_account_id"
+            required
+            placeholder="ID рекламного кабинета, например 123456789"
+          />
+          <input name="business_id" placeholder="Business ID (необязательно)" />
+          <input name="page_id" placeholder="Page ID (необязательно)" />
+          <input
+            name="instagram_username"
+            placeholder="Instagram @username (необязательно)"
+          />
+          <select name="contact_preference" defaultValue="email">
+            <option value="email">Связаться по email</option>
+            <option value="telegram">Связаться в Telegram</option>
+            <option value="whatsapp">Связаться в WhatsApp</option>
+          </select>
+          <textarea
+            name="client_note"
+            maxLength={2000}
+            placeholder="Комментарий для специалиста, без паролей и токенов"
+          />
+          <button className="primary-button" type="submit">
+            Оставить заявку
+          </button>
+        </form>
+        {manualRequests.length > 0 && (
+          <div className="provider-details">
+            <strong>Ваши заявки</strong>
+            {manualRequests
+              .filter((item) => item.workspace_id === active?.id)
+              .map((item) => (
+                <div className="member-row" key={item.id}>
+                  <span>
+                    <strong>{item.company_name}</strong>
+                    <small>
+                      Meta · {item.meta_ad_account_id} ·{" "}
+                      {item.created_at.slice(0, 10)}
+                    </small>
+                  </span>
+                  <em>{item.status}</em>
+                </div>
+              ))}
+          </div>
+        )}
+        {adminManualRequests.filter((item) => item.workspace_id === active?.id)
+          .length > 0 && (
+          <div className="provider-details">
+            <strong>Заявки для специалиста</strong>
+            {adminManualRequests
+              .filter((item) => item.workspace_id === active?.id)
+              .map((item) => (
+                <div className="member-row" key={item.id}>
+                  <span>
+                    <strong>{item.company_name}</strong>
+                    <small>
+                      {item.meta_ad_account_id} · {item.status}
+                    </small>
+                  </span>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={item.status === "COMPLETED"}
+                    onClick={() => void startManualMeta(item.id)}
+                  >
+                    Войти в Meta и подключить
+                  </button>
+                </div>
+              ))}
+          </div>
+        )}
       </section>
 
       <section className="panel">
