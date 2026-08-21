@@ -29,6 +29,11 @@ import { ServiceTokenController } from "./service-tokens/service-token.controlle
 import { ServiceTokenService } from "./service-tokens/service-token.service.js";
 import { McpController } from "./mcp/mcp.controller.js";
 import { McpService } from "./mcp/mcp.service.js";
+import {
+  LegacyAuthController,
+  LegacyMeController,
+} from "./compat/legacy-auth.controller.js";
+import { LegacyMcpTokenController } from "./compat/legacy-mcp-token.controller.js";
 
 @Module({
   controllers: [
@@ -40,6 +45,9 @@ import { McpService } from "./mcp/mcp.service.js";
     ProviderController,
     ServiceTokenController,
     McpController,
+    LegacyAuthController,
+    LegacyMeController,
+    LegacyMcpTokenController,
   ],
   providers: [
     DatabaseService,
