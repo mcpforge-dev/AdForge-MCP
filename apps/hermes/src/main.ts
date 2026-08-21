@@ -5,6 +5,7 @@ import {
   McpHttpClient,
   OpenAiTextEnhancer,
   TelegramClient,
+  validateHermesConfig,
 } from "./hermes.js";
 
 export const hermesFoundationStatus = {
@@ -17,7 +18,14 @@ export const hermesFoundationStatus = {
 const logger = createLogger("holymedia-mcp-v2-hermes");
 const config = loadHermesConfig();
 
-if (!config.enabled) {
+const configError = validateHermesConfig(config);
+if (configError) {
+  logger.error(
+    { ...hermesFoundationStatus, errorType: "invalid_configuration" },
+    configError,
+  );
+  process.exitCode = 1;
+} else if (!config.enabled) {
   logger.info(hermesFoundationStatus, "Hermes is disabled by configuration.");
 } else if (!config.botToken || !config.mcpToken) {
   logger.error(

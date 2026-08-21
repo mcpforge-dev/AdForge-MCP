@@ -8,6 +8,7 @@ import {
   renderComparison,
   renderMetrics,
   shouldHandleMessage,
+  validateHermesConfig,
 } from "./hermes.js";
 
 describe("Hermes deterministic gateway", () => {
@@ -104,6 +105,28 @@ describe("Hermes deterministic gateway", () => {
     expect(config.allowedChatIds).toEqual(new Set([123, 456]));
     expect(config.mcpUrl).toBe("http://127.0.0.1:4000/mcp");
     expect(config.chatAccountIds.get(123)).toBe("account-a");
+  });
+
+  it("requires a chat allowlist when enabled", () => {
+    const config = loadHermesConfig({
+      HERMES_ENABLED: "true",
+      HERMES_TELEGRAM_BOT_TOKEN: "bot-secret",
+      HERMES_MCP_TOKEN: "hmst_secret",
+    });
+    expect(validateHermesConfig(config)).toContain(
+      "HERMES_ALLOWED_CHAT_IDS",
+    );
+  });
+
+  it("accepts an enabled scoped configuration", () => {
+    const config = loadHermesConfig({
+      HERMES_ENABLED: "true",
+      HERMES_TELEGRAM_BOT_TOKEN: "bot-secret",
+      HERMES_MCP_TOKEN: "hmst_secret",
+      HERMES_ALLOWED_CHAT_IDS: "123",
+      HERMES_MCP_URL: "https://mcp.example.test/mcp",
+    });
+    expect(validateHermesConfig(config)).toBeNull();
   });
 
   it("falls back to deterministic text when OpenAI is unavailable", async () => {

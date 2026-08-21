@@ -43,7 +43,9 @@ export function loadHermesConfig(
 ): HermesConfig {
   const list = (source.HERMES_ALLOWED_CHAT_IDS ?? "")
     .split(",")
-    .map((value) => Number(value.trim()))
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .map((value) => Number(value))
     .filter((value) => Number.isSafeInteger(value));
   const chatAccountIds = new Map<number, string>();
   for (const binding of (source.HERMES_CHAT_ACCOUNT_BINDINGS ?? "").split(",")) {
@@ -66,6 +68,22 @@ export function loadHermesConfig(
     openAiApiKey: source.HERMES_OPENAI_API_KEY?.trim() ?? "",
     openAiModel: source.HERMES_OPENAI_MODEL?.trim() || "gpt-5-mini",
   };
+}
+
+export function validateHermesConfig(config: HermesConfig): string | null {
+  if (!config.enabled) return null;
+  if (!config.botToken) return "HERMES_TELEGRAM_BOT_TOKEN is required.";
+  if (!config.mcpToken) return "HERMES_MCP_TOKEN is required.";
+  if (config.allowedChatIds.size === 0)
+    return "HERMES_ALLOWED_CHAT_IDS must contain at least one chat.";
+  try {
+    const url = new URL(config.mcpUrl);
+    if (!(["http:", "https:"].includes(url.protocol)) || url.username || url.password)
+      return "HERMES_MCP_URL must be an http(s) URL without credentials.";
+  } catch {
+    return "HERMES_MCP_URL must be a valid URL.";
+  }
+  return null;
 }
 
 export function shouldHandleMessage(

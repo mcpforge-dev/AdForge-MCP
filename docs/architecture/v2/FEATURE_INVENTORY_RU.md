@@ -20,7 +20,7 @@
 | Reports | implemented/partial | performance report and DOCX, monthly collect-report compatibility | branded template, async artifacts, PDF parity |
 | Site analysis | implemented/partial | SSRF-hardened live HTML analysis, workspace history, DOCX export | evidence pipeline and richer UX/report |
 | SEO/Search Console | implemented/partial | OAuth adapter, properties, analytics report, MCP tools | full client dashboard and export parity |
-| Hermes | implemented/partial | separate read-only Telegram gateway, deterministic Russian analytics, optional AI boundary | deployment/runtime integration and full V1 scenario parity |
+| Hermes | implemented foundation | separate read-only Telegram gateway, deterministic Russian analytics, scoped service identity, chat/account allowlists, optional AI boundary and safe startup validation | production deployment wiring and final V1 scenario sign-off |
 | Billing/plans | implemented foundation | plans/prices/subscriptions/orders/attempts/usage/entitlements, read API, payment port, server-side report/account/MCP entitlement and quota enforcement, legacy migration entitlement | concrete checkout/webhook adapter waits for payment-provider selection |
 | Product analytics | implemented | workspace-scoped allowlisted events, scalar-only redacted properties, aggregated admin summary, audit and provider metrics remain separate | external BI/export adapter is optional post-parity work |
 | Admin | implemented/partial | workspace-scoped user/status/role/diagnostics, self-service OAuth, manual request UI and least-privilege support grant | full admin UI and end-to-end specialist handoff |
