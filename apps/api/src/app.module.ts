@@ -58,6 +58,7 @@ import { OAuthMetadataController } from "./compat/oauth-metadata.controller.js";
 import { LegacyGoogleLoginController } from "./compat/legacy-google-login.controller.js";
 import { GoogleLoginService } from "./auth/google-login.service.js";
 import { LegacyAdminController } from "./compat/legacy-admin.controller.js";
+import { LegacyMetaSkillsController } from "./compat/legacy-meta-skills.controller.js";
 
 @Module({
   controllers: [
@@ -87,6 +88,7 @@ import { LegacyAdminController } from "./compat/legacy-admin.controller.js";
     OAuthMetadataController,
     LegacyGoogleLoginController,
     LegacyAdminController,
+    LegacyMetaSkillsController,
   ],
   providers: [
     DatabaseService,
