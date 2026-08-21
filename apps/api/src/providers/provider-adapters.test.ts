@@ -4,6 +4,7 @@ import { GoogleAdsAdapter } from "./adapters/google.ads.js";
 import { MetaAdsAdapter } from "./adapters/meta.ads.js";
 import { TikTokAdsAdapter } from "./adapters/tiktok.ads.js";
 import { YandexDirectAdapter } from "./adapters/yandex.direct.js";
+import { GoogleSearchConsoleAdapter } from "./adapters/google.search-console.js";
 import {
   googleAccessibleCustomersFixture,
   googleCampaignFixture,
@@ -26,6 +27,10 @@ const config = loadConfig({
   PROVIDER_META_CLIENT_ID: "meta-client",
   PROVIDER_META_CLIENT_SECRET: "meta-secret",
   PROVIDER_META_REDIRECT_URI: "https://v2.example.test/oauth/meta/callback",
+  PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID: "search-console-client",
+  PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: "search-console-secret",
+  PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI:
+    "https://v2.example.test/oauth/google-search-console/callback",
 });
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -244,5 +249,77 @@ describe("V1 partner OAuth adapters", () => {
         displayName: "TikTok client",
       }),
     ]);
+  });
+});
+
+describe("Google Search Console v2 adapter", () => {
+  it("preserves the V1 callback, discovers properties, and reads analytics", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          siteEntry: [
+            {
+              siteUrl: "https://holymedia.kz/",
+              permissionLevel: "siteOwner",
+            },
+            {
+              siteUrl: "sc-domain:holymedia.kz",
+              permissionLevel: "siteFullUser",
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          rows: [
+            {
+              keys: ["holy media"],
+              clicks: 12,
+              impressions: 240,
+              ctr: 0.05,
+              position: 3.2,
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          sitemap: [{ path: "https://holymedia.kz/sitemap.xml" }],
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleSearchConsoleAdapter(config);
+    const url = new URL(
+      adapter.authorizationUrl({
+        state: "state",
+        redirectUri: config.providerGoogleSearchConsoleRedirectUri!,
+      }),
+    );
+    expect(url.pathname).toBe("/o/oauth2/v2/auth");
+    expect(url.searchParams.get("scope")).toBe(
+      "https://www.googleapis.com/auth/webmasters.readonly",
+    );
+    const credentials = { accessToken: "search-access", scopes: [] };
+    const properties = await adapter.discoverAccounts(credentials);
+    expect(properties[0]).toMatchObject({
+      externalAccountId: "https://holymedia.kz/",
+      displayName: "https://holymedia.kz/",
+    });
+    const rows = await adapter.querySearchAnalytics(
+      credentials,
+      "https://holymedia.kz/",
+      "2026-01-01",
+      "2026-01-07",
+      ["query"],
+      25,
+    );
+    expect(rows[0]?.clicks).toBe(12);
+    const sitemaps = await adapter.listSitemaps(
+      credentials,
+      "https://holymedia.kz/",
+    );
+    expect(sitemaps[0]?.path).toContain("sitemap.xml");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 });

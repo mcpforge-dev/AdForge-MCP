@@ -23,6 +23,7 @@ enum AuditActorType {
 enum ProviderId {
   GOOGLE_ADS
   META_ADS
+  GOOGLE_SEARCH_CONSOLE
   YANDEX_DIRECT
   TIKTOK_ADS
   TEST_PROVIDER
@@ -86,6 +87,8 @@ model User {
   connections       ProviderConnection[]
   oauthStates       OAuthState[]
   manualConnectionRequests ManualConnectionRequest[]
+  mcpOAuthClients McpOAuthClient[]
+  mcpOAuthCodes McpOAuthAuthorizationCode[]
 
   @@index([email])
   @@map("users")
@@ -109,6 +112,9 @@ model Workspace {
   usageRecords UsageRecord[]
   entitlements Entitlement[]
   manualConnectionRequests ManualConnectionRequest[]
+  mcpPreviews  McpPreview[]
+  mcpOAuthClients McpOAuthClient[]
+  mcpOAuthCodes McpOAuthAuthorizationCode[]
 
   @@index([createdAt])
   @@map("workspaces")
@@ -239,10 +245,82 @@ model ServiceToken {
   revokedAt         DateTime?       @map("revoked_at")
   lastUsedAt        DateTime?       @map("last_used_at")
   serviceIdentity   ServiceIdentity @relation(fields: [serviceIdentityId], references: [id], onDelete: Cascade)
+  previews          McpPreview[]
 
   @@index([serviceIdentityId, revokedAt])
   @@index([expiresAt])
   @@map("service_tokens")
+}
+
+model McpOAuthClient {
+  id                    String                    @id @default(uuid()) @db.Uuid
+  clientId              String                    @unique @map("client_id") @db.VarChar(255)
+  workspaceId           String                    @map("workspace_id") @db.Uuid
+  userId                String                    @map("user_id") @db.Uuid
+  clientName            String                    @map("client_name") @db.VarChar(160)
+  redirectUris          Json                      @map("redirect_uris")
+  scope                 String                    @default("adforge:mcp:read") @db.VarChar(120)
+  tokenEndpointAuthMethod String                  @default("client_secret_basic") @map("token_endpoint_auth_method") @db.VarChar(40)
+  clientSecretDigest    String                    @unique @map("client_secret_digest") @db.VarChar(128)
+  clientSecretPrefix    String                    @map("client_secret_prefix") @db.VarChar(32)
+  status                String                    @default("active") @db.VarChar(32)
+  createdAt             DateTime                  @default(now()) @map("created_at")
+  revokedAt             DateTime?                 @map("revoked_at")
+  workspace             Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                  User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authorizationCodes    McpOAuthAuthorizationCode[]
+
+  @@index([workspaceId, status])
+  @@index([userId, status])
+  @@map("mcp_oauth_clients")
+}
+
+model McpOAuthAuthorizationCode {
+  id                  String        @id @default(uuid()) @db.Uuid
+  codeDigest          String        @unique @map("code_digest") @db.VarChar(128)
+  clientId            String        @map("client_id") @db.Uuid
+  workspaceId         String        @map("workspace_id") @db.Uuid
+  userId              String        @map("user_id") @db.Uuid
+  sessionId           String        @map("session_id") @db.Uuid
+  redirectUri         String        @map("redirect_uri") @db.VarChar(2000)
+  scope               String        @db.VarChar(120)
+  codeChallenge       String        @map("code_challenge") @db.VarChar(200)
+  codeChallengeMethod String        @default("S256") @map("code_challenge_method") @db.VarChar(16)
+  expiresAt           DateTime      @map("expires_at")
+  usedAt              DateTime?     @map("used_at")
+  createdAt           DateTime      @default(now()) @map("created_at")
+  client              McpOAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([clientId, expiresAt, usedAt])
+  @@index([workspaceId, userId, expiresAt])
+  @@map("mcp_oauth_authorization_codes")
+}
+
+model McpPreview {
+  id                String          @id @default(uuid()) @db.Uuid
+  workspaceId       String          @map("workspace_id") @db.Uuid
+  serviceTokenId    String          @map("service_token_id") @db.Uuid
+  provider          ProviderId
+  accountId         String          @map("account_id") @db.Uuid
+  externalObjectId  String          @map("external_object_id") @db.VarChar(160)
+  operation         String          @db.VarChar(80)
+  payload           Json
+  diff              Json
+  previewTokenDigest String         @unique @map("preview_token_digest") @db.VarChar(128)
+  expiresAt         DateTime        @map("expires_at")
+  confirmedAt       DateTime?       @map("confirmed_at")
+  consumedAt        DateTime?       @map("consumed_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  serviceToken      ServiceToken    @relation(fields: [serviceTokenId], references: [id], onDelete: Cascade)
+  account           ProviderAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, expiresAt, consumedAt])
+  @@index([serviceTokenId, createdAt])
+  @@index([accountId, operation])
+  @@map("mcp_previews")
 }
 
 model AuditEvent {
@@ -488,6 +566,7 @@ model ProviderAccount {
   lastSeenAt        DateTime           @default(now()) @map("last_seen_at")
   connection        ProviderConnection @relation(fields: [connectionId, workspaceId, provider], references: [id, workspaceId, provider], onDelete: Cascade)
   workspace         Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  previews          McpPreview[]
 
   @@unique([workspaceId, provider, externalAccountId])
   @@index([connectionId, enabled])
@@ -516,4 +595,16 @@ model OAuthState {
   @@index([workspaceId, provider, expiresAt])
   @@index([userId, sessionId, expiresAt])
   @@map("oauth_states")
+}
+
+model GoogleLoginState {
+  id          String    @id @default(uuid()) @db.Uuid
+  stateDigest String    @unique @map("state_digest") @db.VarChar(128)
+  nextPath    String    @default("/dashboard") @map("next_path") @db.VarChar(255)
+  expiresAt   DateTime  @map("expires_at")
+  consumedAt  DateTime? @map("consumed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([expiresAt, consumedAt])
+  @@map("google_login_states")
 }

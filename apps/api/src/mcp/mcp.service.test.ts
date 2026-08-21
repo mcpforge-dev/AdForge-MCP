@@ -29,7 +29,13 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
   const reports = {
     performance: async () => ({ reportType: "performance" }),
   } as never;
-  return new McpService(database, providers, reports);
+  const previews = {
+    create: async () => ({ status: "preview" }),
+    confirm: async () => ({ status: "confirmed" }),
+    commit: async () => ({ status: "blocked" }),
+  } as never;
+  const siteAnalysis = { analyze: async () => ({ status: 200 }) } as never;
+  return new McpService(database, providers, reports, previews, siteAnalysis);
 }
 
 describe("MCP V1-compatible policy", () => {

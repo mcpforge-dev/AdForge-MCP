@@ -28,6 +28,7 @@ import type {
 import type { HumanPrincipal, RequestWithAuth } from "./auth.types.js";
 import { PasswordService } from "./password.service.js";
 import { SessionService } from "./session.service.js";
+import type { GoogleLoginProfile } from "./google-login.service.js";
 
 export type PublicUser = {
   id: string;
@@ -170,6 +171,72 @@ export class AuthService {
         select: { workspace: { select: { id: true, name: true, slug: true } } },
       },
     );
+    return {
+      user: this.publicUser(user),
+      sessionToken: session.token,
+      sessionId: session.session.id,
+      ...(membership ? { workspace: membership.workspace } : {}),
+    };
+  }
+
+  public async loginWithGoogle(
+    profile: GoogleLoginProfile,
+    request: RequestWithAuth,
+  ): Promise<AuthResult> {
+    const email = normalizeEmail(profile.email);
+    const name = profile.name.trim() || email;
+    let user = await this.database.client.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      const passwordHash = await this.passwords.hash(createOpaqueToken());
+      const result = await this.database.client.$transaction(async (tx) => {
+        const createdUser = await tx.user.create({
+          data: {
+            email,
+            name,
+            passwordHash,
+            emailVerifiedAt: new Date(),
+          },
+        });
+        const workspace = await tx.workspace.create({
+          data: {
+            name: `${name} workspace`,
+            slug: `${createSlug(name)}-${createOpaqueToken().slice(0, 8)}`,
+          },
+        });
+        await tx.workspaceMembership.create({
+          data: {
+            userId: createdUser.id,
+            workspaceId: workspace.id,
+            role: "OWNER",
+          },
+        });
+        return { user: createdUser, workspace };
+      });
+      user = result.user;
+    } else if (!user.emailVerifiedAt) {
+      user = await this.database.client.user.update({
+        where: { id: user.id },
+        data: { emailVerifiedAt: new Date() },
+      });
+    }
+
+    const session = await this.sessions.create(user.id, request);
+    const membership = await this.database.client.workspaceMembership.findFirst(
+      {
+        where: { userId: user.id },
+        orderBy: { createdAt: "asc" },
+        select: { workspace: { select: { id: true, name: true, slug: true } } },
+      },
+    );
+    await this.record({
+      eventType: "login_success",
+      request,
+      actorUserId: user.id,
+      metadata: { method: "google" },
+    });
     return {
       user: this.publicUser(user),
       sessionToken: session.token,

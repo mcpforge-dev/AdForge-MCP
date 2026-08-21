@@ -28,7 +28,13 @@ export function hashServiceToken(token: string): string {
 
 function normalizeScopes(scopes: string[] | undefined): string[] {
   const values = [
-    ...new Set((scopes ?? [READ_SCOPE]).map((scope) => scope.trim()).filter(Boolean)),
+    ...new Set(
+      (scopes ?? [READ_SCOPE])
+        .map((scope) =>
+          scope.trim() === "adforge:mcp" ? READ_SCOPE : scope.trim(),
+        )
+        .filter(Boolean),
+    ),
   ];
   if (
     values.length === 0 ||
@@ -68,7 +74,9 @@ export class ServiceTokenService {
         where: { workspaceId, id: { in: accountIds } },
       });
       if (count !== accountIds.length) {
-        throw new BadRequestException("Account restriction is outside the workspace.");
+        throw new BadRequestException(
+          "Account restriction is outside the workspace.",
+        );
       }
     }
 
@@ -100,9 +108,15 @@ export class ServiceTokenService {
       targetType: "service_token",
       targetId: created.token.id,
       ...(request.requestId ? { requestId: request.requestId } : {}),
-      metadata: { scopes: scopes.join(","), restrictedAccounts: accountIds.length },
+      metadata: {
+        scopes: scopes.join(","),
+        restrictedAccounts: accountIds.length,
+      },
     });
-    return { ...this.toView(created.token, created.identity.id), token: rawToken };
+    return {
+      ...this.toView(created.token, created.identity.id),
+      token: rawToken,
+    };
   }
 
   public async list(workspaceId: string) {
@@ -139,7 +153,9 @@ export class ServiceTokenService {
     return { success: true as const };
   }
 
-  public async authenticate(rawToken: string): Promise<ServiceTokenPrincipal | null> {
+  public async authenticate(
+    rawToken: string,
+  ): Promise<ServiceTokenPrincipal | null> {
     const token = await this.database.client.serviceToken.findUnique({
       where: { tokenDigest: hashServiceToken(rawToken) },
       include: {

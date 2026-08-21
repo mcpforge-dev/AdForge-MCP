@@ -8,10 +8,13 @@ import { ProviderService } from "../providers/provider.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ReportService } from "../reports/report.service.js";
+import { McpPreviewService } from "./mcp-preview.service.js";
+import { SiteAnalysisService } from "../site-analysis/site-analysis.service.js";
 
 const providerAliases: Record<string, ProviderId> = {
   google_ads: "GOOGLE_ADS",
   meta_ads: "META_ADS",
+  google_search_console: "GOOGLE_SEARCH_CONSOLE",
   yandex_direct: "YANDEX_DIRECT",
   tiktok_ads: "TIKTOK_ADS",
 };
@@ -46,6 +49,9 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "get_page_post",
   "get_page_post_engagement",
   "get_page_instagram_account",
+  "get_search_console_report",
+  "list_search_console_properties",
+  "analyze_site",
   "compare_periods",
   "get_spend_overview",
   "get_executive_summary",
@@ -67,6 +73,13 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "get_beta_diagnostics",
   "describe_auth",
   "describe_auth_strategy",
+  "preview_change_campaign_name",
+  "preview_pause_campaign",
+  "preview_resume_campaign",
+  "preview_change_campaign_budget",
+  "confirm_preview",
+  "commit_preview",
+  "commit_meta_confirmed_write",
 ] as const;
 
 type JsonObject = Record<string, unknown>;
@@ -88,6 +101,15 @@ function providerId(value: unknown): ProviderId {
   return result;
 }
 
+function campaignProvider(value: unknown): "GOOGLE_ADS" | "META_ADS" {
+  const provider = providerId(value);
+  if (provider !== "GOOGLE_ADS" && provider !== "META_ADS")
+    throw new ForbiddenException(
+      "Campaign preview is not available for this provider.",
+    );
+  return provider;
+}
+
 function range(args: JsonObject) {
   const startDate = text(args.start_date || args.startDate);
   const endDate = text(args.end_date || args.endDate);
@@ -100,6 +122,9 @@ export class McpService {
     @Inject(DatabaseService) private readonly database: DatabaseService,
     @Inject(ProviderService) private readonly providers: ProviderService,
     @Inject(ReportService) private readonly reports: ReportService,
+    @Inject(McpPreviewService) private readonly previews: McpPreviewService,
+    @Inject(SiteAnalysisService)
+    private readonly siteAnalysis: SiteAnalysisService,
   ) {}
 
   public tools() {
@@ -408,6 +433,36 @@ export class McpService {
           text(args.page_id || args.pageId),
         );
       }
+      case "get_search_console_report": {
+        const report = await this.providers.searchConsoleReport(
+          principal.workspaceId,
+          text(args.site_url || args.siteUrl) || "__all",
+          Number(args.days) || 28,
+        );
+        return report;
+      }
+      case "list_search_console_properties": {
+        const report = await this.providers.searchConsoleReport(
+          principal.workspaceId,
+          "__all",
+          7,
+        );
+        return {
+          properties: report.properties,
+          selected_property: report.selected_property,
+          provenance: {
+            source_api: report.source_api,
+            real_data: report.real_data,
+            data_status: report.data_status,
+            fetched_at: report.fetched_at,
+          },
+        };
+      }
+      case "analyze_site": {
+        const url = text(args.url);
+        if (!url) throw new ForbiddenException("url is required.");
+        return this.siteAnalysis.analyze(url);
+      }
       case "compare_periods": {
         const account = await this.account(principal, args);
         const current = requiredRange(args, "current");
@@ -593,12 +648,12 @@ export class McpService {
         return { provider: providerId(args.provider), items: [] };
       case "list_supported_dimensions":
         return {
-          provider: providerId(args.provider),
+          provider: campaignProvider(args.provider),
           items: ["account", "campaign", "date"],
         };
       case "get_breakdown_preset":
         return {
-          provider: providerId(args.provider),
+          provider: campaignProvider(args.provider),
           supported: ["account", "campaign", "date"],
         };
       case "get_beta_diagnostics":
@@ -614,6 +669,42 @@ export class McpService {
           authorization: "server-side workspace and account allowlist",
           writes: "disabled in V2 MCP compatibility surface",
         };
+      case "preview_change_campaign_name":
+        return this.previews.create(principal, {
+          provider: campaignProvider(args.provider),
+          accountId: text(args.account_id || args.accountId),
+          objectId: text(args.campaign_id || args.campaignId),
+          operation: "change_name",
+          payload: { new_name: args.new_name ?? args.newName },
+        });
+      case "preview_pause_campaign":
+      case "preview_resume_campaign":
+        return this.previews.create(principal, {
+          provider: campaignProvider(args.provider),
+          accountId: text(args.account_id || args.accountId),
+          objectId: text(args.campaign_id || args.campaignId),
+          operation: name === "preview_pause_campaign" ? "pause" : "resume",
+          payload: {},
+        });
+      case "preview_change_campaign_budget":
+        return this.previews.create(principal, {
+          provider: campaignProvider(args.provider),
+          accountId: text(args.account_id || args.accountId),
+          objectId: text(args.campaign_id || args.campaignId),
+          operation: "change_budget",
+          payload: { daily_budget: args.daily_budget ?? args.dailyBudget },
+        });
+      case "confirm_preview":
+        return this.previews.confirm(
+          principal,
+          text(args.preview_token || args.previewToken),
+        );
+      case "commit_preview":
+      case "commit_meta_confirmed_write":
+        return this.previews.commit(
+          principal,
+          text(args.preview_token || args.previewToken),
+        );
       default:
         throw new ForbiddenException(
           "Tool is not available in this V2 compatibility build.",

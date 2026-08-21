@@ -137,6 +137,42 @@ select:focus {
 .primary-button:hover {
   background: #7290ff;
 }
+.secondary-button {
+  display: flex;
+  min-height: 44px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid #303b4c;
+  border-radius: 7px;
+  color: #f5f7fb;
+  text-decoration: none;
+  font-weight: 700;
+}
+.secondary-button:hover {
+  border-color: #7092ff;
+  background: #182235;
+}
+.google-login-button {
+  margin-bottom: 14px;
+}
+.auth-divider {
+  color: #8e99aa;
+  text-align: center;
+  font-size: 0.82rem;
+  margin: 0 0 16px;
+}
+.legal-shell {
+  max-width: 760px;
+  min-height: 100vh;
+}
+.legal-shell h1 {
+  font-size: clamp(2rem, 5vw, 3.5rem);
+}
+.legal-shell p {
+  max-width: 680px;
+  color: #b7c0cf;
+  line-height: 1.7;
+}
 .error,
 .success {
   margin: 16px 0 0;

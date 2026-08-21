@@ -22,7 +22,12 @@ export type ApiError = {
 };
 
 export type ProviderId =
-  "GOOGLE_ADS" | "META_ADS" | "YANDEX_DIRECT" | "TIKTOK_ADS" | "TEST_PROVIDER";
+  | "GOOGLE_ADS"
+  | "META_ADS"
+  | "GOOGLE_SEARCH_CONSOLE"
+  | "YANDEX_DIRECT"
+  | "TIKTOK_ADS"
+  | "TEST_PROVIDER";
 
 export type ProviderConnectionStatus =
   | "PENDING"

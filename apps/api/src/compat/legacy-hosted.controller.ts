@@ -18,6 +18,8 @@ import { WorkspaceService } from "../workspaces/workspace.service.js";
 
 const providerMap: Record<string, ProviderId> = {
   google: "GOOGLE_ADS",
+  "search-console": "GOOGLE_SEARCH_CONSOLE",
+  google_search_console: "GOOGLE_SEARCH_CONSOLE",
   meta: "META_ADS",
   tiktok: "TIKTOK_ADS",
   yandex: "YANDEX_DIRECT",

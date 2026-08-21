@@ -302,8 +302,21 @@ export class ProviderController {
   }
 
   private provider(value: string): ProviderId {
-    if (!isProviderId(value))
+    const aliases: Record<string, ProviderId> = {
+      google: "GOOGLE_ADS",
+      google_ads: "GOOGLE_ADS",
+      meta: "META_ADS",
+      meta_ads: "META_ADS",
+      yandex: "YANDEX_DIRECT",
+      yandex_direct: "YANDEX_DIRECT",
+      tiktok: "TIKTOK_ADS",
+      tiktok_ads: "TIKTOK_ADS",
+      "google-search-console": "GOOGLE_SEARCH_CONSOLE",
+      google_search_console: "GOOGLE_SEARCH_CONSOLE",
+    };
+    const normalized = aliases[value] ?? value;
+    if (!isProviderId(normalized))
       throw new BadRequestException("Unsupported provider.");
-    return value;
+    return normalized;
   }
 }

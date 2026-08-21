@@ -114,6 +114,13 @@ export default function AuthPage() {
               ? "Создайте защищённое рабочее пространство."
               : "Введите email. Ответ не раскрывает наличие аккаунта."}
         </p>
+        <a
+          className="secondary-button google-login-button"
+          href={`${API}/auth/google/start`}
+        >
+          Войти через Google
+        </a>
+        <p className="auth-divider">или через email</p>
         <form onSubmit={submit}>
           {mode === "signup" && (
             <label>

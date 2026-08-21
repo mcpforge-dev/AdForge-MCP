@@ -29,6 +29,8 @@ import type {
   NormalizedProviderAccount,
   ProviderCredentialPayload,
   ProviderScopeMetadata,
+  SearchConsoleReadAdapter,
+  SearchConsoleQueryRow,
 } from "./provider.types.js";
 import { isProviderReadAdapter } from "./provider.types.js";
 
@@ -686,6 +688,168 @@ export class ProviderService {
     return adapter.getPageInstagramAccount(context.credentials, pageId);
   }
 
+  /** V1-compatible SEO report backed by the encrypted Search Console connection. */
+  public async searchConsoleReport(
+    workspaceId: string,
+    siteUrl = "__all",
+    days = 28,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      "",
+      "GOOGLE_SEARCH_CONSOLE",
+    );
+    const adapter = context.adapter as unknown as SearchConsoleReadAdapter;
+    if (typeof adapter.querySearchAnalytics !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Google Search Console read is not configured.",
+      );
+
+    const fresh = await this.refreshCoordinator.withLock(
+      context.connection.id,
+      () => this.refreshForRead(context),
+    );
+    const accounts = await this.database.client.providerAccount.findMany({
+      where: {
+        workspaceId,
+        connectionId: context.connection.id,
+        provider: "GOOGLE_SEARCH_CONSOLE",
+      },
+      orderBy: { displayName: "asc" },
+    });
+    const properties = accounts.map((account) => ({
+      name: account.displayName,
+      account_id: account.externalAccountId,
+      site_url: account.externalAccountId,
+      permission_level:
+        stringMetadata(account.metadata, "permissionLevel") ?? "",
+      property_type:
+        stringMetadata(account.metadata, "propertyType") ??
+        (account.externalAccountId.startsWith("sc-domain:")
+          ? "domain"
+          : "url_prefix"),
+      status: account.status ?? "connected",
+    }));
+    if (!properties.length) {
+      return {
+        status: "not_connected",
+        provider: "google_search_console",
+        properties: [],
+        message: "Подключите Google Search Console, чтобы увидеть SEO-отчеты.",
+      };
+    }
+    const selected =
+      siteUrl && siteUrl !== "__all"
+        ? properties.filter((property) => property.site_url === siteUrl)
+        : properties;
+    if (!selected.length) {
+      return {
+        status: "property_not_found",
+        provider: "google_search_console",
+        properties,
+        message: "Выбранная property не найдена в подключении Search Console.",
+      };
+    }
+
+    const cleanDays = Math.max(7, Math.min(Math.trunc(days) || 28, 90));
+    const endDate = new Date();
+    endDate.setUTCDate(endDate.getUTCDate() - 3);
+    const startDate = new Date(endDate);
+    startDate.setUTCDate(startDate.getUTCDate() - cleanDays + 1);
+    const previousEnd = new Date(startDate);
+    previousEnd.setUTCDate(previousEnd.getUTCDate() - 1);
+    const previousStart = new Date(previousEnd);
+    previousStart.setUTCDate(previousStart.getUTCDate() - cleanDays + 1);
+    const range = (value: Date) => value.toISOString().slice(0, 10);
+    const selectedProperties = selected.map((property) => property.site_url);
+    const queryMany = async (
+      from: Date,
+      to: Date,
+      dimensions: string[],
+      rowLimit: number,
+    ) => {
+      const rows: SearchConsoleQueryRow[] = [];
+      for (const property of selectedProperties) {
+        rows.push(
+          ...(await adapter.querySearchAnalytics(
+            fresh.credentials,
+            property,
+            range(from),
+            range(to),
+            dimensions,
+            rowLimit,
+          )),
+        );
+      }
+      return dimensions.length
+        ? mergeRows(rows, dimensions[0] ?? "dimension")
+        : [totals(rows)];
+    };
+
+    const summary = await queryMany(startDate, endDate, [], 1);
+    const previousSummary = await queryMany(previousStart, previousEnd, [], 1);
+    const topQueries = await queryMany(startDate, endDate, ["query"], 25);
+    const topPages = await queryMany(startDate, endDate, ["page"], 25);
+    const trend = await queryMany(startDate, endDate, ["date"], cleanDays);
+    const sitemaps = (
+      await Promise.all(
+        selectedProperties.map((property) =>
+          adapter.listSitemaps(fresh.credentials, property),
+        ),
+      )
+    ).flat();
+    const current = totals(summary);
+    const previous = totals(previousSummary);
+    const fetchedAt = new Date().toISOString();
+    return {
+      status: "ok",
+      provider: "google_search_console",
+      source_api: "Google Search Console Search Analytics API",
+      real_data: true,
+      data_status: "live",
+      fetched_at: fetchedAt,
+      date_range: {
+        start_date: range(startDate),
+        end_date: range(endDate),
+        days: cleanDays,
+      },
+      previous_date_range: {
+        start_date: range(previousStart),
+        end_date: range(previousEnd),
+        days: cleanDays,
+      },
+      properties,
+      property_summaries: selected.map((property) => ({
+        ...property,
+        metrics: current,
+        source_api: "Google Search Console Search Analytics API",
+        real_data: true,
+        data_status: "live",
+        fetched_at: fetchedAt,
+      })),
+      selected_property:
+        selected.length === 1
+          ? selected[0]
+          : {
+              name: "Все ресурсы Search Console",
+              account_id: "__all",
+              site_url: "__all",
+              property_type: "aggregate",
+              status: "connected",
+            },
+      metrics: current,
+      previous_metrics: previous,
+      deltas: metricDeltas(current, previous),
+      top_queries: rows(topQueries),
+      top_pages: rows(topPages),
+      trend: rows(trend),
+      opportunities: [],
+      insights: [],
+      sitemaps,
+    };
+  }
+
   private async readContext(
     workspaceId: string,
     connectionId: string,
@@ -722,11 +886,17 @@ export class ProviderService {
   private async connectionReadCredentials(
     workspaceId: string,
     connectionId: string,
+    provider?: ProviderId,
   ) {
-    const connection = await this.connectionWithCredential(
-      workspaceId,
-      connectionId,
-    );
+    const connection = connectionId
+      ? await this.connectionWithCredential(workspaceId, connectionId)
+      : await this.database.client.providerConnection.findFirst({
+          where: { workspaceId, provider: provider as never },
+          include: { credential: true },
+        });
+    if (!connection) {
+      throw new NotFoundException("Provider connection not found.");
+    }
     if (!connection.credential)
       throw new ProviderError(
         "authentication_failed",
@@ -738,6 +908,35 @@ export class ProviderService {
     );
     const adapter = this.registry.adapter(connection.provider as ProviderId);
     return { connection, credentials, adapter };
+  }
+
+  private async refreshForRead(context: {
+    connection: { id: string; provider: ProviderId };
+    credentials: ProviderCredentialPayload;
+    adapter: {
+      refreshCredentials?: (
+        credentials: ProviderCredentialPayload,
+      ) => Promise<ProviderCredentialPayload>;
+    };
+  }) {
+    if (
+      !context.credentials.expiresAt ||
+      new Date(context.credentials.expiresAt).getTime() > Date.now() + 30_000 ||
+      !context.adapter.refreshCredentials
+    )
+      return context;
+    const credentials = await context.adapter.refreshCredentials(
+      context.credentials,
+    );
+    const encrypted = this.vault.encrypt(credentials);
+    await this.database.client.providerCredential.update({
+      where: { connectionId: context.connection.id },
+      data: {
+        encryptedPayload: encrypted.ciphertext,
+        encryptionVersion: encrypted.encryptionVersion,
+      },
+    });
+    return { ...context, credentials };
   }
 
   private async persistAccounts(
@@ -901,6 +1100,11 @@ export class ProviderService {
   private redirectUri(provider: ProviderId): string {
     if (provider === "GOOGLE_ADS" && this.config.providerGoogleRedirectUri)
       return this.config.providerGoogleRedirectUri;
+    if (
+      provider === "GOOGLE_SEARCH_CONSOLE" &&
+      this.config.providerGoogleSearchConsoleRedirectUri
+    )
+      return this.config.providerGoogleSearchConsoleRedirectUri;
     if (provider === "META_ADS" && this.config.providerMetaRedirectUri)
       return this.config.providerMetaRedirectUri;
     return `http://localhost:${this.config.apiPort}/api/v1/oauth/${provider}/callback`;
@@ -944,4 +1148,81 @@ function stringMetadata(value: unknown, key: string): string | undefined {
   if (!value || typeof value !== "object") return undefined;
   const candidate = (value as Record<string, unknown>)[key];
   return typeof candidate === "string" ? candidate : undefined;
+}
+
+type SearchConsoleTotals = {
+  clicks: number;
+  impressions: number;
+  ctr: number;
+  position: number;
+};
+
+function totals(rows: SearchConsoleQueryRow[]): SearchConsoleTotals {
+  let clicks = 0;
+  let impressions = 0;
+  let positionWeight = 0;
+  for (const row of rows) {
+    const rowClicks = Number(row.clicks ?? 0);
+    const rowImpressions = Number(row.impressions ?? 0);
+    const rowPosition = Number(row.position ?? 0);
+    clicks += Number.isFinite(rowClicks) ? rowClicks : 0;
+    impressions += Number.isFinite(rowImpressions) ? rowImpressions : 0;
+    positionWeight +=
+      (Number.isFinite(rowPosition) ? rowPosition : 0) *
+      (Number.isFinite(rowImpressions) ? rowImpressions : 0);
+  }
+  return {
+    clicks,
+    impressions,
+    ctr: impressions ? clicks / impressions : 0,
+    position: impressions ? positionWeight / impressions : 0,
+  };
+}
+
+function mergeRows(rows: SearchConsoleQueryRow[], dimension: string) {
+  const grouped = new Map<string, SearchConsoleQueryRow>();
+  for (const row of rows) {
+    const key = String(row.keys?.[0] ?? "");
+    const current = grouped.get(key) ?? { keys: [key] };
+    const clicks = Number(current.clicks ?? 0) + Number(row.clicks ?? 0);
+    const impressions =
+      Number(current.impressions ?? 0) + Number(row.impressions ?? 0);
+    const weightedPosition =
+      Number(current.position ?? 0) * Number(current.impressions ?? 0) +
+      Number(row.position ?? 0) * Number(row.impressions ?? 0);
+    grouped.set(key, {
+      keys: [key],
+      clicks,
+      impressions,
+      ctr: impressions ? clicks / impressions : 0,
+      position: impressions ? weightedPosition / impressions : 0,
+    });
+  }
+  return [...grouped.values()]
+    .sort((left, right) => Number(right.clicks ?? 0) - Number(left.clicks ?? 0))
+    .map((row) => ({ ...row, dimension }));
+}
+
+function metricDeltas(
+  current: SearchConsoleTotals,
+  previous: SearchConsoleTotals,
+) {
+  return Object.fromEntries(
+    Object.entries(current).map(([key, value]) => {
+      const oldValue = previous[key as keyof SearchConsoleTotals] ?? 0;
+      return [
+        key,
+        {
+          absolute: value - oldValue,
+          percent: oldValue ? ((value - oldValue) / oldValue) * 100 : null,
+        },
+      ];
+    }),
+  );
+}
+
+function rows(value: unknown): Array<Record<string, unknown>> {
+  return Array.isArray(value)
+    ? value.map((row) => (row && typeof row === "object" ? row : {}))
+    : [];
 }

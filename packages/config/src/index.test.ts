@@ -81,4 +81,41 @@ describe("v2 configuration", () => {
       "https://mcp.holymedia.kz/oauth/yandex/callback",
     );
   });
+
+  it("maps the existing Search Console callback without creating a new OAuth contract", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      AD_MCP_PUBLIC_BASE_URL: "https://mcp.holymedia.kz",
+      AD_MCP_GOOGLE_OAUTH_CLIENT_ID: "google-client",
+      AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET: "google-secret",
+      AD_MCP_GOOGLE_SEARCH_CONSOLE_SCOPES:
+        "https://www.googleapis.com/auth/webmasters.readonly",
+      AD_MCP_GOOGLE_SEARCH_CONSOLE_REDIRECT_PATH:
+        "/oauth/google-search-console/callback",
+    });
+
+    expect(config.providerGoogleSearchConsoleClientId).toBe("google-client");
+    expect(config.providerGoogleSearchConsoleRedirectUri).toBe(
+      "https://mcp.holymedia.kz/oauth/google-search-console/callback",
+    );
+    expect(config.providerGoogleSearchConsoleScopes).toContain(
+      "webmasters.readonly",
+    );
+  });
+
+  it("maps the legacy Google Login client and callback", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      AD_MCP_PUBLIC_BASE_URL: "https://mcp.holymedia.kz",
+      AD_MCP_GOOGLE_LOGIN_CLIENT_ID: "login-client",
+      AD_MCP_GOOGLE_LOGIN_CLIENT_SECRET: "login-secret",
+      AD_MCP_GOOGLE_LOGIN_REDIRECT_PATH: "/auth/google/callback",
+    });
+
+    expect(config.providerGoogleLoginClientId).toBe("login-client");
+    expect(config.providerGoogleLoginClientSecret).toBe("login-secret");
+    expect(config.providerGoogleLoginRedirectUri).toBe(
+      "https://mcp.holymedia.kz/auth/google/callback",
+    );
+  });
 });

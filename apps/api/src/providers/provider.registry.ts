@@ -14,6 +14,7 @@ import {
 import { MetaAdsAdapter, metaAdsDefinition } from "./adapters/meta.ads.js";
 import { TikTokAdsAdapter } from "./adapters/tiktok.ads.js";
 import { YandexDirectAdapter } from "./adapters/yandex.direct.js";
+import { GoogleSearchConsoleAdapter } from "./adapters/google.search-console.js";
 
 @Injectable()
 export class ProviderRegistry {
@@ -25,6 +26,7 @@ export class ProviderRegistry {
     const meta = new MetaAdsAdapter(this.config);
     const yandex = new YandexDirectAdapter(this.config);
     const tiktok = new TikTokAdsAdapter(this.config);
+    const searchConsole = new GoogleSearchConsoleAdapter(this.config);
     this.entries = [
       {
         definition: googleAdsDefinition(
@@ -41,6 +43,10 @@ export class ProviderRegistry {
       },
       { definition: yandex.definition, adapter: yandex },
       { definition: tiktok.definition, adapter: tiktok },
+      {
+        definition: searchConsole.definition,
+        adapter: searchConsole,
+      },
       {
         definition: testProviderDefinition(),
         adapter: new TestProviderAdapter(),

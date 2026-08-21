@@ -162,10 +162,37 @@ export interface MetaReadAdapter extends ProviderReadAdapter {
   ): Promise<MetaPage>;
 }
 
+export type SearchConsoleQueryRow = {
+  keys?: string[];
+  clicks?: number;
+  impressions?: number;
+  ctr?: number;
+  position?: number;
+};
+
+export interface SearchConsoleReadAdapter extends ProviderOAuthAdapter {
+  listProperties(
+    credentials: ProviderCredentialPayload,
+  ): Promise<NormalizedProviderAccount[]>;
+  querySearchAnalytics(
+    credentials: ProviderCredentialPayload,
+    property: string,
+    startDate: string,
+    endDate: string,
+    dimensions: string[],
+    rowLimit: number,
+  ): Promise<SearchConsoleQueryRow[]>;
+  listSitemaps(
+    credentials: ProviderCredentialPayload,
+    property: string,
+  ): Promise<Record<string, unknown>[]>;
+}
+
 export function isProviderId(value: string): value is ProviderId {
   return [
     "GOOGLE_ADS",
     "META_ADS",
+    "GOOGLE_SEARCH_CONSOLE",
     "YANDEX_DIRECT",
     "TIKTOK_ADS",
     "TEST_PROVIDER",

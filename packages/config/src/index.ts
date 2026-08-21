@@ -43,6 +43,16 @@ const rawConfigSchema = z.object({
     .string()
     .regex(/^v?\d+$/)
     .default("v24"),
+  PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID: z.string().optional(),
+  PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: z.string().optional(),
+  PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI: z.string().url().optional(),
+  PROVIDER_GOOGLE_SEARCH_CONSOLE_SCOPES: z
+    .string()
+    .default("https://www.googleapis.com/auth/webmasters.readonly"),
+  PROVIDER_GOOGLE_LOGIN_CLIENT_ID: z.string().optional(),
+  PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET: z.string().optional(),
+  PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: z.string().url().optional(),
+  PROVIDER_GOOGLE_LOGIN_SCOPES: z.string().default("openid email profile"),
   PROVIDER_META_CLIENT_ID: z.string().optional(),
   PROVIDER_META_CLIENT_SECRET: z.string().optional(),
   PROVIDER_META_REDIRECT_URI: z.string().url().optional(),
@@ -51,6 +61,8 @@ const rawConfigSchema = z.object({
     .regex(/^v\d+\.\d+$/)
     .default("v20.0"),
   PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED: booleanFromEnv.default(false),
+  V2_PREVIEW_ONLY: booleanFromEnv.default(true),
+  V2_CONFIRMED_WRITE_ENABLED: booleanFromEnv.default(false),
   PROVIDER_TIKTOK_CLIENT_ID: z.string().optional(),
   PROVIDER_TIKTOK_CLIENT_SECRET: z.string().optional(),
   PROVIDER_TIKTOK_REDIRECT_URI: z.string().url().optional(),
@@ -131,11 +143,21 @@ export type AppConfig = {
   providerGoogleDeveloperToken: string | undefined;
   providerGoogleLoginCustomerId: string | undefined;
   providerGoogleApiVersion: string;
+  providerGoogleSearchConsoleClientId: string | undefined;
+  providerGoogleSearchConsoleClientSecret: string | undefined;
+  providerGoogleSearchConsoleRedirectUri: string | undefined;
+  providerGoogleSearchConsoleScopes: string;
+  providerGoogleLoginClientId: string | undefined;
+  providerGoogleLoginClientSecret: string | undefined;
+  providerGoogleLoginRedirectUri: string | undefined;
+  providerGoogleLoginScopes: string;
   providerMetaClientId: string | undefined;
   providerMetaClientSecret: string | undefined;
   providerMetaRedirectUri: string | undefined;
   providerMetaApiVersion: string;
   providerMetaAdsManagementOauthEnabled: boolean;
+  previewOnly: boolean;
+  confirmedWriteEnabled: boolean;
   providerTikTokClientId: string | undefined;
   providerTikTokClientSecret: string | undefined;
   providerTikTokRedirectUri: string | undefined;
@@ -192,6 +214,30 @@ function withV1ProviderAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   value.PROVIDER_GOOGLE_REDIRECT_URI ??= callback(
     value.AD_MCP_GOOGLE_OAUTH_REDIRECT_PATH,
   );
+  value.PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID ??= nonEmpty(
+    value.AD_MCP_GOOGLE_OAUTH_CLIENT_ID,
+  );
+  value.PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET ??= nonEmpty(
+    value.AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET,
+  );
+  value.PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI ??= callback(
+    value.AD_MCP_GOOGLE_SEARCH_CONSOLE_REDIRECT_PATH,
+  );
+  value.PROVIDER_GOOGLE_SEARCH_CONSOLE_SCOPES ??= nonEmpty(
+    value.AD_MCP_GOOGLE_SEARCH_CONSOLE_SCOPES,
+  );
+  value.PROVIDER_GOOGLE_LOGIN_CLIENT_ID ??= nonEmpty(
+    value.AD_MCP_GOOGLE_LOGIN_CLIENT_ID,
+  );
+  value.PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET ??= nonEmpty(
+    value.AD_MCP_GOOGLE_LOGIN_CLIENT_SECRET,
+  );
+  value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI ??= callback(
+    value.AD_MCP_GOOGLE_LOGIN_REDIRECT_PATH,
+  );
+  value.PROVIDER_GOOGLE_LOGIN_SCOPES ??= nonEmpty(
+    value.AD_MCP_GOOGLE_LOGIN_SCOPES,
+  );
 
   value.PROVIDER_META_CLIENT_ID ??= nonEmpty(value.AD_MCP_META_OAUTH_APP_ID);
   value.PROVIDER_META_CLIENT_SECRET ??= nonEmpty(
@@ -202,6 +248,9 @@ function withV1ProviderAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   );
   value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED ??=
     value.AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED;
+  value.V2_PREVIEW_ONLY ??= value.AD_MCP_PREVIEW_ONLY;
+  value.V2_CONFIRMED_WRITE_ENABLED ??=
+    value.AD_MCP_META_CONFIRMED_WRITE_ENABLED;
   value.PROVIDER_META_REDIRECT_URI ??= callback(
     value.AD_MCP_META_OAUTH_REDIRECT_PATH,
   );
@@ -302,12 +351,26 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerGoogleDeveloperToken: value.PROVIDER_GOOGLE_DEVELOPER_TOKEN,
     providerGoogleLoginCustomerId: value.PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID,
     providerGoogleApiVersion: value.PROVIDER_GOOGLE_API_VERSION,
+    providerGoogleSearchConsoleClientId:
+      value.PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_ID,
+    providerGoogleSearchConsoleClientSecret:
+      value.PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET,
+    providerGoogleSearchConsoleRedirectUri:
+      value.PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI,
+    providerGoogleSearchConsoleScopes:
+      value.PROVIDER_GOOGLE_SEARCH_CONSOLE_SCOPES,
+    providerGoogleLoginClientId: value.PROVIDER_GOOGLE_LOGIN_CLIENT_ID,
+    providerGoogleLoginClientSecret: value.PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET,
+    providerGoogleLoginRedirectUri: value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI,
+    providerGoogleLoginScopes: value.PROVIDER_GOOGLE_LOGIN_SCOPES,
     providerMetaClientId: value.PROVIDER_META_CLIENT_ID,
     providerMetaClientSecret: value.PROVIDER_META_CLIENT_SECRET,
     providerMetaRedirectUri: value.PROVIDER_META_REDIRECT_URI,
     providerMetaApiVersion: value.PROVIDER_META_API_VERSION,
     providerMetaAdsManagementOauthEnabled:
       value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED,
+    previewOnly: value.V2_PREVIEW_ONLY,
+    confirmedWriteEnabled: value.V2_CONFIRMED_WRITE_ENABLED,
     providerTikTokClientId: value.PROVIDER_TIKTOK_CLIENT_ID,
     providerTikTokClientSecret: value.PROVIDER_TIKTOK_CLIENT_SECRET,
     providerTikTokRedirectUri: value.PROVIDER_TIKTOK_REDIRECT_URI,
