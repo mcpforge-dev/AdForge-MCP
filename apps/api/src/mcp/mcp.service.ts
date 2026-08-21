@@ -821,10 +821,48 @@ export class McpService {
       case "list_operator_skills":
         return {
           items: [
-            "account_reads",
-            "campaign_reads",
-            "period_comparison",
-            "performance_report",
+            {
+              id: "collect_report",
+              title: "Собери отчёт",
+              mcp_tool: "collect_report_skill",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "summarize_budget",
+              title: "Сводка расходов",
+              mcp_tool: "summarize_budget_skill",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "compare_periods",
+              title: "Сравнение периодов",
+              mcp_tool: "compare_periods",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "campaign_candidates",
+              title: "Кампании для проверки",
+              mcp_tool: "disable_candidates_skill",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "scale_candidates",
+              title: "Кампании для масштабирования",
+              mcp_tool: "scale_candidates_skill",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "site_analysis",
+              title: "Анализ сайта",
+              mcp_tool: "analyze_site",
+              status: "implemented",
+              read_only: true,
+            },
           ],
           read_only: true,
         };

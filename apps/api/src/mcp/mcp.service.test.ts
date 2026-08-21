@@ -113,6 +113,33 @@ describe("MCP V1-compatible policy", () => {
     expect(names).toContain("update_targeting_preview");
   });
 
+  it("exposes the client-facing report skill in the operator catalog", async () => {
+    const service = serviceWithAccounts([account]);
+    const result = (await service.call(
+      {
+        kind: "service",
+        tokenId: "token",
+        serviceIdentityId: "identity",
+        workspaceId: "workspace-a",
+        scopes: ["adforge:mcp:read"],
+        accountIds: [],
+      },
+      "list_operator_skills",
+      {},
+    )) as {
+      items: Array<{ id: string; mcp_tool: string; read_only: boolean }>;
+    };
+    expect(result.items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "collect_report",
+          mcp_tool: "collect_report_skill",
+          read_only: true,
+        }),
+      ]),
+    );
+  });
+
   it("rejects secrets in compatibility preview payloads", async () => {
     const service = serviceWithAccounts([account]);
     await expect(
