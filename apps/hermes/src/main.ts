@@ -3,6 +3,7 @@ import {
   HermesGateway,
   loadHermesConfig,
   McpHttpClient,
+  OpenAiTextEnhancer,
   TelegramClient,
 } from "./hermes.js";
 
@@ -29,6 +30,9 @@ if (!config.enabled) {
     config,
     new TelegramClient(config.botToken),
     new McpHttpClient(config.mcpUrl, config.mcpToken),
+    config.openAiApiKey
+      ? new OpenAiTextEnhancer(config.openAiApiKey, config.openAiModel)
+      : undefined,
   );
   const stop = () => gateway.stop();
   process.once("SIGTERM", stop);

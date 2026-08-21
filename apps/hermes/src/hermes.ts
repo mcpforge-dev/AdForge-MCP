@@ -28,7 +28,10 @@ export type HermesConfig = {
   mcpUrl: string;
   mcpToken: string;
   allowedChatIds: Set<number>;
+  chatAccountIds: Map<number, string>;
   pollTimeoutSeconds: number;
+  openAiApiKey: string;
+  openAiModel: string;
 };
 
 export type HermesMcpClient = {
@@ -42,16 +45,26 @@ export function loadHermesConfig(
     .split(",")
     .map((value) => Number(value.trim()))
     .filter((value) => Number.isSafeInteger(value));
+  const chatAccountIds = new Map<number, string>();
+  for (const binding of (source.HERMES_CHAT_ACCOUNT_BINDINGS ?? "").split(",")) {
+    const [chatId, accountId] = binding.split(":", 2).map((value) => value?.trim());
+    const numericChatId = Number(chatId);
+    if (Number.isSafeInteger(numericChatId) && accountId)
+      chatAccountIds.set(numericChatId, accountId);
+  }
   return {
     enabled: source.HERMES_ENABLED === "true",
     botToken: source.HERMES_TELEGRAM_BOT_TOKEN?.trim() ?? "",
     mcpUrl: source.HERMES_MCP_URL?.trim() || "http://127.0.0.1:4000/mcp",
     mcpToken: source.HERMES_MCP_TOKEN?.trim() ?? "",
     allowedChatIds: new Set(list),
+    chatAccountIds,
     pollTimeoutSeconds: Math.min(
       Math.max(Number(source.HERMES_POLL_TIMEOUT_SECONDS ?? 25) || 25, 1),
       50,
     ),
+    openAiApiKey: source.HERMES_OPENAI_API_KEY?.trim() ?? "",
+    openAiModel: source.HERMES_OPENAI_MODEL?.trim() || "gpt-5-mini",
   };
 }
 
@@ -77,9 +90,54 @@ export function queryText(message: TelegramMessage): string {
 }
 
 export function isWriteRequest(query: string): boolean {
-  return /(увелич|уменьш|измен|созда|удал|постав|пауза|возобнов|перезапуск|переимен|бюджет|ставк|кампан|объявлен|increase|decrease|change|create|delete|pause|resume|rename|budget|bid|campaign|ad)/i.test(
+  return /(увелич(?:ь|ить)|уменьш(?:ь|ить)|измен(?:и|ить)|созда(?:й|ть)|удал(?:и|ить)|постав(?:ь|ить)|приостанов(?:и|ить)|возобнов(?:и|ить)|перезапуст(?:и|ить)|переимен(?:уй|овать)|increase|decrease|change|create|delete|pause|resume|rename)/i.test(
     query,
   );
+}
+
+export type HermesTextEnhancer = {
+  enhance(deterministicText: string): Promise<string>;
+};
+
+export class OpenAiTextEnhancer implements HermesTextEnhancer {
+  public constructor(
+    private readonly apiKey: string,
+    private readonly model: string,
+  ) {}
+
+  public async enhance(deterministicText: string): Promise<string> {
+    if (!this.apiKey) return deterministicText;
+    try {
+      const response = await fetch("https://api.openai.com/v1/responses", {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${this.apiKey}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({
+          model: this.model,
+          store: false,
+          instructions:
+            "Rewrite the Russian advertising summary clearly and briefly. Preserve every number and fact exactly. Do not add causes, advice or new facts.",
+          input: deterministicText,
+        }),
+      });
+      if (!response.ok) return deterministicText;
+      const payload = (await response.json()) as { output_text?: string };
+      const enhanced = payload.output_text?.trim();
+      if (!enhanced || !sameNumericFacts(deterministicText, enhanced))
+        return deterministicText;
+      return enhanced;
+    } catch {
+      return deterministicText;
+    }
+  }
+}
+
+function sameNumericFacts(source: string, candidate: string): boolean {
+  const values = (text: string) =>
+    text.match(/[-+]?\d[\d\s.,%]*/g)?.map((value) => value.replace(/\s/g, "")) ?? [];
+  return JSON.stringify(values(source)) === JSON.stringify(values(candidate));
 }
 
 function objectValue(value: unknown): JsonObject {
@@ -383,11 +441,13 @@ export class HermesGateway {
   private readonly seen = new Set<number>();
   private botUsername = "";
   private stopped = false;
+  private readonly threadRanges = new Map<string, { days: number; offset: number }>();
 
   public constructor(
     private readonly config: HermesConfig,
     private readonly telegram: TelegramClient,
     private readonly mcp: HermesMcpClient,
+    private readonly enhancer?: HermesTextEnhancer,
   ) {}
 
   public stop(): void {
@@ -426,7 +486,7 @@ export class HermesGateway {
         "Гермес работает только в режиме чтения и не изменяет рекламные кампании.";
     } else {
       try {
-        response = await this.answer(query);
+        response = await this.answer(query, message);
       } catch {
         response =
           "Не удалось получить данные рекламного кабинета. Проверьте подключение и повторите запрос.";
@@ -435,9 +495,15 @@ export class HermesGateway {
     await this.telegram.sendMessage(message, response);
   }
 
-  private async answer(query: string): Promise<string> {
+  private async answer(query: string, message: TelegramMessage): Promise<string> {
     const accounts = arrayValue(await this.mcp.callTool("list_accounts", {}));
-    const account = accounts[0];
+    const boundAccountId = this.config.chatAccountIds.get(message.chat.id);
+    const account = boundAccountId
+      ? accounts.find(
+          (item) =>
+            item.account_id === boundAccountId || item.id === boundAccountId,
+        )
+      : accounts[0];
     if (!account)
       return "В разрешённом рекламном кабинете пока нет доступных данных.";
     const provider = String(account.provider ?? "").toLowerCase();
@@ -446,8 +512,18 @@ export class HermesGateway {
       /(сравн|предыдущ|прошл|изменил|динамик|compare|previous|last week)/i.test(
         query,
       );
-    const current = completedRange(7);
-    const previous = completedRange(7, 7);
+    const threadKey = `${message.chat.id}:${message.message_thread_id ?? 0}`;
+    const priorContext = this.threadRanges.get(threadKey) ?? { days: 7, offset: 0 };
+    const requestedDays = Number(query.match(/(?:за|последн\w*)\s+(\d{1,3})\s+д/i)?.[1] ?? 0);
+    const asksPrevious = /предыдущ|прошл\w*\s+недел/i.test(query);
+    const followUp = /^а\s+/i.test(query);
+    const context = {
+      days: requestedDays > 0 && requestedDays <= 90 ? requestedDays : priorContext.days,
+      offset: asksPrevious ? 7 : followUp ? priorContext.offset : 0,
+    };
+    this.threadRanges.set(threadKey, context);
+    const current = completedRange(context.days, context.offset);
+    const previous = completedRange(context.days, context.offset + context.days);
     const args = (range: { start: string; end: string }) => ({
       provider,
       account_id: accountId,
@@ -458,10 +534,23 @@ export class HermesGateway {
       await this.mcp.callTool("get_performance_report", args(current)),
     );
     const campaigns = arrayValue(currentResult.campaigns);
-    let output = renderMetrics(
-      currentResult,
-      dateLabel(current.start, current.end),
-    );
+    const currentMetrics = objectValue(currentResult.metrics);
+    const onlyConversions = /только\s+конверс/i.test(query);
+    const efficiencyMetrics = /(ctr|стоимост\w+\s+клик|стоимост\w+\s+конверс)/i.test(query);
+    let output = onlyConversions
+      ? [
+          `Период: ${dateLabel(current.start, current.end)}`,
+          `Конверсии: ${formatNumber(numericMetric(currentMetrics, "conversions"))}`,
+          `Стоимость конверсии: ${formatMoney(currentMetrics.costPerConversion)}`,
+        ].join("\n")
+      : efficiencyMetrics
+        ? [
+            `Период: ${dateLabel(current.start, current.end)}`,
+            `CTR: ${formatPercent(numericMetric(currentMetrics, "ctr"))}`,
+            `Средняя стоимость клика: ${formatMoney(currentMetrics.cpc)}`,
+            `Стоимость конверсии: ${formatMoney(currentMetrics.costPerConversion)}`,
+          ].join("\n")
+        : renderMetrics(currentResult, dateLabel(current.start, current.end));
     if (compare) {
       const previousResult = objectValue(
         await this.mcp.callTool("get_performance_report", args(previous)),
@@ -487,6 +576,6 @@ export class HermesGateway {
     if (!campaigns.length)
       output +=
         "\n\nЗамечание: за выбранный период кампании не вернули данных, поэтому вывод ограничен общими показателями.";
-    return output;
+    return this.enhancer ? this.enhancer.enhance(output) : output;
   }
 }

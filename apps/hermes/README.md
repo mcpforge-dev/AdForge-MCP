@@ -11,5 +11,11 @@ Required environment:
 - `HERMES_MCP_URL` (default `http://127.0.0.1:4000/mcp`)
 - `HERMES_MCP_TOKEN` (scoped service token, server-only)
 - optional `HERMES_ALLOWED_CHAT_IDS`
+- optional `HERMES_CHAT_ACCOUNT_BINDINGS` in the form
+  `chat_id:account_id,chat_id:account_id`; the account must still be allowed by
+  the scoped service token
+- optional `HERMES_OPENAI_API_KEY` and `HERMES_OPENAI_MODEL`; OpenAI only
+  rewrites the deterministic result and any failure silently keeps the local
+  response
 
 Hermes never logs these values and never reads provider credentials or the V2 database directly.

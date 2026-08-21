@@ -3,6 +3,7 @@ import {
   completedRange,
   isWriteRequest,
   loadHermesConfig,
+  OpenAiTextEnhancer,
   queryText,
   renderComparison,
   renderMetrics,
@@ -52,6 +53,7 @@ describe("Hermes deterministic gateway", () => {
     ).toBe("сколько потратили?");
     expect(isWriteRequest("увеличь бюджет кампании на 20%")).toBe(true);
     expect(isWriteRequest("покажи расход за неделю")).toBe(false);
+    expect(isWriteRequest("какая кампания потратила больше всего?")).toBe(false);
   });
 
   it("formats only returned metrics and does not invent missing values", () => {
@@ -96,9 +98,24 @@ describe("Hermes deterministic gateway", () => {
       HERMES_TELEGRAM_BOT_TOKEN: "bot-secret",
       HERMES_MCP_TOKEN: "hmst_secret",
       HERMES_ALLOWED_CHAT_IDS: "123, 456",
+      HERMES_CHAT_ACCOUNT_BINDINGS: "123:account-a,456:account-b",
     });
     expect(config.enabled).toBe(true);
     expect(config.allowedChatIds).toEqual(new Set([123, 456]));
     expect(config.mcpUrl).toBe("http://127.0.0.1:4000/mcp");
+    expect(config.chatAccountIds.get(123)).toBe("account-a");
+  });
+
+  it("falls back to deterministic text when OpenAI is unavailable", async () => {
+    const previousFetch = globalThis.fetch;
+    globalThis.fetch = async () => new Response("quota", { status: 429 });
+    try {
+      const enhancer = new OpenAiTextEnhancer("test-key", "test-model");
+      await expect(enhancer.enhance("Расход: 100 USD")).resolves.toBe(
+        "Расход: 100 USD",
+      );
+    } finally {
+      globalThis.fetch = previousFetch;
+    }
   });
 });
