@@ -107,8 +107,53 @@ export type AppConfig = {
   logLevel: z.infer<typeof rawConfigSchema.shape.LOG_LEVEL>;
 };
 
+function nonEmpty(value: string | undefined): string | undefined {
+  const normalized = value?.trim();
+  return normalized ? normalized : undefined;
+}
+
+function withV1ProviderAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const value = { ...source };
+  const baseUrl = nonEmpty(value.AD_MCP_PUBLIC_BASE_URL)?.replace(/\/$/, "");
+  const callback = (pathName: string | undefined) =>
+    baseUrl && nonEmpty(pathName) ? `${baseUrl}${pathName}` : undefined;
+
+  value.PROVIDER_GOOGLE_CLIENT_ID ??= nonEmpty(
+    value.AD_MCP_GOOGLE_OAUTH_CLIENT_ID,
+  );
+  value.PROVIDER_GOOGLE_CLIENT_SECRET ??= nonEmpty(
+    value.AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET,
+  );
+  value.PROVIDER_GOOGLE_DEVELOPER_TOKEN ??= nonEmpty(
+    value.AD_MCP_GOOGLE_ADS_DEVELOPER_TOKEN,
+  );
+  value.PROVIDER_GOOGLE_LOGIN_CUSTOMER_ID ??= nonEmpty(
+    value.AD_MCP_GOOGLE_ADS_LOGIN_CUSTOMER_ID,
+  );
+  value.PROVIDER_GOOGLE_API_VERSION ??= nonEmpty(
+    value.AD_MCP_GOOGLE_ADS_API_VERSION,
+  );
+  value.PROVIDER_GOOGLE_REDIRECT_URI ??= callback(
+    value.AD_MCP_GOOGLE_OAUTH_REDIRECT_PATH,
+  );
+
+  value.PROVIDER_META_CLIENT_ID ??= nonEmpty(value.AD_MCP_META_OAUTH_APP_ID);
+  value.PROVIDER_META_CLIENT_SECRET ??= nonEmpty(
+    value.AD_MCP_META_OAUTH_APP_SECRET,
+  );
+  value.PROVIDER_META_API_VERSION ??= nonEmpty(
+    value.AD_MCP_META_OAUTH_API_VERSION,
+  );
+  value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED ??= value
+    .AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED;
+  value.PROVIDER_META_REDIRECT_URI ??= callback(
+    value.AD_MCP_META_OAUTH_REDIRECT_PATH,
+  );
+  return value;
+}
+
 export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
-  const parsed = rawConfigSchema.safeParse(source);
+  const parsed = rawConfigSchema.safeParse(withV1ProviderAliases(source));
   if (!parsed.success) {
     throw new Error(
       `Invalid v2 configuration: ${parsed.error.issues.map((issue) => issue.path.join(".")).join(", ")}`,
