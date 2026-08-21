@@ -51,8 +51,8 @@ export class GoogleSearchConsoleAdapter implements SearchConsoleReadAdapter {
     this.definition = googleSearchConsoleDefinition(
       Boolean(
         config.providerGoogleSearchConsoleClientId &&
-          config.providerGoogleSearchConsoleClientSecret &&
-          config.providerGoogleSearchConsoleRedirectUri,
+        config.providerGoogleSearchConsoleClientSecret &&
+        config.providerGoogleSearchConsoleRedirectUri,
       ),
       config.providerGoogleSearchConsoleScopes,
     );
@@ -66,7 +66,10 @@ export class GoogleSearchConsoleAdapter implements SearchConsoleReadAdapter {
     );
     url.searchParams.set("redirect_uri", context.redirectUri);
     url.searchParams.set("response_type", "code");
-    url.searchParams.set("scope", this.config.providerGoogleSearchConsoleScopes);
+    url.searchParams.set(
+      "scope",
+      this.config.providerGoogleSearchConsoleScopes,
+    );
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent");
     url.searchParams.set("include_granted_scopes", "true");
@@ -146,7 +149,10 @@ export class GoogleSearchConsoleAdapter implements SearchConsoleReadAdapter {
   public async listProperties(
     credentials: ProviderCredentialPayload,
   ): Promise<NormalizedProviderAccount[]> {
-    const payload = await this.getJson<SitesPayload>(GOOGLE_SITES_URL, credentials);
+    const payload = await this.getJson<SitesPayload>(
+      GOOGLE_SITES_URL,
+      credentials,
+    );
     return (payload.siteEntry ?? []).flatMap((site) => {
       const property = String(site.siteUrl ?? "").trim();
       if (!property) return [];
@@ -176,13 +182,17 @@ export class GoogleSearchConsoleAdapter implements SearchConsoleReadAdapter {
   ): Promise<SearchConsoleQueryRow[]> {
     const site = this.validProperty(property);
     const url = `https://www.googleapis.com/webmasters/v3/sites/${encodeURIComponent(site)}/searchAnalytics/query`;
-    const payload = await this.postJson<SearchAnalyticsPayload>(url, credentials, {
-      startDate,
-      endDate,
-      dimensions,
-      rowLimit: Math.max(1, Math.min(rowLimit, 25000)),
-      type: "web",
-    });
+    const payload = await this.postJson<SearchAnalyticsPayload>(
+      url,
+      credentials,
+      {
+        startDate,
+        endDate,
+        dimensions,
+        rowLimit: Math.max(1, Math.min(rowLimit, 25000)),
+        type: "web",
+      },
+    );
     return Array.isArray(payload.rows) ? payload.rows : [];
   }
 
@@ -225,7 +235,10 @@ export class GoogleSearchConsoleAdapter implements SearchConsoleReadAdapter {
     };
   }
 
-  private async getJson<T>(url: string, credentials: ProviderCredentialPayload) {
+  private async getJson<T>(
+    url: string,
+    credentials: ProviderCredentialPayload,
+  ) {
     return providerJson<T>(
       url,
       { headers: { authorization: `Bearer ${credentials.accessToken}` } },
@@ -260,7 +273,10 @@ export class GoogleSearchConsoleAdapter implements SearchConsoleReadAdapter {
         !property.startsWith("http://") &&
         !property.startsWith("https://"))
     )
-      throw new ProviderError("invalid_account", "Search Console property is invalid.");
+      throw new ProviderError(
+        "invalid_account",
+        "Search Console property is invalid.",
+      );
     return property;
   }
 

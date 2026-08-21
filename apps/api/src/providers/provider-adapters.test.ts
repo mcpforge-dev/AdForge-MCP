@@ -99,7 +99,9 @@ describe("Google Ads v2 adapter", () => {
 
 describe("Meta Ads v2 adapter", () => {
   it("executes only an explicit campaign mutation with ads_management", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ success: true }));
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ success: true }));
     vi.stubGlobal("fetch", fetchMock);
     const adapter = new MetaAdsAdapter(config);
     await adapter.mutateCampaign(
@@ -126,7 +128,10 @@ describe("Meta Ads v2 adapter", () => {
     const adapter = new MetaAdsAdapter(config);
     await expect(
       adapter.mutateCampaign(
-        { credentials: { accessToken: "token", scopes: ["ads_read"] }, accountId: "act_1" },
+        {
+          credentials: { accessToken: "token", scopes: ["ads_read"] },
+          accountId: "act_1",
+        },
         { objectId: "campaign-1", operation: "pause", payload: {} },
       ),
     ).rejects.toThrow("ads_management");

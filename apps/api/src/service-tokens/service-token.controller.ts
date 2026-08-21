@@ -9,7 +9,10 @@ import {
   Req,
   UseGuards,
 } from "@nestjs/common";
-import { CurrentPrincipal, RequirePermissions } from "../auth/auth.decorators.js";
+import {
+  CurrentPrincipal,
+  RequirePermissions,
+} from "../auth/auth.decorators.js";
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";

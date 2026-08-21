@@ -35,7 +35,9 @@ describe("MCP preview lifecycle", () => {
       },
     } as never;
     const audit = { record: async () => undefined } as never;
-    const providers = { mutateCampaign: async () => ({ reread: null }) } as never;
+    const providers = {
+      mutateCampaign: async () => ({ reread: null }),
+    } as never;
     const service = new McpPreviewService(database, audit, providers);
     const principal = {
       kind: "service" as const,
@@ -106,7 +108,9 @@ describe("MCP preview lifecycle", () => {
     } as never;
     const audit = { record: async () => undefined } as never;
     const providers = {
-      mutateCampaign: async () => ({ reread: { id: "campaign-a", name: "Review test" } }),
+      mutateCampaign: async () => ({
+        reread: { id: "campaign-a", name: "Review test" },
+      }),
     } as never;
     try {
       const service = new McpPreviewService(database, audit, providers);

@@ -138,7 +138,7 @@ export function isProviderMutationAdapter(
 ): value is ProviderOAuthAdapter & ProviderMutationAdapter {
   return Boolean(
     value &&
-      typeof (value as ProviderMutationAdapter).mutateCampaign === "function",
+    typeof (value as ProviderMutationAdapter).mutateCampaign === "function",
   );
 }
 
