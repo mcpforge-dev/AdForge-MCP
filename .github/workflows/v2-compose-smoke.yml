@@ -47,17 +47,6 @@ jobs:
             sleep 2
           done
 
-      - name: Capture PostgreSQL health diagnostics
-        if: failure()
-        shell: bash
-        run: |
-          set +e
-          postgres_id=$(docker compose ps -q postgres)
-          status=$(docker inspect -f '{{.State.Status}} / {{.State.Health.Status}}' "$postgres_id" 2>/dev/null || true)
-          details=$(docker inspect -f '{{range .State.Health.Log}}{{.ExitCode}}: {{.Output}}{{"\n"}}{{end}}' "$postgres_id" 2>/dev/null | tail -n 10 | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
-          echo "::error title=PostgreSQL health status::$status"
-          echo "::error title=PostgreSQL healthcheck output::$details"
-
       - name: Wait for Redis health
         shell: bash
         run: |
@@ -77,19 +66,7 @@ jobs:
           done
 
       - name: Start the full Compose stack
-        run: docker compose up -d || true
-
-      - name: Diagnose API after healthy dependencies
-        if: always()
-        run: docker compose up -d api
-
-      - name: Capture API diagnostics after healthy dependencies
-        if: always()
-        shell: bash
-        run: |
-          set +e
-          docker compose ps
-          docker compose logs --no-color api | tail -n 80
+        run: docker compose up -d
           docker compose up -d
 
       - name: Verify API and web readiness
