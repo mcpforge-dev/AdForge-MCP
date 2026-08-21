@@ -131,8 +131,15 @@ export class ReportService {
       ["Клики", this.formatMetric(metrics.clicks)],
       ["CTR", this.formatPercent(metrics.ctr)],
       ["Средняя стоимость клика", this.formatMoney(metrics.cpc)],
+      ["CPM", this.formatMoney(metrics.cpm)],
       ["Конверсии", this.formatMetric(metrics.conversions)],
       ["Стоимость конверсии", this.formatMoney(metrics.costPerConversion)],
+      [
+        "Ценность конверсий",
+        metrics.conversionValue === null
+          ? "Нет данных"
+          : `${this.formatMetric(metrics.conversionValue)}${report.account.currency ? ` ${report.account.currency}` : ""}`,
+      ],
     ];
     const campaigns = [...report.campaigns]
       .sort(
