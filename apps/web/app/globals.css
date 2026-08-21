@@ -26,7 +26,7 @@ p {
 }
 h1 {
   letter-spacing: 0;
-  font-size: clamp(2rem, 5vw, 4rem);
+  font-size: 3.5rem;
   line-height: 1.05;
   max-width: 760px;
 }
@@ -166,7 +166,7 @@ select:focus {
   min-height: 100vh;
 }
 .legal-shell h1 {
-  font-size: clamp(2rem, 5vw, 3.5rem);
+  font-size: 3.25rem;
 }
 .legal-shell p {
   max-width: 680px;
@@ -201,6 +201,13 @@ select:focus {
 .dashboard-header h1 {
   font-size: 2.2rem;
   margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  h1,
+  .legal-shell h1 {
+    font-size: 2.25rem;
+  }
 }
 .dashboard-grid {
   display: grid;

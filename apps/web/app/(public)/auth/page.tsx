@@ -38,7 +38,6 @@ export default function AuthPage() {
               password: String(form.get("password") ?? ""),
             };
     try {
-      const token = await csrf();
       const response = await fetch(
         `${API}/api/v1/auth/${mode === "forgot" ? "forgot-password" : mode}`,
         {
@@ -46,15 +45,12 @@ export default function AuthPage() {
           credentials: "include",
           headers: {
             "content-type": "application/json",
-            "x-csrf-token": token,
+            "x-csrf-token": await csrf(),
           },
           body: JSON.stringify(body),
         },
       );
-      const data = (await response.json()) as {
-        error?: { message?: string };
-        user?: unknown;
-      };
+      const data = (await response.json()) as { error?: { message?: string } };
       if (!response.ok)
         throw new Error(data.error?.message ?? "Не удалось выполнить запрос.");
       if (mode === "forgot")
@@ -90,7 +86,7 @@ export default function AuthPage() {
             onClick={() => setMode("signup")}
             type="button"
           >
-            Создать аккаунт
+            Регистрация
           </button>
           <button
             className={mode === "forgot" ? "tab active" : "tab"}
