@@ -113,6 +113,12 @@ export class McpPreviewService {
         "Explicit preview confirmation is required.",
       );
 
+    const consumed = await this.database.client.mcpPreview.updateMany({
+      where: { id: preview.id, consumedAt: null },
+      data: { consumedAt: new Date() },
+    });
+    if (consumed.count !== 1)
+      throw new ForbiddenException("Preview has already been consumed.");
     await this.audit.record({
       eventType: "mcp_commit_blocked",
       actorType: "SERVICE",
