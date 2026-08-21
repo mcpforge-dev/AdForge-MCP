@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+
 type Workspace = { id: string; name: string; slug: string; role: string };
 type Member = {
   userId: string;
@@ -42,6 +43,15 @@ async function csrf(): Promise<string> {
   return data.csrfToken;
 }
 
+function lastSevenDays(): { startDate: string; endDate: string } {
+  const end = new Date(Date.now() - 86_400_000);
+  const start = new Date(end.getTime() - 6 * 86_400_000);
+  return {
+    startDate: start.toISOString().slice(0, 10),
+    endDate: end.toISOString().slice(0, 10),
+  };
+}
+
 export default function DashboardPage() {
   const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [active, setActive] = useState<Workspace | null>(null);
@@ -49,6 +59,8 @@ export default function DashboardPage() {
   const [providers, setProviders] = useState<Provider[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
   const [readResult, setReadResult] = useState<unknown>(null);
+  const [siteResult, setSiteResult] = useState<unknown>(null);
+  const [siteUrl, setSiteUrl] = useState("");
   const [error, setError] = useState("");
 
   async function loadWorkspaces() {
@@ -62,7 +74,7 @@ export default function DashboardPage() {
     const data = (await response.json()) as Workspace[];
     setWorkspaces(data);
     setActive((current) =>
-      current && data.find((item) => item.id === current.id)
+      current && data.some((item) => item.id === current.id)
         ? current
         : (data[0] ?? null),
     );
@@ -93,21 +105,19 @@ export default function DashboardPage() {
     void loadWorkspaces();
   }, []);
   useEffect(() => {
-    if (active) void loadMembers(active);
-  }, [active]);
-  useEffect(() => {
-    if (active) void loadConnections(active);
+    if (!active) return;
+    void loadMembers(active);
+    void loadConnections(active);
   }, [active]);
 
   async function startProvider(provider: string) {
     if (!active) return;
-    const token = await csrf();
     const response = await fetch(
       `${API}/api/v1/workspaces/${active.id}/connections/${provider}/oauth/start`,
       {
         method: "POST",
         credentials: "include",
-        headers: { "x-csrf-token": token },
+        headers: { "x-csrf-token": await csrf() },
       },
     );
     if (!response.ok) {
@@ -120,13 +130,12 @@ export default function DashboardPage() {
 
   async function disconnect(connectionId: string) {
     if (!active) return;
-    const token = await csrf();
     const response = await fetch(
       `${API}/api/v1/workspaces/${active.id}/connections/${connectionId}`,
       {
         method: "DELETE",
         credentials: "include",
-        headers: { "x-csrf-token": token },
+        headers: { "x-csrf-token": await csrf() },
       },
     );
     if (response.ok) await loadConnections(active);
@@ -135,13 +144,12 @@ export default function DashboardPage() {
 
   async function discover(connectionId: string) {
     if (!active) return;
-    const token = await csrf();
     const response = await fetch(
       `${API}/api/v1/workspaces/${active.id}/connections/${connectionId}/accounts/discover`,
       {
         method: "POST",
         credentials: "include",
-        headers: { "x-csrf-token": token },
+        headers: { "x-csrf-token": await csrf() },
       },
     );
     if (response.ok) await loadConnections(active);
@@ -150,62 +158,106 @@ export default function DashboardPage() {
 
   async function toggleAccount(accountId: string, enabled: boolean) {
     if (!active) return;
-    const token = await csrf();
     const response = await fetch(
       `${API}/api/v1/workspaces/${active.id}/provider-accounts/${accountId}`,
       {
         method: "PATCH",
         credentials: "include",
-        headers: { "content-type": "application/json", "x-csrf-token": token },
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
         body: JSON.stringify({ enabled }),
       },
     );
     if (response.ok) await loadConnections(active);
-    else setError("Не удалось изменить доступ рекламного кабинета.");
+    else setError("Не удалось изменить доступ к рекламному кабинету.");
   }
 
   async function readSmoke(connection: Connection, account: ProviderAccount) {
     if (!active) return;
-    const from = new Date(Date.now() - 6 * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    const to = new Date().toISOString().slice(0, 10);
-    const query = `startDate=${from}&endDate=${to}`;
-    const [healthResponse, metricsResponse, campaignsResponse] =
-      await Promise.all([
-        fetch(
-          `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/health`,
-          { credentials: "include" },
-        ),
-        fetch(
-          `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/metrics?${query}`,
-          { credentials: "include" },
-        ),
-        fetch(
-          `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/campaigns?${query}&limit=10`,
-          { credentials: "include" },
-        ),
-      ]);
-    if (!healthResponse.ok || !metricsResponse.ok || !campaignsResponse.ok) {
+    const dates = lastSevenDays();
+    const query = new URLSearchParams(dates).toString();
+    const [health, metrics, campaigns] = await Promise.all([
+      fetch(
+        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/health`,
+        { credentials: "include" },
+      ),
+      fetch(
+        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/metrics?${query}`,
+        { credentials: "include" },
+      ),
+      fetch(
+        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/campaigns?${query}&limit=10`,
+        { credentials: "include" },
+      ),
+    ]);
+    if (!health.ok || !metrics.ok || !campaigns.ok) {
       setError("Не удалось выполнить read-проверку рекламного кабинета.");
       return;
     }
     setReadResult({
       account: account.displayName,
-      health: await healthResponse.json(),
-      metrics: await metricsResponse.json(),
-      campaigns: await campaignsResponse.json(),
+      period: dates,
+      health: await health.json(),
+      metrics: await metrics.json(),
+      campaigns: await campaigns.json(),
     });
+  }
+
+  async function downloadReport(account: ProviderAccount) {
+    if (!active) return;
+    const query = new URLSearchParams({
+      accountId: account.id,
+      ...lastSevenDays(),
+    }).toString();
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/reports/performance.docx?${query}`,
+      { credentials: "include" },
+    );
+    if (!response.ok) {
+      setError("Не удалось собрать DOCX-отчёт.");
+      return;
+    }
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(await response.blob());
+    link.download = "holymedia-performance-report.docx";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  async function analyzeSite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active || !siteUrl.trim()) return;
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/site-analysis`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({ url: siteUrl.trim() }),
+      },
+    );
+    if (!response.ok) {
+      setError("Не удалось проанализировать сайт.");
+      return;
+    }
+    setSiteResult(await response.json());
   }
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
-    const token = await csrf();
     const response = await fetch(`${API}/api/v1/workspaces`, {
       method: "POST",
       credentials: "include",
-      headers: { "content-type": "application/json", "x-csrf-token": token },
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": await csrf(),
+      },
       body: JSON.stringify({ name: form.get("name") }),
     });
     if (!response.ok) {
@@ -220,13 +272,15 @@ export default function DashboardPage() {
     event.preventDefault();
     if (!active) return;
     const form = new FormData(event.currentTarget);
-    const token = await csrf();
     const response = await fetch(
       `${API}/api/v1/workspaces/${active.id}/invitations`,
       {
         method: "POST",
         credentials: "include",
-        headers: { "content-type": "application/json", "x-csrf-token": token },
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
         body: JSON.stringify({
           email: form.get("email"),
           role: form.get("role"),
@@ -242,11 +296,10 @@ export default function DashboardPage() {
   }
 
   async function logout() {
-    const token = await csrf();
     await fetch(`${API}/api/v1/auth/logout`, {
       method: "POST",
       credentials: "include",
-      headers: { "x-csrf-token": token },
+      headers: { "x-csrf-token": await csrf() },
     });
     window.location.assign("/auth");
   }
@@ -262,6 +315,7 @@ export default function DashboardPage() {
           Выйти
         </button>
       </header>
+
       <section className="dashboard-grid">
         <div className="panel">
           <label>
@@ -314,9 +368,9 @@ export default function DashboardPage() {
                 placeholder="Email участника"
               />
               <select name="role" defaultValue="MEMBER">
-                <option value="MEMBER">MEMBER</option>
-                <option value="VIEWER">VIEWER</option>
-                <option value="ADMIN">ADMIN</option>
+                <option value="MEMBER">Участник</option>
+                <option value="VIEWER">Наблюдатель</option>
+                <option value="ADMIN">Администратор</option>
               </select>
               <button className="primary-button" type="submit">
                 Пригласить
@@ -325,13 +379,16 @@ export default function DashboardPage() {
           )}
         </div>
       </section>
+
       <section className="panel connections-panel">
         <div className="section-heading">
           <div>
             <p className="eyebrow">Providers</p>
             <h2>Подключения рекламных платформ</h2>
           </div>
-          <span className="muted">Доступы хранятся отдельно для workspace</span>
+          <span className="muted">
+            Доступы хранятся отдельно для каждого workspace
+          </span>
         </div>
         <div className="provider-list">
           {providers.map((provider) => {
@@ -384,7 +441,7 @@ export default function DashboardPage() {
                       Обновить кабинеты
                     </button>
                     {connection.accounts.map((account) => (
-                      <label className="account-row" key={account.id}>
+                      <div className="account-row" key={account.id}>
                         <input
                           type="checkbox"
                           checked={account.enabled}
@@ -395,7 +452,7 @@ export default function DashboardPage() {
                         <span>{account.displayName}</span>
                         <small>
                           {account.externalAccountId} ·{" "}
-                          {account.status ?? "unknown"}
+                          {account.status ?? "неизвестно"}
                         </small>
                         <button
                           className="ghost-button"
@@ -405,7 +462,15 @@ export default function DashboardPage() {
                         >
                           Проверить чтение
                         </button>
-                      </label>
+                        <button
+                          className="ghost-button"
+                          type="button"
+                          disabled={!account.enabled}
+                          onClick={() => void downloadReport(account)}
+                        >
+                          DOCX-отчёт
+                        </button>
+                      </div>
                     ))}
                   </div>
                 )}
@@ -414,6 +479,34 @@ export default function DashboardPage() {
           })}
         </div>
       </section>
+
+      <section className="panel">
+        <div className="section-heading">
+          <div>
+            <p className="eyebrow">Site analysis</p>
+            <h2>Анализ сайта</h2>
+          </div>
+          <span className="muted">
+            Проверяется только публичный HTTP(S)-адрес
+          </span>
+        </div>
+        <form onSubmit={analyzeSite} className="inline-form">
+          <input
+            value={siteUrl}
+            onChange={(event) => setSiteUrl(event.target.value)}
+            type="url"
+            required
+            placeholder="https://example.com"
+          />
+          <button className="primary-button" type="submit">
+            Проверить
+          </button>
+        </form>
+        {siteResult !== null && (
+          <pre>{JSON.stringify(siteResult, null, 2)}</pre>
+        )}
+      </section>
+
       {readResult !== null && (
         <section className="panel">
           <div className="section-heading">
@@ -422,7 +515,7 @@ export default function DashboardPage() {
               <h2>Последний ответ провайдера</h2>
             </div>
           </div>
-          <pre>{String(JSON.stringify(readResult, null, 2))}</pre>
+          <pre>{JSON.stringify(readResult, null, 2)}</pre>
         </section>
       )}
       {error && <p className="error">{error}</p>}
