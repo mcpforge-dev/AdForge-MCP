@@ -83,6 +83,35 @@ type AnalyticsSummary = {
   active_users: number;
   events: Array<{ name: string; count: number }>;
 };
+type SeoReport = {
+  status?: string;
+  message?: string;
+  date_range?: { start_date: string; end_date: string; days: number };
+  metrics?: {
+    clicks: number;
+    impressions: number;
+    ctr: number;
+    position: number;
+  };
+  previous_metrics?: SeoReport["metrics"];
+  properties?: Array<{
+    site_url: string;
+    name: string;
+    property_type?: string;
+  }>;
+  top_queries?: Array<{
+    keys?: string[];
+    clicks?: number;
+    impressions?: number;
+    ctr?: number;
+  }>;
+  top_pages?: Array<{
+    keys?: string[];
+    clicks?: number;
+    impressions?: number;
+    ctr?: number;
+  }>;
+};
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -149,6 +178,9 @@ export default function DashboardPage() {
   const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
   const [analyticsSummary, setAnalyticsSummary] =
     useState<AnalyticsSummary | null>(null);
+  const [seoSiteUrl, setSeoSiteUrl] = useState("__all");
+  const [seoDays, setSeoDays] = useState("28");
+  const [seoResult, setSeoResult] = useState<SeoReport | null>(null);
   const [error, setError] = useState("");
 
   const canManageMembers = Boolean(
@@ -281,8 +313,20 @@ export default function DashboardPage() {
     ]);
     if (providerResponse.ok)
       setProviders((await providerResponse.json()) as Provider[]);
-    if (connectionResponse.ok)
-      setConnections((await connectionResponse.json()) as Connection[]);
+    if (connectionResponse.ok) {
+      const nextConnections = (await connectionResponse.json()) as Connection[];
+      setConnections(nextConnections);
+      const searchConsole = nextConnections.find(
+        (connection) => connection.provider === "GOOGLE_SEARCH_CONSOLE",
+      );
+      if (
+        searchConsole &&
+        !searchConsole.accounts.some(
+          (account) => account.externalAccountId === seoSiteUrl,
+        )
+      )
+        setSeoSiteUrl("__all");
+    }
   }
 
   async function loadServiceTokens(workspace: Workspace) {
@@ -344,6 +388,20 @@ export default function DashboardPage() {
     if (response.ok)
       setAnalyticsSummary((await response.json()) as AnalyticsSummary);
     else setAnalyticsSummary(null);
+  }
+
+  async function loadSeoReport() {
+    if (!active) return;
+    const query = new URLSearchParams({
+      site_url: seoSiteUrl,
+      days: seoDays,
+    });
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/seo/search-console?${query.toString()}`,
+      { credentials: "include" },
+    );
+    if (response.ok) setSeoResult((await response.json()) as SeoReport);
+    else setError("Не удалось загрузить SEO-отчёт Search Console.");
   }
 
   useEffect(() => {
@@ -895,6 +953,108 @@ export default function DashboardPage() {
           })}
         </div>
       </section>
+
+      {active &&
+        connections.some(
+          (connection) => connection.provider === "GOOGLE_SEARCH_CONSOLE",
+        ) && (
+          <section className="panel connections-panel">
+            <div className="section-heading">
+              <div>
+                <p className="eyebrow">SEO</p>
+                <h2>Google Search Console</h2>
+              </div>
+              <span className="muted">
+                Реальные данные Search Console за завершённый период.
+              </span>
+            </div>
+            <div className="inline-form">
+              <select
+                value={seoSiteUrl}
+                onChange={(event) => setSeoSiteUrl(event.target.value)}
+                aria-label="SEO property"
+              >
+                <option value="__all">Все подключённые properties</option>
+                {connections
+                  .find(
+                    (connection) =>
+                      connection.provider === "GOOGLE_SEARCH_CONSOLE",
+                  )
+                  ?.accounts.map((account) => (
+                    <option key={account.id} value={account.externalAccountId}>
+                      {account.displayName}
+                    </option>
+                  ))}
+              </select>
+              <select
+                value={seoDays}
+                onChange={(event) => setSeoDays(event.target.value)}
+                aria-label="Период SEO отчёта"
+              >
+                <option value="28">28 дней</option>
+                <option value="56">56 дней</option>
+                <option value="90">90 дней</option>
+              </select>
+              <button
+                className="primary-button"
+                type="button"
+                onClick={() => void loadSeoReport()}
+              >
+                Загрузить SEO-отчёт
+              </button>
+            </div>
+            {seoResult?.message && (
+              <p className="muted" role="status">
+                {seoResult.message}
+              </p>
+            )}
+            {seoResult?.metrics && (
+              <div className="billing-grid">
+                <div className="billing-summary">
+                  <small>Клики</small>
+                  <strong>
+                    {seoResult.metrics.clicks.toLocaleString("ru-RU")}
+                  </strong>
+                  <span>Переходы из поиска</span>
+                </div>
+                <div className="billing-summary">
+                  <small>Показы</small>
+                  <strong>
+                    {seoResult.metrics.impressions.toLocaleString("ru-RU")}
+                  </strong>
+                  <span>Показы в выдаче</span>
+                </div>
+                <div className="billing-summary">
+                  <small>CTR / позиция</small>
+                  <strong>{(seoResult.metrics.ctr * 100).toFixed(2)}%</strong>
+                  <span>
+                    Средняя позиция {seoResult.metrics.position.toFixed(1)}
+                  </span>
+                </div>
+              </div>
+            )}
+            {seoResult?.top_queries?.length ? (
+              <div className="plan-list">
+                <strong>Топ запросов</strong>
+                {seoResult.top_queries.slice(0, 8).map((row, index) => (
+                  <div
+                    className="plan-row"
+                    key={`${row.keys?.[0] ?? "query"}-${index}`}
+                  >
+                    <span>
+                      <strong>{row.keys?.[0] ?? "Без названия"}</strong>
+                      <small>
+                        {row.clicks ?? 0} кликов · {row.impressions ?? 0}{" "}
+                        показов
+                      </small>
+                    </span>
+                    <em>{((row.ctr ?? 0) * 100).toFixed(2)}%</em>
+                  </div>
+                ))}
+              </div>
+            ) : null}
+          </section>
+        )}
 
       {active && ["OWNER", "ADMIN"].includes(active.role) && (
         <section className="panel connections-panel">
