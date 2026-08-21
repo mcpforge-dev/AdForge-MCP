@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="HolyMedia MCP">
+  <rect width="64" height="64" rx="12" fill="#0a0d12"/>
+  <path d="M12 45V19h8v9h8v-9h8v26h-8V35h-8v10h-8Zm30 0V19h7l7 10v16h-8V32l-3 5h-3l-3-5v13h-7Z" fill="#f5f7fb"/>
+  <circle cx="52" cy="12" r="4" fill="#31d0aa"/>
+</svg>

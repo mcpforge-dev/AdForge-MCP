@@ -20,6 +20,13 @@ export const metadata: Metadata = {
     description:
       "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
     url: "/",
+    locale: "ru_RU",
+  },
+  twitter: {
+    card: "summary",
+    title: "HolyMedia MCP",
+    description:
+      "Рекламные кабинеты, аналитика, отчёты и AI-клиенты в одном защищённом workspace.",
   },
   robots: { index: true, follow: true },
 };
