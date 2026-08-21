@@ -41,6 +41,8 @@ import { LegacyReportController } from "./compat/legacy-report.controller.js";
 import { LegacySiteAnalysisController } from "./compat/legacy-site-analysis.controller.js";
 import { SiteAnalysisController } from "./site-analysis/site-analysis.controller.js";
 import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
+import { BillingController } from "./billing/billing.controller.js";
+import { BillingService } from "./billing/billing.service.js";
 
 @Module({
   controllers: [
@@ -60,6 +62,7 @@ import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
     LegacyReportController,
     LegacySiteAnalysisController,
     SiteAnalysisController,
+    BillingController,
   ],
   providers: [
     DatabaseService,
@@ -84,6 +87,7 @@ import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
     McpService,
     ReportService,
     SiteAnalysisService,
+    BillingService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

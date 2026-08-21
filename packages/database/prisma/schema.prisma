@@ -38,6 +38,28 @@ enum ProviderConnectionStatus {
   ERROR
 }
 
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum BillingOrderStatus {
+  OPEN
+  PAID
+  FAILED
+  CANCELED
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
 model User {
   id                String               @id @default(uuid()) @db.Uuid
   email             String               @unique @db.VarChar(320)
@@ -72,6 +94,10 @@ model Workspace {
   connections  ProviderConnection[]
   providerAccounts ProviderAccount[]
   oauthStates  OAuthState[]
+  subscriptions WorkspaceSubscription[]
+  billingOrders BillingOrder[]
+  usageRecords UsageRecord[]
+  entitlements Entitlement[]
 
   @@index([createdAt])
   @@map("workspaces")
@@ -238,6 +264,133 @@ model SystemMetadata {
 
   @@index([updatedAt])
   @@map("system_metadata")
+}
+
+model Plan {
+  id            String                  @id @default(uuid()) @db.Uuid
+  key           String                  @unique @db.VarChar(80)
+  name          String                  @db.VarChar(160)
+  description   String?                 @db.VarChar(500)
+  active        Boolean                 @default(true)
+  features      Json
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+  prices        Price[]
+  subscriptions WorkspaceSubscription[]
+  orders        BillingOrder[]
+  @@index([active])
+  @@map("plans")
+}
+
+model Price {
+  id             String                  @id @default(uuid()) @db.Uuid
+  planId         String                  @map("plan_id") @db.Uuid
+  currency       String                  @db.VarChar(3)
+  amount         Decimal                 @db.Decimal(18, 6)
+  interval       String                  @db.VarChar(32)
+  active         Boolean                 @default(true)
+  provider       String?                 @db.VarChar(80)
+  providerPriceRef String?               @map("provider_price_ref") @db.VarChar(255)
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  plan           Plan                    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscriptions  WorkspaceSubscription[]
+  orders         BillingOrder[]
+  @@unique([planId, currency, interval])
+  @@index([active, currency])
+  @@map("prices")
+}
+
+model WorkspaceSubscription {
+  id                       String             @id @default(uuid()) @db.Uuid
+  workspaceId              String             @map("workspace_id") @db.Uuid
+  planId                   String             @map("plan_id") @db.Uuid
+  priceId                  String?            @map("price_id") @db.Uuid
+  status                   SubscriptionStatus @default(TRIALING)
+  startsAt                 DateTime           @map("starts_at")
+  currentPeriodStart      DateTime           @map("current_period_start")
+  currentPeriodEnd        DateTime           @map("current_period_end")
+  trialEndsAt              DateTime?          @map("trial_ends_at")
+  canceledAt               DateTime?          @map("canceled_at")
+  providerCustomerRef      String?            @map("provider_customer_ref") @db.VarChar(255)
+  providerSubscriptionRef  String?            @map("provider_subscription_ref") @db.VarChar(255)
+  metadata                 Json?
+  createdAt                DateTime           @default(now()) @map("created_at")
+  updatedAt                DateTime           @updatedAt @map("updated_at")
+  workspace                Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan                     Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  price                    Price?             @relation(fields: [priceId], references: [id], onDelete: SetNull)
+  @@index([workspaceId, status])
+  @@index([currentPeriodEnd])
+  @@map("workspace_subscriptions")
+}
+
+model BillingOrder {
+  id                     String             @id @default(uuid()) @db.Uuid
+  workspaceId            String             @map("workspace_id") @db.Uuid
+  planId                 String             @map("plan_id") @db.Uuid
+  priceId                String?            @map("price_id") @db.Uuid
+  status                 BillingOrderStatus @default(OPEN)
+  currency               String             @db.VarChar(3)
+  amount                 Decimal            @db.Decimal(18, 6)
+  idempotencyKey         String             @unique @map("idempotency_key") @db.VarChar(160)
+  providerOrderRef       String?            @map("provider_order_ref") @db.VarChar(255)
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+  paidAt                  DateTime?          @map("paid_at")
+  workspace               Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan                   Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  price                  Price?             @relation(fields: [priceId], references: [id], onDelete: SetNull)
+  attempts               PaymentAttempt[]
+  @@index([workspaceId, createdAt])
+  @@index([status, createdAt])
+  @@map("billing_orders")
+}
+
+model PaymentAttempt {
+  id                 String                @id @default(uuid()) @db.Uuid
+  orderId            String                @map("order_id") @db.Uuid
+  provider           String                @db.VarChar(80)
+  status             PaymentAttemptStatus  @default(CREATED)
+  providerPaymentRef String?               @map("provider_payment_ref") @db.VarChar(255)
+  idempotencyKey     String                @unique @map("idempotency_key") @db.VarChar(160)
+  errorCode          String?               @map("error_code") @db.VarChar(120)
+  createdAt          DateTime              @default(now()) @map("created_at")
+  updatedAt          DateTime              @updatedAt @map("updated_at")
+  order              BillingOrder          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  @@index([orderId, status])
+  @@map("payment_attempts")
+}
+
+model UsageRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  metricKey   String   @map("metric_key") @db.VarChar(120)
+  periodStart DateTime @map("period_start")
+  periodEnd   DateTime @map("period_end")
+  quantity    Decimal  @db.Decimal(24, 6)
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@unique([workspaceId, metricKey, periodStart, periodEnd])
+  @@index([workspaceId, periodEnd])
+  @@map("usage_records")
+}
+
+model Entitlement {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  featureKey  String   @map("feature_key") @db.VarChar(120)
+  value       Json
+  source      String   @db.VarChar(80)
+  expiresAt   DateTime? @map("expires_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  @@unique([workspaceId, featureKey])
+  @@index([workspaceId, expiresAt])
+  @@map("entitlements")
 }
 
 model ProviderConnection {
