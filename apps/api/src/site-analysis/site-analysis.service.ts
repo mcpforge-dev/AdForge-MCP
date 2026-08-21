@@ -1,5 +1,23 @@
 import { lookup } from "node:dns/promises";
-import { BadRequestException, Injectable } from "@nestjs/common";
+import {
+  BadRequestException,
+  Inject,
+  Injectable,
+  NotFoundException,
+  Optional,
+} from "@nestjs/common";
+import {
+  Document,
+  HeadingLevel,
+  Packer,
+  Paragraph,
+  Table,
+  TableCell,
+  TableRow,
+  TextRun,
+  WidthType,
+} from "docx";
+import { DatabaseService } from "../infrastructure/database.service.js";
 
 const MAX_BYTES = 1_500_000;
 const MAX_REDIRECTS = 3;
@@ -7,7 +25,16 @@ const TIMEOUT_MS = 15_000;
 
 @Injectable()
 export class SiteAnalysisService {
-  public async analyze(rawUrl: string) {
+  public constructor(
+    @Optional()
+    @Inject(DatabaseService)
+    private readonly database?: DatabaseService,
+  ) {}
+
+  public async analyze(
+    rawUrl: string,
+    context?: { workspaceId: string; userId: string },
+  ) {
     let url = await this.validateUrl(rawUrl);
     let response: Response | undefined;
     for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
@@ -45,7 +72,7 @@ export class SiteAnalysisService {
       );
     const h1Count = (html.match(/<h1\b/gi) ?? []).length;
     const links = (html.match(/<a\b[^>]*href=["'][^"']+["']/gi) ?? []).length;
-    return {
+    const result = {
       url,
       status: response.status,
       contentType,
@@ -62,6 +89,105 @@ export class SiteAnalysisService {
       source: "live_http_fetch",
       fetchedAt: new Date().toISOString(),
     };
+    if (context && this.database) {
+      await this.database.client.siteAnalysisRecord.create({
+        data: {
+          workspaceId: context.workspaceId,
+          userId: context.userId,
+          url: result.url,
+          result,
+        },
+      });
+    }
+    return result;
+  }
+
+  public async history(workspaceId: string, userId: string) {
+    if (!this.database) return { items: [] };
+    const rows = await this.database.client.siteAnalysisRecord.findMany({
+      where: { workspaceId, userId },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+      select: { id: true, url: true, result: true, createdAt: true },
+    });
+    return {
+      items: rows.map((row) => ({
+        id: row.id,
+        url: row.url,
+        result: row.result,
+        created_at: row.createdAt.toISOString(),
+      })),
+    };
+  }
+
+  public async reportDocx(
+    workspaceId: string,
+    userId: string,
+    recordId: string,
+  ): Promise<Buffer> {
+    if (!this.database)
+      throw new NotFoundException("Analysis record not found.");
+    const row = await this.database.client.siteAnalysisRecord.findFirst({
+      where: { id: recordId, workspaceId, userId },
+      select: { url: true, result: true, createdAt: true },
+    });
+    if (!row) throw new NotFoundException("Analysis record not found.");
+    const result = objectValue(row.result);
+    const checks = objectValue(result.checks);
+    const rows = [
+      ["URL", String(row.url)],
+      ["HTTP status", String(result.status ?? "нет данных")],
+      ["Title", String(result.title ?? "нет данных")],
+      ["Description", String(result.description ?? "нет данных")],
+      ["H1", String(result.h1Count ?? "нет данных")],
+      ["Links", String(result.linkCount ?? "нет данных")],
+      ["HTTPS", checks.https === true ? "Да" : "Нет"],
+      ["Single H1", checks.hasSingleH1 === true ? "Да" : "Нет"],
+    ];
+    const document = new Document({
+      sections: [
+        {
+          children: [
+            new Paragraph({
+              text: "HOLYMEDIA MCP",
+              heading: HeadingLevel.TITLE,
+            }),
+            new Paragraph({
+              text: "Отчёт анализа сайта",
+              heading: HeadingLevel.HEADING_1,
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: `Дата: ${row.createdAt.toISOString()}`,
+                  bold: true,
+                }),
+              ],
+            }),
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              rows: rows.map(
+                ([label, value]) =>
+                  new TableRow({
+                    children: [
+                      new TableCell({
+                        children: [new Paragraph(String(label))],
+                      }),
+                      new TableCell({
+                        children: [new Paragraph(String(value))],
+                      }),
+                    ],
+                  }),
+              ),
+            }),
+            new Paragraph({
+              text: "Источник: live HTTP fetch. Документ не содержит OAuth-токены и секреты.",
+            }),
+          ],
+        },
+      ],
+    });
+    return Packer.toBuffer(document);
   }
 
   private async validateUrl(rawUrl: string): Promise<string> {
@@ -105,6 +231,12 @@ export class SiteAnalysisService {
 
 function match(html: string, expression: RegExp): string | null {
   return expression.exec(html)?.[1] ?? null;
+}
+
+function objectValue(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }
 
 function decodeHtml(value: string): string {

@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+  completedRange,
   isWriteRequest,
   loadHermesConfig,
   queryText,
+  renderComparison,
   renderMetrics,
   shouldHandleMessage,
 } from "./hermes.js";
@@ -68,7 +70,24 @@ describe("Hermes deterministic gateway", () => {
       "2026-01-01 — 2026-01-07",
     );
     expect(output).toContain("12,5 USD");
+    expect(output).toContain("CTR: 2,5%");
     expect(output).toContain("нет данных");
+  });
+
+  it("renders absolute and percentage period changes", () => {
+    const output = renderComparison(
+      { metrics: { spend: { amount: "150", currency: "USD" }, clicks: 120 } },
+      { metrics: { spend: { amount: "100", currency: "USD" }, clicks: 100 } },
+    );
+    expect(output).toContain("Расход: +50 (+50%)");
+    expect(output).toContain("Клики: +20 (+20%)");
+  });
+
+  it("returns completed ranges and supports a previous period", () => {
+    const current = completedRange();
+    const previous = completedRange(7, 7);
+    expect(current.end < new Date().toISOString().slice(0, 10)).toBe(true);
+    expect(previous.end < current.start).toBe(true);
   });
 
   it("keeps scoped configuration server-side", () => {

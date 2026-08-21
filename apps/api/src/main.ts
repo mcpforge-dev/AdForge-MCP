@@ -94,6 +94,8 @@ async function bootstrap(): Promise<void> {
       { path: "api/profile/(.*)", method: RequestMethod.ALL },
       { path: "api/connection-requests", method: RequestMethod.ALL },
       { path: "api/connection-requests/(.*)", method: RequestMethod.ALL },
+      { path: "api/admin", method: RequestMethod.ALL },
+      { path: "api/admin/(.*)", method: RequestMethod.ALL },
       { path: "api/admin/connection-requests", method: RequestMethod.ALL },
       { path: "api/admin/connection-requests/(.*)", method: RequestMethod.ALL },
       { path: "api/diagnostics", method: RequestMethod.ALL },

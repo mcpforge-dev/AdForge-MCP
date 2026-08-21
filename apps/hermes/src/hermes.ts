@@ -19,6 +19,9 @@ type MpcResponse = {
   error?: { code?: number; message?: string };
 };
 
+type Metrics = JsonObject;
+type Campaign = JsonObject & { metrics?: JsonObject };
+
 export type HermesConfig = {
   enabled: boolean;
   botToken: string;
@@ -74,13 +77,37 @@ export function queryText(message: TelegramMessage): string {
 }
 
 export function isWriteRequest(query: string): boolean {
-  return /(увелич|уменьш|измен|созд|удал|постав|пауза|возобнов|перезапу|переимен|бюджет|ставк|кампан|объявлен)/i.test(
+  return /(увелич|уменьш|измен|созда|удал|постав|пауза|возобнов|перезапуск|переимен|бюджет|ставк|кампан|объявлен|increase|decrease|change|create|delete|pause|resume|rename|budget|bid|campaign|ad)/i.test(
     query,
   );
 }
 
+function objectValue(value: unknown): JsonObject {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as JsonObject)
+    : {};
+}
+
+function arrayValue(value: unknown): JsonObject[] {
+  if (Array.isArray(value))
+    return value.filter(
+      (item) => item && typeof item === "object",
+    ) as JsonObject[];
+  const object = objectValue(value);
+  return Array.isArray(object.items)
+    ? (object.items.filter(
+        (item) => item && typeof item === "object",
+      ) as JsonObject[])
+    : [];
+}
+
 function metricValue(value: unknown): number | null {
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const parsed = Number(value);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+  return null;
 }
 
 function metricMoney(
@@ -88,10 +115,19 @@ function metricMoney(
 ): { amount: number; currency: string } | null {
   if (!value || typeof value !== "object") return null;
   const row = value as JsonObject;
-  const amount = Number(row.amount);
-  return Number.isFinite(amount)
-    ? { amount, currency: typeof row.currency === "string" ? row.currency : "" }
-    : null;
+  const amount = metricValue(row.amount);
+  return amount === null
+    ? null
+    : {
+        amount,
+        currency: typeof row.currency === "string" ? row.currency : "",
+      };
+}
+
+function numericMetric(metrics: Metrics, name: string): number | null {
+  const value = metrics[name];
+  const money = metricMoney(value);
+  return money ? money.amount : metricValue(value);
 }
 
 function formatNumber(value: number | null): string {
@@ -102,6 +138,12 @@ function formatNumber(value: number | null): string {
       );
 }
 
+function formatPercent(value: number | null): string {
+  if (value === null) return "нет данных";
+  const percent = Math.abs(value) <= 1 ? value * 100 : value;
+  return `${formatNumber(percent)}%`;
+}
+
 function formatMoney(value: unknown): string {
   const money = metricMoney(value);
   return money
@@ -109,24 +151,140 @@ function formatMoney(value: unknown): string {
     : "нет данных";
 }
 
+function dateLabel(start: string, end: string): string {
+  return `${start} — ${end}`;
+}
+
+function dateOnly(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
+export function completedRange(
+  days = 7,
+  offsetDays = 0,
+): { start: string; end: string } {
+  const end = new Date(Date.now() - (1 + offsetDays) * 86_400_000);
+  const start = new Date(end.getTime() - (days - 1) * 86_400_000);
+  return { start: dateOnly(start), end: dateOnly(end) };
+}
+
 export function renderMetrics(result: JsonObject, label: string): string {
-  const metrics = (
+  const metrics = objectValue(
     result.metrics && typeof result.metrics === "object"
       ? result.metrics
-      : result
-  ) as JsonObject;
+      : result,
+  );
   const lines = [
     `Период: ${label}`,
     "",
     `Расход: ${formatMoney(metrics.spend)}`,
-    `Показы: ${formatNumber(metricValue(metrics.impressions))}`,
-    `Клики: ${formatNumber(metricValue(metrics.clicks))}`,
-    `CTR: ${formatNumber(metricValue(metrics.ctr))}`,
+    `Показы: ${formatNumber(numericMetric(metrics, "impressions"))}`,
+    `Клики: ${formatNumber(numericMetric(metrics, "clicks"))}`,
+    `CTR: ${formatPercent(numericMetric(metrics, "ctr"))}`,
     `Средняя стоимость клика: ${formatMoney(metrics.cpc)}`,
-    `Конверсии: ${formatNumber(metricValue(metrics.conversions))}`,
+    `Конверсии: ${formatNumber(numericMetric(metrics, "conversions"))}`,
     `Стоимость конверсии: ${formatMoney(metrics.costPerConversion)}`,
   ];
   return lines.join("\n");
+}
+
+function delta(current: number | null, previous: number | null): string {
+  if (current === null || previous === null) return "нет данных";
+  const absolute = current - previous;
+  const percent = previous === 0 ? null : (absolute / Math.abs(previous)) * 100;
+  return `${absolute >= 0 ? "+" : ""}${formatNumber(absolute)}${percent === null ? "" : ` (${percent >= 0 ? "+" : ""}${formatNumber(percent)}%)`}`;
+}
+
+export function renderComparison(
+  current: JsonObject,
+  previous: JsonObject,
+): string {
+  const currentMetrics = objectValue(current.metrics);
+  const previousMetrics = objectValue(previous.metrics);
+  const rows: Array<[string, string]> = [
+    [
+      "Расход",
+      delta(
+        numericMetric(currentMetrics, "spend"),
+        numericMetric(previousMetrics, "spend"),
+      ),
+    ],
+    [
+      "Показы",
+      delta(
+        numericMetric(currentMetrics, "impressions"),
+        numericMetric(previousMetrics, "impressions"),
+      ),
+    ],
+    [
+      "Клики",
+      delta(
+        numericMetric(currentMetrics, "clicks"),
+        numericMetric(previousMetrics, "clicks"),
+      ),
+    ],
+    [
+      "Конверсии",
+      delta(
+        numericMetric(currentMetrics, "conversions"),
+        numericMetric(previousMetrics, "conversions"),
+      ),
+    ],
+    [
+      "CTR",
+      delta(
+        numericMetric(currentMetrics, "ctr"),
+        numericMetric(previousMetrics, "ctr"),
+      ),
+    ],
+    [
+      "Стоимость конверсии",
+      delta(
+        numericMetric(currentMetrics, "costPerConversion"),
+        numericMetric(previousMetrics, "costPerConversion"),
+      ),
+    ],
+  ];
+  return [
+    "\nСравнение с предыдущим периодом:",
+    ...rows.map(([label, value]) => `${label}: ${value}`),
+  ].join("\n");
+}
+
+function campaignMetric(campaign: Campaign, name: string): number | null {
+  return numericMetric(objectValue(campaign.metrics), name);
+}
+
+function campaignLeaders(campaigns: JsonObject[]): {
+  spend: Campaign | null;
+  clicks: Campaign | null;
+  conversions: Campaign | null;
+} {
+  const sorted = (name: string) =>
+    [...(campaigns as Campaign[])].sort(
+      (left, right) =>
+        (campaignMetric(right, name) ?? -1) -
+        (campaignMetric(left, name) ?? -1),
+    )[0] ?? null;
+  return {
+    spend: sorted("spend"),
+    clicks: sorted("clicks"),
+    conversions: sorted("conversions"),
+  };
+}
+
+function campaignLine(
+  label: string,
+  campaign: Campaign | null,
+  totalSpend: number | null,
+): string {
+  if (!campaign) return `${label}: нет данных`;
+  const spend = campaignMetric(campaign, "spend");
+  const share =
+    spend !== null && totalSpend && totalSpend > 0
+      ? `, доля расходов ${formatNumber((spend / totalSpend) * 100)}%`
+      : "";
+  return `${label}: ${String(campaign.name ?? campaign.id ?? "без названия")} (${formatMoney(objectValue(campaign.metrics).spend)}${share})`;
 }
 
 export class TelegramClient {
@@ -189,7 +347,6 @@ export class McpHttpClient implements HermesMcpClient {
     name: string,
     arguments_: JsonObject,
   ): Promise<unknown> {
-    const id = ++this.requestId;
     const response = await fetch(this.url, {
       method: "POST",
       headers: {
@@ -198,7 +355,7 @@ export class McpHttpClient implements HermesMcpClient {
       },
       body: JSON.stringify({
         jsonrpc: "2.0",
-        id,
+        id: ++this.requestId,
         method: "tools/call",
         params: { name, arguments: arguments_ },
       }),
@@ -279,34 +436,57 @@ export class HermesGateway {
   }
 
   private async answer(query: string): Promise<string> {
-    const accounts = (await this.mcp.callTool(
-      "list_accounts",
-      {},
-    )) as Array<JsonObject>;
+    const accounts = arrayValue(await this.mcp.callTool("list_accounts", {}));
     const account = accounts[0];
     if (!account)
       return "В разрешённом рекламном кабинете пока нет доступных данных.";
     const provider = String(account.provider ?? "").toLowerCase();
     const accountId = String(account.account_id ?? "");
-    const end = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
-    const start = new Date(Date.now() - 7 * 86_400_000)
-      .toISOString()
-      .slice(0, 10);
-    const args = {
+    const compare =
+      /(сравн|предыдущ|прошл|изменил|динамик|compare|previous|last week)/i.test(
+        query,
+      );
+    const current = completedRange(7);
+    const previous = completedRange(7, 7);
+    const args = (range: { start: string; end: string }) => ({
       provider,
       account_id: accountId,
-      start_date: start,
-      end_date: end,
-    };
-    const result = await this.mcp.callTool(
-      /кампан|клик|конверс|расход|ctr|стоим|эффектив|показ/i.test(query)
-        ? "get_performance_report"
-        : "get_account_summary",
-      args,
+      start_date: range.start,
+      end_date: range.end,
+    });
+    const currentResult = objectValue(
+      await this.mcp.callTool("get_performance_report", args(current)),
     );
-    return renderMetrics(
-      (result && typeof result === "object" ? result : {}) as JsonObject,
-      `${start} — ${end}`,
+    const campaigns = arrayValue(currentResult.campaigns);
+    let output = renderMetrics(
+      currentResult,
+      dateLabel(current.start, current.end),
     );
+    if (compare) {
+      const previousResult = objectValue(
+        await this.mcp.callTool("get_performance_report", args(previous)),
+      );
+      output += renderComparison(currentResult, previousResult);
+      output +=
+        "\n\nВывод: сравнение построено по данным HolyMedia MCP за два завершённых периода.";
+    }
+    const asksForLeader =
+      /(какая|какой|лидир|больше всего|максималь|топ|кампани)/i.test(query);
+    if (asksForLeader) {
+      const leaders = campaignLeaders(campaigns);
+      const totalSpend = numericMetric(
+        objectValue(currentResult.metrics),
+        "spend",
+      );
+      output += `\n\n${campaignLine("Больше всего расходов", leaders.spend, totalSpend)}`;
+      if (/(клик|трафик)/i.test(query))
+        output += `\n${campaignLine("Больше всего кликов", leaders.clicks, totalSpend)}`;
+      if (/(конверс|результат)/i.test(query))
+        output += `\n${campaignLine("Больше всего конверсий", leaders.conversions, totalSpend)}`;
+    }
+    if (!campaigns.length)
+      output +=
+        "\n\nЗамечание: за выбранный период кампании не вернули данных, поэтому вывод ограничен общими показателями.";
+    return output;
   }
 }

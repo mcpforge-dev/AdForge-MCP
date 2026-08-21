@@ -57,6 +57,7 @@ import { McpOAuthClientService } from "./mcp/mcp-oauth-client.service.js";
 import { OAuthMetadataController } from "./compat/oauth-metadata.controller.js";
 import { LegacyGoogleLoginController } from "./compat/legacy-google-login.controller.js";
 import { GoogleLoginService } from "./auth/google-login.service.js";
+import { LegacyAdminController } from "./compat/legacy-admin.controller.js";
 
 @Module({
   controllers: [
@@ -85,6 +86,7 @@ import { GoogleLoginService } from "./auth/google-login.service.js";
     LegacyMcpOAuthController,
     OAuthMetadataController,
     LegacyGoogleLoginController,
+    LegacyAdminController,
   ],
   providers: [
     DatabaseService,

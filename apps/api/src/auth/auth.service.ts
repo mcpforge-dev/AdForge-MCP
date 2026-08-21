@@ -142,6 +142,7 @@ export class AuthService {
     });
     if (
       !user ||
+      user.status !== "active" ||
       !(await this.passwords.verify(user.passwordHash, input.password))
     ) {
       await this.record({
@@ -216,6 +217,8 @@ export class AuthService {
         return { user: createdUser, workspace };
       });
       user = result.user;
+    } else if (user.status !== "active") {
+      throw new UnauthorizedException("Account is not active.");
     } else if (!user.emailVerifiedAt) {
       user = await this.database.client.user.update({
         where: { id: user.id },

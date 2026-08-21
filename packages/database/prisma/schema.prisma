@@ -75,6 +75,7 @@ model User {
   email             String               @unique @db.VarChar(320)
   name              String               @db.VarChar(160)
   passwordHash      String               @map("password_hash") @db.VarChar(255)
+  status            String               @default("active") @db.VarChar(32)
   emailVerifiedAt   DateTime?            @map("email_verified_at")
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
@@ -86,11 +87,13 @@ model User {
   auditEvents       AuditEvent[]
   connections       ProviderConnection[]
   oauthStates       OAuthState[]
+  siteAnalysisRecords SiteAnalysisRecord[]
   manualConnectionRequests ManualConnectionRequest[]
   mcpOAuthClients McpOAuthClient[]
   mcpOAuthCodes McpOAuthAuthorizationCode[]
 
   @@index([email])
+  @@index([status, createdAt])
   @@map("users")
 }
 
@@ -107,6 +110,7 @@ model Workspace {
   connections  ProviderConnection[]
   providerAccounts ProviderAccount[]
   oauthStates  OAuthState[]
+  siteAnalysisRecords SiteAnalysisRecord[]
   subscriptions WorkspaceSubscription[]
   billingOrders BillingOrder[]
   usageRecords UsageRecord[]
@@ -353,6 +357,21 @@ model SystemMetadata {
 
   @@index([updatedAt])
   @@map("system_metadata")
+}
+
+model SiteAnalysisRecord {
+  id          String   @id @default(uuid()) @db.Uuid
+  workspaceId String   @map("workspace_id") @db.Uuid
+  userId      String   @map("user_id") @db.Uuid
+  url         String   @db.VarChar(2048)
+  result      Json
+  createdAt   DateTime @default(now()) @map("created_at")
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, userId, createdAt])
+  @@index([workspaceId, createdAt])
+  @@map("site_analysis_records")
 }
 
 model ManualConnectionRequest {

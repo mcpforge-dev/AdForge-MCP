@@ -50,9 +50,20 @@ export class SessionService {
   public async validate(token: string): Promise<SessionRecord | null> {
     const session = await this.database.client.session.findUnique({
       where: { tokenDigest: digestToken(token, this.config.sessionHashSecret) },
-      select: { id: true, userId: true, expiresAt: true, revokedAt: true },
+      select: {
+        id: true,
+        userId: true,
+        expiresAt: true,
+        revokedAt: true,
+        user: { select: { status: true } },
+      },
     });
-    if (!session || session.revokedAt || session.expiresAt <= new Date())
+    if (
+      !session ||
+      session.revokedAt ||
+      session.expiresAt <= new Date() ||
+      session.user.status !== "active"
+    )
       return null;
     await this.database.client.session.update({
       where: { id: session.id },
