@@ -1,8 +1,9 @@
 # V1 MCP tool parity manifest
 
-Inventory получен из V1 AST builders. Он фиксирует внешний contract до
-blue/green cutover, но не является заявлением о том, что все 134 инструмента
-уже реализованы в V2.
+Inventory получен из фактического `create_server().list_tools()` V1. Он
+фиксирует 135 внешних имён до blue/green cutover. V2 публикует те же имена,
+но наличие имени не означает, что provider уже поддерживает соответствующие
+данные или mutation.
 
 ## Источники
 
@@ -14,7 +15,7 @@ blue/green cutover, но не является заявлением о том, �
 
 ## Группы
 
-В исходном V1 inventory 134 имени. Среди них discovery/account reads,
+В исходном V1 inventory 135 имён. Среди них discovery/account reads,
 campaign reads, metrics, reports, Meta Business/Page/Instagram, SEO, site
 analysis, preview/write intents и skill presets.
 
@@ -48,7 +49,7 @@ Commit требует `adforge:mcp:write`, явное подтверждение
 конфигурации. Даже при наличии scope текущий provider mutation adapter не
 вызывается: `preview_only` остаётся включённым.
 
-### Не выдаётся за готовую функцию
+### Сохранено для drop-in compatibility с явным ограничением
 
 - подробные ad/adset/ad-group/keyword reports;
 - billing/balance и auction insights;
@@ -58,9 +59,12 @@ Commit требует `adforge:mcp:write`, явное подтверждение
 - create/update/delete рекламных объектов;
 - полноценная background provider sync.
 
-Эти имена не должны появляться в `tools/list`, пока для них нет реального
-adapter, контракта, tenant authorization и regression tests. Placeholder
-ответы запрещены.
+Эти имена сохраняются в `tools/list`, чтобы существующие AI-клиенты не теряли
+внешний contract. Если реального adapter нет, сервер возвращает
+`status=unavailable`, `data_status=unsupported`, `real_data=false`. Fixture,
+seeded или mock-ответ не подменяет live-данные. Все preview-intents создают
+TTL-bound preview и остаются `simulated_no_write`; commit требует write scope,
+одноразовое подтверждение и в Phase A блокируется server policy.
 
 ## Acceptance rule
 

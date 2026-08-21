@@ -364,6 +364,48 @@ textarea:focus {
   resize: vertical;
   overflow-wrap: anywhere;
 }
+.billing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 18px;
+}
+.billing-summary {
+  display: grid;
+  gap: 7px;
+  padding: 14px;
+  border: 1px solid #303b4c;
+  border-radius: 7px;
+}
+.billing-summary small,
+.billing-summary span,
+.plan-row small {
+  color: #8e99aa;
+}
+.billing-summary strong {
+  font-size: 1.25rem;
+}
+.plan-list {
+  display: grid;
+  gap: 8px;
+  margin-top: 16px;
+}
+.plan-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #26303d;
+}
+.plan-row span {
+  display: grid;
+  gap: 4px;
+}
+.plan-row em {
+  color: #9eb5ff;
+  font-size: 0.75rem;
+  font-style: normal;
+}
 
 @media (max-width: 720px) {
   main {
@@ -397,6 +439,9 @@ textarea:focus {
     width: 100%;
   }
   .token-form {
+    grid-template-columns: 1fr;
+  }
+  .billing-grid {
     grid-template-columns: 1fr;
   }
   .check-row {

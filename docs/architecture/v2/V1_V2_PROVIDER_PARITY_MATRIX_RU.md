@@ -23,5 +23,12 @@
 | Provider-neutral read API          | Phase 3 contracts                                | summary/campaigns/metrics/health routes                                     | IMPLEMENTED | typecheck + API security review              |
 | Tenant isolation                   | Phase 2/3                                        | workspace + connection + selected account server checks                     | TESTED      | existing integration + route guards          |
 | Production live read               | v1 live credentials                              | optional env-only smoke                                                     | NOT_STARTED | intentionally pending, no credentials copied |
+| Yandex OAuth / account discovery    | `web/partner_oauth.py`                           | `adapters/yandex.direct.ts`                                                  | TESTED      | OAuth and clients contract                    |
+| TikTok OAuth / advertiser discovery | `web/partner_oauth.py`                           | `adapters/tiktok.ads.ts`                                                     | TESTED      | OAuth and advertisers contract                |
+
+V1 Yandex/TikTok campaign reporting was preview/seeded provider output rather
+than verified live reads. V2 deliberately does not label those shapes as live
+provider parity. Real campaign and metrics adapters remain a future provider
+capability and are not a cutover regression from a confirmed V1 live read.
 
 Phase 4 не переносит write/MCP/Hermes. `ads_management` только отражается как capability OAuth при явном env-флаге; `write=false` остаётся в v2 registry.

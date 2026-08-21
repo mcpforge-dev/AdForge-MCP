@@ -55,6 +55,21 @@ type ServiceToken = {
   revokedAt: string | null;
   lastUsedAt: string | null;
 };
+type Plan = {
+  id: string;
+  key: string;
+  name: string;
+  description: string | null;
+  features: Record<string, unknown>;
+  prices: Array<{ currency: string; amount: string; interval: string }>;
+};
+type Subscription = {
+  status: string;
+  currentPeriodEnd: string;
+  plan: { key: string; name: string };
+} | null;
+type UsageRecord = { metricKey: string; quantity: string; periodEnd: string };
+type Entitlement = { featureKey: string; value: unknown; source: string };
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -89,6 +104,10 @@ export default function DashboardPage() {
   const [siteUrl, setSiteUrl] = useState("");
   const [serviceTokens, setServiceTokens] = useState<ServiceToken[]>([]);
   const [createdServiceToken, setCreatedServiceToken] = useState("");
+  const [plans, setPlans] = useState<Plan[]>([]);
+  const [subscription, setSubscription] = useState<Subscription>(null);
+  const [usage, setUsage] = useState<UsageRecord[]>([]);
+  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
   const [error, setError] = useState("");
 
   async function loadManualRequests() {
@@ -190,6 +209,29 @@ export default function DashboardPage() {
     if (response.ok) setServiceTokens((await response.json()) as ServiceToken[]);
   }
 
+  async function loadBilling(workspace: Workspace) {
+    if (!["OWNER", "ADMIN"].includes(workspace.role)) return;
+    const [plansResponse, subscriptionResponse, usageResponse, entitlementResponse] =
+      await Promise.all([
+        fetch(`${API}/api/v1/plans`, { credentials: "include" }),
+        fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/subscription`, {
+          credentials: "include",
+        }),
+        fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/usage`, {
+          credentials: "include",
+        }),
+        fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/entitlements`, {
+          credentials: "include",
+        }),
+      ]);
+    if (plansResponse.ok) setPlans((await plansResponse.json()) as Plan[]);
+    if (subscriptionResponse.ok)
+      setSubscription((await subscriptionResponse.json()) as Subscription);
+    if (usageResponse.ok) setUsage((await usageResponse.json()) as UsageRecord[]);
+    if (entitlementResponse.ok)
+      setEntitlements((await entitlementResponse.json()) as Entitlement[]);
+  }
+
   useEffect(() => {
     void loadWorkspaces();
   }, []);
@@ -198,6 +240,7 @@ export default function DashboardPage() {
     void loadMembers(active);
     void loadConnections(active);
     void loadServiceTokens(active);
+    void loadBilling(active);
     void loadManualRequests();
   }, [active]);
 
@@ -735,6 +778,50 @@ export default function DashboardPage() {
                     Отозвать
                   </button>
                 )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {active && ["OWNER", "ADMIN"].includes(active.role) && (
+        <section className="panel connections-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Billing</p>
+              <h2>Тариф и использование</h2>
+            </div>
+            <span className="muted">
+              Платёжный провайдер подключается отдельным adapter и пока не выбран.
+            </span>
+          </div>
+          <div className="billing-grid">
+            <div className="billing-summary">
+              <small>Текущий тариф</small>
+              <strong>{subscription?.plan.name ?? "Тариф ещё не назначен"}</strong>
+              <span>{subscription?.status ?? "Без активной подписки"}</span>
+            </div>
+            <div className="billing-summary">
+              <small>MCP-запросы за период</small>
+              <strong>
+                {usage.find((item) => item.metricKey === "mcp.requests")?.quantity ?? "0"}
+              </strong>
+              <span>Учитываются только успешные вызовы инструментов</span>
+            </div>
+            <div className="billing-summary">
+              <small>Индивидуальные права</small>
+              <strong>{entitlements.length}</strong>
+              <span>{entitlements.map((item) => item.featureKey).join(", ") || "Нет"}</span>
+            </div>
+          </div>
+          <div className="plan-list">
+            {plans.map((plan) => (
+              <div className="plan-row" key={plan.id}>
+                <span>
+                  <strong>{plan.name}</strong>
+                  <small>{plan.description}</small>
+                </span>
+                <em>{plan.key}</em>
               </div>
             ))}
           </div>
