@@ -51,6 +51,45 @@ const rawConfigSchema = z.object({
     .regex(/^v\d+\.\d+$/)
     .default("v20.0"),
   PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED: booleanFromEnv.default(false),
+  PROVIDER_TIKTOK_CLIENT_ID: z.string().optional(),
+  PROVIDER_TIKTOK_CLIENT_SECRET: z.string().optional(),
+  PROVIDER_TIKTOK_REDIRECT_URI: z.string().url().optional(),
+  PROVIDER_TIKTOK_AUTH_URI: z
+    .string()
+    .url()
+    .default("https://ads.tiktok.com/marketing_api/auth"),
+  PROVIDER_TIKTOK_TOKEN_URI: z
+    .string()
+    .url()
+    .default(
+      "https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/",
+    ),
+  PROVIDER_TIKTOK_ADVERTISER_URI: z
+    .string()
+    .url()
+    .default(
+      "https://business-api.tiktok.com/open_api/v1.3/oauth2/advertiser/get/",
+    ),
+  PROVIDER_TIKTOK_SCOPES: z.string().default(""),
+  PROVIDER_TIKTOK_ADVERTISER_ID: z.string().optional(),
+  PROVIDER_YANDEX_CLIENT_ID: z.string().optional(),
+  PROVIDER_YANDEX_CLIENT_SECRET: z.string().optional(),
+  PROVIDER_YANDEX_REDIRECT_URI: z.string().url().optional(),
+  PROVIDER_YANDEX_AUTH_URI: z
+    .string()
+    .url()
+    .default("https://oauth.yandex.ru/authorize"),
+  PROVIDER_YANDEX_TOKEN_URI: z
+    .string()
+    .url()
+    .default("https://oauth.yandex.ru/token"),
+  PROVIDER_YANDEX_CLIENTS_URI: z
+    .string()
+    .url()
+    .default("https://api.direct.yandex.com/json/v5/clients"),
+  PROVIDER_YANDEX_SCOPE: z.string().default("direct:api"),
+  PROVIDER_YANDEX_LOGIN: z.string().optional(),
+  PROVIDER_YANDEX_CLIENT_LOGIN: z.string().optional(),
   PROVIDER_HTTP_TIMEOUT_MS: z.coerce
     .number()
     .int()
@@ -97,6 +136,23 @@ export type AppConfig = {
   providerMetaRedirectUri: string | undefined;
   providerMetaApiVersion: string;
   providerMetaAdsManagementOauthEnabled: boolean;
+  providerTikTokClientId: string | undefined;
+  providerTikTokClientSecret: string | undefined;
+  providerTikTokRedirectUri: string | undefined;
+  providerTikTokAuthUri: string;
+  providerTikTokTokenUri: string;
+  providerTikTokAdvertiserUri: string;
+  providerTikTokScopes: string;
+  providerTikTokAdvertiserId: string | undefined;
+  providerYandexClientId: string | undefined;
+  providerYandexClientSecret: string | undefined;
+  providerYandexRedirectUri: string | undefined;
+  providerYandexAuthUri: string;
+  providerYandexTokenUri: string;
+  providerYandexClientsUri: string;
+  providerYandexScope: string;
+  providerYandexLogin: string | undefined;
+  providerYandexClientLogin: string | undefined;
   providerHttpTimeoutMs: number;
   cookieDomain: string | undefined;
   sessionTtlDays: number;
@@ -144,10 +200,55 @@ function withV1ProviderAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   value.PROVIDER_META_API_VERSION ??= nonEmpty(
     value.AD_MCP_META_OAUTH_API_VERSION,
   );
-  value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED ??= value
-    .AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED;
+  value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED ??=
+    value.AD_MCP_META_ADS_MANAGEMENT_OAUTH_ENABLED;
   value.PROVIDER_META_REDIRECT_URI ??= callback(
     value.AD_MCP_META_OAUTH_REDIRECT_PATH,
+  );
+  value.PROVIDER_TIKTOK_CLIENT_ID ??= nonEmpty(
+    value.AD_MCP_TIKTOK_OAUTH_APP_ID,
+  );
+  value.PROVIDER_TIKTOK_CLIENT_SECRET ??= nonEmpty(
+    value.AD_MCP_TIKTOK_OAUTH_APP_SECRET,
+  );
+  value.PROVIDER_TIKTOK_REDIRECT_URI ??= callback(
+    value.AD_MCP_TIKTOK_OAUTH_REDIRECT_PATH,
+  );
+  value.PROVIDER_TIKTOK_AUTH_URI ??= nonEmpty(
+    value.AD_MCP_TIKTOK_OAUTH_AUTH_URL,
+  );
+  value.PROVIDER_TIKTOK_TOKEN_URI ??= nonEmpty(
+    value.AD_MCP_TIKTOK_OAUTH_TOKEN_URL,
+  );
+  value.PROVIDER_TIKTOK_ADVERTISER_URI ??= nonEmpty(
+    value.AD_MCP_TIKTOK_OAUTH_ADVERTISER_GET_URL,
+  );
+  value.PROVIDER_TIKTOK_SCOPES ??= value.AD_MCP_TIKTOK_OAUTH_SCOPES;
+  value.PROVIDER_TIKTOK_ADVERTISER_ID ??= nonEmpty(
+    value.AD_MCP_TIKTOK_OAUTH_ADVERTISER_ID,
+  );
+  value.PROVIDER_YANDEX_CLIENT_ID ??= nonEmpty(
+    value.AD_MCP_YANDEX_OAUTH_CLIENT_ID,
+  );
+  value.PROVIDER_YANDEX_CLIENT_SECRET ??= nonEmpty(
+    value.AD_MCP_YANDEX_OAUTH_CLIENT_SECRET,
+  );
+  value.PROVIDER_YANDEX_REDIRECT_URI ??= callback(
+    value.AD_MCP_YANDEX_OAUTH_REDIRECT_PATH,
+  );
+  value.PROVIDER_YANDEX_AUTH_URI ??= nonEmpty(
+    value.AD_MCP_YANDEX_OAUTH_AUTHORIZE_URL,
+  );
+  value.PROVIDER_YANDEX_TOKEN_URI ??= nonEmpty(
+    value.AD_MCP_YANDEX_OAUTH_TOKEN_URL,
+  );
+  value.PROVIDER_YANDEX_CLIENTS_URI ??= nonEmpty(
+    value.AD_MCP_YANDEX_DIRECT_CLIENTS_URL,
+  );
+  value.PROVIDER_YANDEX_SCOPE ??= nonEmpty(value.AD_MCP_YANDEX_OAUTH_SCOPE);
+  value.PROVIDER_YANDEX_LOGIN ??= nonEmpty(value.AD_MCP_YANDEX_DIRECT_LOGIN);
+  value.PROVIDER_YANDEX_CLIENT_LOGIN ??= nonEmpty(
+    value.AD_MCP_YANDEX_DIRECT_CLIENT_LOGIN,
   );
   return value;
 }
@@ -207,6 +308,23 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerMetaApiVersion: value.PROVIDER_META_API_VERSION,
     providerMetaAdsManagementOauthEnabled:
       value.PROVIDER_META_ADS_MANAGEMENT_OAUTH_ENABLED,
+    providerTikTokClientId: value.PROVIDER_TIKTOK_CLIENT_ID,
+    providerTikTokClientSecret: value.PROVIDER_TIKTOK_CLIENT_SECRET,
+    providerTikTokRedirectUri: value.PROVIDER_TIKTOK_REDIRECT_URI,
+    providerTikTokAuthUri: value.PROVIDER_TIKTOK_AUTH_URI,
+    providerTikTokTokenUri: value.PROVIDER_TIKTOK_TOKEN_URI,
+    providerTikTokAdvertiserUri: value.PROVIDER_TIKTOK_ADVERTISER_URI,
+    providerTikTokScopes: value.PROVIDER_TIKTOK_SCOPES,
+    providerTikTokAdvertiserId: value.PROVIDER_TIKTOK_ADVERTISER_ID,
+    providerYandexClientId: value.PROVIDER_YANDEX_CLIENT_ID,
+    providerYandexClientSecret: value.PROVIDER_YANDEX_CLIENT_SECRET,
+    providerYandexRedirectUri: value.PROVIDER_YANDEX_REDIRECT_URI,
+    providerYandexAuthUri: value.PROVIDER_YANDEX_AUTH_URI,
+    providerYandexTokenUri: value.PROVIDER_YANDEX_TOKEN_URI,
+    providerYandexClientsUri: value.PROVIDER_YANDEX_CLIENTS_URI,
+    providerYandexScope: value.PROVIDER_YANDEX_SCOPE,
+    providerYandexLogin: value.PROVIDER_YANDEX_LOGIN,
+    providerYandexClientLogin: value.PROVIDER_YANDEX_CLIENT_LOGIN,
     providerHttpTimeoutMs: value.PROVIDER_HTTP_TIMEOUT_MS,
     cookieDomain: value.COOKIE_DOMAIN,
     sessionTtlDays: value.SESSION_TTL_DAYS,

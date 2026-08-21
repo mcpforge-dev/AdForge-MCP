@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "@holymedia/config";
 import { GoogleAdsAdapter } from "./adapters/google.ads.js";
 import { MetaAdsAdapter } from "./adapters/meta.ads.js";
+import { TikTokAdsAdapter } from "./adapters/tiktok.ads.js";
+import { YandexDirectAdapter } from "./adapters/yandex.direct.js";
 import {
   googleAccessibleCustomersFixture,
   googleCampaignFixture,
@@ -143,5 +145,104 @@ describe("Meta Ads v2 adapter", () => {
     );
     expect(instagram.linkedInstagram?.username).toBe("saqta_market.kz");
     expect(posts.provenance.sourceApi).toContain("published_posts");
+  });
+});
+
+describe("V1 partner OAuth adapters", () => {
+  it("keeps Yandex Direct callback and client discovery contract", async () => {
+    const partnerConfig = loadConfig({
+      NODE_ENV: "test",
+      PROVIDER_YANDEX_CLIENT_ID: "yandex-client",
+      PROVIDER_YANDEX_CLIENT_SECRET: "yandex-secret",
+      PROVIDER_YANDEX_REDIRECT_URI:
+        "https://mcp.example.test/oauth/yandex/callback",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          access_token: "yandex-access",
+          refresh_token: "yandex-refresh",
+          expires_in: 3600,
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          result: {
+            Clients: [
+              {
+                Login: "123456",
+                ClientInfo: "Yandex client",
+                Currency: "RUB",
+                Archived: "NO",
+              },
+            ],
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new YandexDirectAdapter(partnerConfig);
+    const url = new URL(
+      adapter.authorizationUrl({
+        state: "state",
+        redirectUri: partnerConfig.providerYandexRedirectUri!,
+      }),
+    );
+    expect(url.hostname).toBe("oauth.yandex.ru");
+    expect(url.pathname).toBe("/authorize");
+    const credentials = await adapter.exchangeCode({
+      code: "code",
+      redirectUri: partnerConfig.providerYandexRedirectUri!,
+    });
+    const accounts = await adapter.discoverAccounts(credentials);
+    expect(accounts[0]).toMatchObject({
+      externalAccountId: "123456",
+      currency: "RUB",
+      status: "active",
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps TikTok advertiser discovery read-only and does not expose app secret", async () => {
+    const partnerConfig = loadConfig({
+      NODE_ENV: "test",
+      PROVIDER_TIKTOK_CLIENT_ID: "tiktok-client",
+      PROVIDER_TIKTOK_CLIENT_SECRET: "tiktok-secret",
+      PROVIDER_TIKTOK_REDIRECT_URI:
+        "https://mcp.example.test/oauth/tiktok/callback",
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            access_token: "tiktok-access",
+            refresh_token: "tiktok-refresh",
+          },
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          data: {
+            advertiser_ids: [
+              { advertiser_id: "adv-1", advertiser_name: "TikTok client" },
+            ],
+          },
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new TikTokAdsAdapter(partnerConfig);
+    const credentials = await adapter.exchangeCode({
+      code: "code",
+      redirectUri: partnerConfig.providerTikTokRedirectUri!,
+    });
+    expect(credentials).not.toHaveProperty("clientSecret");
+    const accounts = await adapter.discoverAccounts(credentials);
+    expect(accounts).toEqual([
+      expect.objectContaining({
+        externalAccountId: "adv-1",
+        displayName: "TikTok client",
+      }),
+    ]);
   });
 });

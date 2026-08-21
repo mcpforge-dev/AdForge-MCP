@@ -12,6 +12,8 @@ import {
   googleAdsDefinition,
 } from "./adapters/google.ads.js";
 import { MetaAdsAdapter, metaAdsDefinition } from "./adapters/meta.ads.js";
+import { TikTokAdsAdapter } from "./adapters/tiktok.ads.js";
+import { YandexDirectAdapter } from "./adapters/yandex.direct.js";
 
 @Injectable()
 export class ProviderRegistry {
@@ -21,6 +23,8 @@ export class ProviderRegistry {
   public constructor() {
     const google = new GoogleAdsAdapter(this.config);
     const meta = new MetaAdsAdapter(this.config);
+    const yandex = new YandexDirectAdapter(this.config);
+    const tiktok = new TikTokAdsAdapter(this.config);
     this.entries = [
       {
         definition: googleAdsDefinition(
@@ -35,34 +39,8 @@ export class ProviderRegistry {
         ),
         adapter: meta,
       },
-      configuredEntry(
-        {
-          id: "YANDEX_DIRECT",
-          displayName: "Yandex Direct",
-          oauth: true,
-          pkce: true,
-          accountDiscovery: true,
-          refresh: true,
-          read: false,
-          write: false,
-          scopes: [],
-        },
-        false,
-      ),
-      configuredEntry(
-        {
-          id: "TIKTOK_ADS",
-          displayName: "TikTok Ads",
-          oauth: true,
-          pkce: true,
-          accountDiscovery: true,
-          refresh: true,
-          read: false,
-          write: false,
-          scopes: [],
-        },
-        false,
-      ),
+      { definition: yandex.definition, adapter: yandex },
+      { definition: tiktok.definition, adapter: tiktok },
       {
         definition: testProviderDefinition(),
         adapter: new TestProviderAdapter(),
@@ -125,17 +103,5 @@ function testProviderDefinition(): ProviderDefinition {
     write: false,
     status: "test_only",
     scopes: ["test.accounts.read"],
-  };
-}
-
-function configuredEntry(
-  definition: Omit<ProviderDefinition, "status">,
-  configured: boolean,
-): ProviderRegistryEntry {
-  return {
-    definition: {
-      ...definition,
-      status: configured ? "available" : "configuration_required",
-    },
   };
 }

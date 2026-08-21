@@ -59,4 +59,26 @@ describe("v2 configuration", () => {
       "https://mcp.holymedia.kz/oauth/meta/callback",
     );
   });
+
+  it("maps V1 Yandex and TikTok configuration without changing callback paths", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      AD_MCP_PUBLIC_BASE_URL: "https://mcp.holymedia.kz",
+      AD_MCP_TIKTOK_OAUTH_APP_ID: "tiktok-app",
+      AD_MCP_TIKTOK_OAUTH_APP_SECRET: "tiktok-secret",
+      AD_MCP_TIKTOK_OAUTH_REDIRECT_PATH: "/oauth/tiktok/callback",
+      AD_MCP_YANDEX_OAUTH_CLIENT_ID: "yandex-client",
+      AD_MCP_YANDEX_OAUTH_CLIENT_SECRET: "yandex-secret",
+      AD_MCP_YANDEX_OAUTH_REDIRECT_PATH: "/oauth/yandex/callback",
+    });
+
+    expect(config.providerTikTokClientId).toBe("tiktok-app");
+    expect(config.providerTikTokRedirectUri).toBe(
+      "https://mcp.holymedia.kz/oauth/tiktok/callback",
+    );
+    expect(config.providerYandexClientId).toBe("yandex-client");
+    expect(config.providerYandexRedirectUri).toBe(
+      "https://mcp.holymedia.kz/oauth/yandex/callback",
+    );
+  });
 });
