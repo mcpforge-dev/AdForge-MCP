@@ -5,10 +5,6 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "HolyMedia MCP v2",
   description: "Production foundation for HolyMedia MCP.",
-  robots: {
-    index: false,
-    follow: false,
-  },
 };
 
 export default function RootLayout({
