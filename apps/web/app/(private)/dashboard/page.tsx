@@ -85,6 +85,29 @@ async function csrf(): Promise<string> {
   return data.csrfToken;
 }
 
+async function recordProductEvent(
+  workspaceId: string,
+  eventName:
+    | "provider.connect_clicked"
+    | "provider.account_selected"
+    | "mcp.setup_viewed"
+    | "report.downloaded",
+): Promise<void> {
+  try {
+    await fetch(`${API}/api/v1/workspaces/${workspaceId}/analytics/events`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": await csrf(),
+      },
+      body: JSON.stringify({ event_name: eventName }),
+    });
+  } catch {
+    // Analytics must never interrupt the requested product action.
+  }
+}
+
 function lastSevenDays(): { startDate: string; endDate: string } {
   const end = new Date(Date.now() - 86_400_000);
   const start = new Date(end.getTime() - 6 * 86_400_000);
@@ -280,6 +303,8 @@ export default function DashboardPage() {
     void loadServiceTokens(active);
     void loadBilling(active);
     void loadAnalytics(active);
+    if (["OWNER", "ADMIN"].includes(active.role))
+      void recordProductEvent(active.id, "mcp.setup_viewed");
     void loadManualRequests();
   }, [active]);
 
@@ -317,6 +342,7 @@ export default function DashboardPage() {
 
   async function startProvider(provider: string) {
     if (!active) return;
+    await recordProductEvent(active.id, "provider.connect_clicked");
     const response = await fetch(
       `${API}/api/v1/workspaces/${active.id}/connections/${provider}/oauth/start`,
       {
@@ -375,8 +401,11 @@ export default function DashboardPage() {
         body: JSON.stringify({ enabled }),
       },
     );
-    if (response.ok) await loadConnections(active);
-    else setError("Не удалось изменить доступ к рекламному кабинету.");
+    if (response.ok) {
+      if (enabled)
+        await recordProductEvent(active.id, "provider.account_selected");
+      await loadConnections(active);
+    } else setError("Не удалось изменить доступ к рекламному кабинету.");
   }
 
   async function readSmoke(connection: Connection, account: ProviderAccount) {
@@ -429,6 +458,7 @@ export default function DashboardPage() {
     link.download = "holymedia-performance-report.docx";
     link.click();
     URL.revokeObjectURL(link.href);
+    await recordProductEvent(active.id, "report.downloaded");
   }
 
   async function analyzeSite(event: FormEvent<HTMLFormElement>) {
