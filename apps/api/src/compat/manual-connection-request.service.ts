@@ -26,6 +26,8 @@ const statusMap = {
   cancelled: "CANCELED",
 } as const;
 
+const supportPermission = "support.connection_requests.manage";
+
 @Injectable()
 export class ManualConnectionRequestService {
   public constructor(
@@ -102,20 +104,32 @@ export class ManualConnectionRequestService {
   }
 
   public async listForAdmin(principal: HumanPrincipal) {
+    const supportAccess = await this.hasSupportAccess(principal.userId);
     const memberships = await this.database.client.workspaceMembership.findMany(
       {
         where: { userId: principal.userId, role: { in: ["OWNER", "ADMIN"] } },
         select: { workspaceId: true },
       },
     );
+    if (!supportAccess && memberships.length === 0)
+      throw new ForbiddenException("Support access required.");
     const rows = await this.database.client.manualConnectionRequest.findMany({
-      where: {
-        workspaceId: { in: memberships.map((item) => item.workspaceId) },
-      },
+      ...(supportAccess
+        ? {}
+        : {
+            where: {
+              workspaceId: {
+                in: memberships.map((item) => item.workspaceId),
+              },
+            },
+          }),
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       take: 100,
     });
-    return { requests: rows.map((row) => this.view(row)) };
+    return {
+      requests: rows.map((row) => this.view(row)),
+      support_access: supportAccess,
+    };
   }
 
   public async update(
@@ -124,23 +138,7 @@ export class ManualConnectionRequestService {
     input: UpdateManualConnectionRequestDto,
     request: RequestWithAuth,
   ) {
-    const current =
-      await this.database.client.manualConnectionRequest.findUnique({
-        where: { id: requestId },
-      });
-    if (!current) throw new NotFoundException("Заявка не найдена.");
-    const membership =
-      await this.database.client.workspaceMembership.findUnique({
-        where: {
-          workspaceId_userId: {
-            workspaceId: current.workspaceId,
-            userId: principal.userId,
-          },
-        },
-        select: { role: true },
-      });
-    if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
-      throw new ForbiddenException("Нет прав на изменение заявки.");
+    const current = await this.authorizedRequest(principal, requestId);
     const row = await this.database.client.manualConnectionRequest.update({
       where: { id: current.id },
       data: {
@@ -266,6 +264,7 @@ export class ManualConnectionRequestService {
         where: { id: requestId },
       });
     if (!current) throw new NotFoundException("Connection request not found.");
+    if (await this.hasSupportAccess(principal.userId)) return current;
     const membership =
       await this.database.client.workspaceMembership.findUnique({
         where: {
@@ -279,6 +278,19 @@ export class ManualConnectionRequestService {
     if (!membership || !["OWNER", "ADMIN"].includes(membership.role))
       throw new ForbiddenException("Admin access required.");
     return current;
+  }
+
+  private async hasSupportAccess(userId: string): Promise<boolean> {
+    const grant = await this.database.client.userPermissionGrant.findFirst({
+      where: {
+        userId,
+        revokedAt: null,
+        permission: { key: supportPermission },
+        OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }],
+      },
+      select: { id: true },
+    });
+    return Boolean(grant);
   }
 
   private view(row: {

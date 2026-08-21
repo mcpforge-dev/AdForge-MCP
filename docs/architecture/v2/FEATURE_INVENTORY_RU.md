@@ -23,7 +23,7 @@
 | Hermes | implemented/partial | separate read-only Telegram gateway, deterministic Russian analytics, optional AI boundary | deployment/runtime integration and full V1 scenario parity |
 | Billing/plans | foundation | schema for plans/prices/subscriptions/orders/attempts/usage/entitlements, read API, payment port | checkout/webhook provider and quota enforcement |
 | Product analytics | partial | audit events and provider metrics | privacy-safe product event pipeline |
-| Admin | implemented/partial | workspace-scoped user/status/role/diagnostics, manual request UI and specialist OAuth pending flow | full admin UI and end-to-end specialist handoff |
+| Admin | implemented/partial | workspace-scoped user/status/role/diagnostics, self-service OAuth, manual request UI and least-privilege support grant | full admin UI and end-to-end specialist handoff |
 | Background jobs | foundation | BullMQ, retry/graceful shutdown, discovery queue boundary | actual provider discovery/health jobs |
 | Observability | foundation | structured logs, request IDs, safe errors, provider metrics | OTel exporter, dashboards and alerting |
 

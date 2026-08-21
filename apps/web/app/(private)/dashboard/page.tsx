@@ -72,6 +72,7 @@ export default function DashboardPage() {
   const [adminManualRequests, setAdminManualRequests] = useState<
     ManualRequest[]
   >([]);
+  const [supportAccess, setSupportAccess] = useState(false);
   const [readResult, setReadResult] = useState<unknown>(null);
   const [siteResult, setSiteResult] = useState<unknown>(null);
   const [siteUrl, setSiteUrl] = useState("");
@@ -95,10 +96,13 @@ export default function DashboardPage() {
     if (adminResponse?.ok) {
       const data = (await adminResponse.json()) as {
         requests: ManualRequest[];
+        support_access?: boolean;
       };
       setAdminManualRequests(data.requests);
-    } else if (!active || !["OWNER", "ADMIN"].includes(active.role)) {
+      setSupportAccess(Boolean(data.support_access));
+    } else {
       setAdminManualRequests([]);
+      setSupportAccess(false);
     }
   }
 
@@ -629,12 +633,17 @@ export default function DashboardPage() {
               ))}
           </div>
         )}
-        {adminManualRequests.filter((item) => item.workspace_id === active?.id)
-          .length > 0 && (
+        {adminManualRequests.filter(
+          (item) => supportAccess || item.workspace_id === active?.id,
+        ).length > 0 && (
           <div className="provider-details">
-            <strong>Заявки для специалиста</strong>
+            <strong>
+              {supportAccess ? "Очередь поддержки" : "Заявки workspace"}
+            </strong>
             {adminManualRequests
-              .filter((item) => item.workspace_id === active?.id)
+              .filter(
+                (item) => supportAccess || item.workspace_id === active?.id,
+              )
               .map((item) => (
                 <div className="member-row" key={item.id}>
                   <span>

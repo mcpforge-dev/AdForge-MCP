@@ -22,6 +22,9 @@ describe("manual Meta connection workflow", () => {
         workspaceMembership: {
           findUnique: vi.fn().mockResolvedValue(null),
         },
+        userPermissionGrant: {
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
       },
     } as never;
     const service = new ManualConnectionRequestService(
@@ -55,6 +58,9 @@ describe("manual Meta connection workflow", () => {
         workspaceMembership: {
           findUnique: vi.fn().mockResolvedValue({ role: "ADMIN" }),
         },
+        userPermissionGrant: {
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
         providerAccount: {
           findFirst: vi.fn().mockResolvedValue({
             id: selected.id,
@@ -87,6 +93,38 @@ describe("manual Meta connection workflow", () => {
     expect(result.account).toMatchObject({
       external_account_id: selected.externalAccountId,
       enabled: true,
+    });
+  });
+
+  it("allows a support grant without workspace membership", async () => {
+    const database = {
+      client: {
+        manualConnectionRequest: {
+          findUnique: vi.fn().mockResolvedValue({
+            id: "request-a",
+            workspaceId: "workspace-client",
+          }),
+        },
+        userPermissionGrant: {
+          findFirst: vi.fn().mockResolvedValue({ id: "grant-a" }),
+        },
+        providerConnection: {
+          findFirst: vi.fn().mockResolvedValue(null),
+        },
+      },
+    } as never;
+    const service = new ManualConnectionRequestService(
+      database,
+      {} as never,
+      {} as never,
+    );
+
+    await expect(
+      service.pendingMeta(principal, "request-a"),
+    ).resolves.toMatchObject({
+      request_id: "request-a",
+      pending: [],
+      real_data: false,
     });
   });
 });
