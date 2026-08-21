@@ -802,6 +802,18 @@ class AdsWebHandler(BaseHTTPRequestHandler):
                 if not user:
                     return self._send_json({"authenticated": False}, HTTPStatus.UNAUTHORIZED)
                 return self._send_json({"authenticated": True, "user": user.public_dict()})
+            if route == "/api/auth/registration-status":
+                registration_code_required = bool(self.settings.auth_registration_code.strip())
+                registration_enabled = bool(
+                    self.settings.auth_enabled
+                    and (registration_code_required or self.settings.auth_allow_public_registration)
+                )
+                return self._send_json(
+                    {
+                        "enabled": registration_enabled,
+                        "requires_access_code": registration_code_required,
+                    }
+                )
             if route == "/api/mcp-token":
                 user = self._ensure_session_user()
                 if not user:

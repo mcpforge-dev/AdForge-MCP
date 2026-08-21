@@ -830,7 +830,7 @@ def test_legal_pages_are_public_and_linked_from_landing(tmp_path) -> None:
     assert privacy_head_body == terms_head_body == b""
 
 
-def test_registration_form_has_no_access_code_field(tmp_path) -> None:
+def test_registration_form_supports_server_registration_code(tmp_path) -> None:
     settings = Settings(
         project_root=tmp_path,
         env="production",
@@ -847,8 +847,29 @@ def test_registration_form_has_no_access_code_field(tmp_path) -> None:
         close()
 
     assert landing_status == script_status == 200
-    assert 'id="auth-access-code"' not in landing
-    assert "access_code" not in script
+    assert 'id="auth-access-code"' in landing
+    assert "access_code" in script
+
+
+def test_registration_status_does_not_expose_registration_code(tmp_path) -> None:
+    settings = Settings(
+        project_root=tmp_path,
+        env="production",
+        web_api_token="secret-token",
+        auth_registration_code="invite-only-code",
+        public_base_url="https://adforge.example",
+        connection_store_path="tokens/connections.json",
+        connections_fallback_to_local=False,
+    )
+    base_url, close = _serve(settings)
+    try:
+        status_code, payload = _get_json(base_url, "/api/auth/registration-status")
+    finally:
+        close()
+
+    assert status_code == 200
+    assert payload == {"enabled": True, "requires_access_code": True}
+    assert "invite-only-code" not in str(payload)
 
 
 def test_connections_ui_only_lists_advertising_platforms(tmp_path) -> None:
