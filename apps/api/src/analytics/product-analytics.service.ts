@@ -88,5 +88,7 @@ export function sanitizeProperties(
     }
     throw new BadRequestException("Unsupported analytics property.");
   }
-  return Object.keys(safe).length ? (safe as Prisma.InputJsonObject) : undefined;
+  return Object.keys(safe).length
+    ? (safe as Prisma.InputJsonObject)
+    : undefined;
 }

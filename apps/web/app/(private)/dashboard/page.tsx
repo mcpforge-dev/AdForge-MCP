@@ -70,6 +70,12 @@ type Subscription = {
 } | null;
 type UsageRecord = { metricKey: string; quantity: string; periodEnd: string };
 type Entitlement = { featureKey: string; value: unknown; source: string };
+type AnalyticsSummary = {
+  period: { days: number; since: string };
+  total_events: number;
+  active_users: number;
+  events: Array<{ name: string; count: number }>;
+};
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -108,7 +114,13 @@ export default function DashboardPage() {
   const [subscription, setSubscription] = useState<Subscription>(null);
   const [usage, setUsage] = useState<UsageRecord[]>([]);
   const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
+  const [analyticsSummary, setAnalyticsSummary] =
+    useState<AnalyticsSummary | null>(null);
   const [error, setError] = useState("");
+
+  const canManageMembers = Boolean(
+    active && ["OWNER", "ADMIN"].includes(active.role),
+  );
 
   async function loadManualRequests() {
     const [response, adminResponse] = await Promise.all([
@@ -206,30 +218,56 @@ export default function DashboardPage() {
       `${API}/api/v1/workspaces/${workspace.id}/service-tokens`,
       { credentials: "include" },
     );
-    if (response.ok) setServiceTokens((await response.json()) as ServiceToken[]);
+    if (response.ok)
+      setServiceTokens((await response.json()) as ServiceToken[]);
   }
 
   async function loadBilling(workspace: Workspace) {
-    if (!["OWNER", "ADMIN"].includes(workspace.role)) return;
-    const [plansResponse, subscriptionResponse, usageResponse, entitlementResponse] =
-      await Promise.all([
-        fetch(`${API}/api/v1/plans`, { credentials: "include" }),
-        fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/subscription`, {
-          credentials: "include",
-        }),
-        fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/usage`, {
-          credentials: "include",
-        }),
-        fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/entitlements`, {
-          credentials: "include",
-        }),
-      ]);
+    if (!["OWNER", "ADMIN"].includes(workspace.role)) {
+      setPlans([]);
+      setSubscription(null);
+      setUsage([]);
+      setEntitlements([]);
+      return;
+    }
+    const [
+      plansResponse,
+      subscriptionResponse,
+      usageResponse,
+      entitlementResponse,
+    ] = await Promise.all([
+      fetch(`${API}/api/v1/plans`, { credentials: "include" }),
+      fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/subscription`, {
+        credentials: "include",
+      }),
+      fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/usage`, {
+        credentials: "include",
+      }),
+      fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/entitlements`, {
+        credentials: "include",
+      }),
+    ]);
     if (plansResponse.ok) setPlans((await plansResponse.json()) as Plan[]);
     if (subscriptionResponse.ok)
       setSubscription((await subscriptionResponse.json()) as Subscription);
-    if (usageResponse.ok) setUsage((await usageResponse.json()) as UsageRecord[]);
+    if (usageResponse.ok)
+      setUsage((await usageResponse.json()) as UsageRecord[]);
     if (entitlementResponse.ok)
       setEntitlements((await entitlementResponse.json()) as Entitlement[]);
+  }
+
+  async function loadAnalytics(workspace: Workspace) {
+    if (!["OWNER", "ADMIN"].includes(workspace.role)) {
+      setAnalyticsSummary(null);
+      return;
+    }
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${workspace.id}/analytics/summary?days=30`,
+      { credentials: "include" },
+    );
+    if (response.ok)
+      setAnalyticsSummary((await response.json()) as AnalyticsSummary);
+    else setAnalyticsSummary(null);
   }
 
   useEffect(() => {
@@ -241,8 +279,41 @@ export default function DashboardPage() {
     void loadConnections(active);
     void loadServiceTokens(active);
     void loadBilling(active);
+    void loadAnalytics(active);
     void loadManualRequests();
   }, [active]);
+
+  async function changeMemberRole(userId: string, role: string) {
+    if (!active) return;
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/members/${userId}`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({ role }),
+      },
+    );
+    if (response.ok) await loadMembers(active);
+    else setError("Не удалось изменить роль участника.");
+  }
+
+  async function removeMember(userId: string) {
+    if (!active || !window.confirm("Удалить участника из workspace?")) return;
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/members/${userId}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "x-csrf-token": await csrf() },
+      },
+    );
+    if (response.ok) await loadMembers(active);
+    else setError("Не удалось удалить участника.");
+  }
 
   async function startProvider(provider: string) {
     if (!active) return;
@@ -427,6 +498,7 @@ export default function DashboardPage() {
     }
     event.currentTarget.reset();
     setError("");
+    await loadMembers(active);
   }
 
   async function requestManualMeta(event: FormEvent<HTMLFormElement>) {
@@ -571,7 +643,30 @@ export default function DashboardPage() {
                 <strong>{member.user.name}</strong>
                 <small>{member.user.email}</small>
               </span>
-              <em>{member.role}</em>
+              {canManageMembers && member.role !== "OWNER" ? (
+                <select
+                  value={member.role}
+                  onChange={(event) =>
+                    void changeMemberRole(member.userId, event.target.value)
+                  }
+                  aria-label={`Роль участника ${member.user.name}`}
+                >
+                  <option value="VIEWER">Наблюдатель</option>
+                  <option value="MEMBER">Участник</option>
+                  <option value="ADMIN">Администратор</option>
+                </select>
+              ) : (
+                <em>{member.role}</em>
+              )}
+              {canManageMembers && member.role !== "OWNER" && (
+                <button
+                  className="ghost-button"
+                  type="button"
+                  onClick={() => void removeMember(member.userId)}
+                >
+                  Удалить
+                </button>
+              )}
             </div>
           ))}
           {active && (
@@ -703,13 +798,19 @@ export default function DashboardPage() {
               <h2>Доступ для AI-клиента и Гермеса</h2>
             </div>
             <span className="muted">
-              Токен показывается один раз. Ограничьте его только нужными кабинетами.
+              Токен показывается один раз. Ограничьте его только нужными
+              кабинетами.
             </span>
           </div>
           <form onSubmit={createServiceToken} className="token-form">
             <label>
               Название
-              <input name="name" required minLength={2} placeholder="Например, Гермес" />
+              <input
+                name="name"
+                required
+                minLength={2}
+                placeholder="Например, Гермес"
+              />
             </label>
             <label>
               Срок действия
@@ -726,7 +827,11 @@ export default function DashboardPage() {
                   .filter((account) => account.enabled)
                   .map((account) => (
                     <label key={account.id} className="check-row">
-                      <input type="checkbox" name="account_ids" value={account.id} />
+                      <input
+                        type="checkbox"
+                        name="account_ids"
+                        value={account.id}
+                      />
                       <span>{account.displayName}</span>
                       <small>{connection.provider}</small>
                     </label>
@@ -734,12 +839,18 @@ export default function DashboardPage() {
               )}
               {!connections.some((connection) =>
                 connection.accounts.some((account) => account.enabled),
-              ) && <small className="muted">Сначала подключите рекламный кабинет.</small>}
+              ) && (
+                <small className="muted">
+                  Сначала подключите рекламный кабинет.
+                </small>
+              )}
             </fieldset>
             <label className="check-row">
               <input type="checkbox" name="write" />
               <span>Разрешить подтверждаемые write-запросы</span>
-              <small>Фактические изменения всё ещё блокируются preview-only policy.</small>
+              <small>
+                Фактические изменения всё ещё блокируются preview-only policy.
+              </small>
             </label>
             <button className="primary-button" type="submit">
               Создать токен
@@ -764,7 +875,8 @@ export default function DashboardPage() {
                 <span>
                   <strong>{token.name}</strong>
                   <small>
-                    {token.tokenPrefix}… · {token.scopes.join(", ")} · кабинетов: {token.accountIds.length || "все workspace"}
+                    {token.tokenPrefix}… · {token.scopes.join(", ")} ·
+                    кабинетов: {token.accountIds.length || "все workspace"}
                   </small>
                 </span>
                 {token.revokedAt ? (
@@ -792,26 +904,33 @@ export default function DashboardPage() {
               <h2>Тариф и использование</h2>
             </div>
             <span className="muted">
-              Платёжный провайдер подключается отдельным adapter и пока не выбран.
+              Платёжный провайдер подключается отдельным adapter и пока не
+              выбран.
             </span>
           </div>
           <div className="billing-grid">
             <div className="billing-summary">
               <small>Текущий тариф</small>
-              <strong>{subscription?.plan.name ?? "Тариф ещё не назначен"}</strong>
+              <strong>
+                {subscription?.plan.name ?? "Тариф ещё не назначен"}
+              </strong>
               <span>{subscription?.status ?? "Без активной подписки"}</span>
             </div>
             <div className="billing-summary">
               <small>MCP-запросы за период</small>
               <strong>
-                {usage.find((item) => item.metricKey === "mcp.requests")?.quantity ?? "0"}
+                {usage.find((item) => item.metricKey === "mcp.requests")
+                  ?.quantity ?? "0"}
               </strong>
               <span>Учитываются только успешные вызовы инструментов</span>
             </div>
             <div className="billing-summary">
               <small>Индивидуальные права</small>
               <strong>{entitlements.length}</strong>
-              <span>{entitlements.map((item) => item.featureKey).join(", ") || "Нет"}</span>
+              <span>
+                {entitlements.map((item) => item.featureKey).join(", ") ||
+                  "Нет"}
+              </span>
             </div>
           </div>
           <div className="plan-list">
@@ -825,6 +944,57 @@ export default function DashboardPage() {
               </div>
             ))}
           </div>
+        </section>
+      )}
+
+      {active && ["OWNER", "ADMIN"].includes(active.role) && (
+        <section className="panel connections-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">Analytics</p>
+              <h2>Продуктовая аналитика workspace</h2>
+            </div>
+            <span className="muted">
+              Только агрегированные события без токенов, credentials и рекламных
+              идентификаторов.
+            </span>
+          </div>
+          <div className="billing-grid">
+            <div className="billing-summary">
+              <small>События за 30 дней</small>
+              <strong>{analyticsSummary?.total_events ?? "—"}</strong>
+              <span>Запуски функций и рабочие действия</span>
+            </div>
+            <div className="billing-summary">
+              <small>Активные пользователи</small>
+              <strong>{analyticsSummary?.active_users ?? "—"}</strong>
+              <span>Уникальные пользователи workspace</span>
+            </div>
+            <div className="billing-summary">
+              <small>Период</small>
+              <strong>{analyticsSummary ? "30 дней" : "Нет данных"}</strong>
+              <span>
+                {analyticsSummary
+                  ? `С ${new Date(analyticsSummary.period.since).toLocaleDateString("ru-RU")}`
+                  : "Сводка будет доступна после первого события"}
+              </span>
+            </div>
+          </div>
+          {analyticsSummary?.events.length ? (
+            <div className="plan-list">
+              {analyticsSummary.events.map((event) => (
+                <div className="plan-row" key={event.name}>
+                  <span>
+                    <strong>{event.name}</strong>
+                    <small>Событие workspace</small>
+                  </span>
+                  <em>{event.count}</em>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="muted">Событий за выбранный период пока нет.</p>
+          )}
         </section>
       )}
 

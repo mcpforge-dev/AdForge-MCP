@@ -54,7 +54,9 @@ describe("Hermes deterministic gateway", () => {
     ).toBe("сколько потратили?");
     expect(isWriteRequest("увеличь бюджет кампании на 20%")).toBe(true);
     expect(isWriteRequest("покажи расход за неделю")).toBe(false);
-    expect(isWriteRequest("какая кампания потратила больше всего?")).toBe(false);
+    expect(isWriteRequest("какая кампания потратила больше всего?")).toBe(
+      false,
+    );
   });
 
   it("formats only returned metrics and does not invent missing values", () => {
@@ -113,9 +115,7 @@ describe("Hermes deterministic gateway", () => {
       HERMES_TELEGRAM_BOT_TOKEN: "bot-secret",
       HERMES_MCP_TOKEN: "hmst_secret",
     });
-    expect(validateHermesConfig(config)).toContain(
-      "HERMES_ALLOWED_CHAT_IDS",
-    );
+    expect(validateHermesConfig(config)).toContain("HERMES_ALLOWED_CHAT_IDS");
   });
 
   it("accepts an enabled scoped configuration", () => {

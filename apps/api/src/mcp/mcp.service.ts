@@ -446,6 +446,7 @@ export class McpService {
       }
       case "generate_monthly_ads_report":
       case "collect_report_skill": {
+        await this.billing.requireFeature(principal.workspaceId, "reports");
         const account = await this.account(principal, args);
         const dates = range(args) ?? defaultReportRange();
         return this.reports.performance(principal.workspaceId, {
@@ -949,11 +950,12 @@ export class McpService {
       name === "get_meta_ads_detailed_report"
     ) {
       const provider =
-        name === "get_google_ads_detailed_report"
-          ? "google_ads"
-          : "meta_ads";
+        name === "get_google_ads_detailed_report" ? "google_ads" : "meta_ads";
       const reportType = text(args.report_type || args.reportType);
-      if (reportType && !["campaign", "campaigns", "campaign_performance"].includes(reportType)) {
+      if (
+        reportType &&
+        !["campaign", "campaigns", "campaign_performance"].includes(reportType)
+      ) {
         return {
           handled: true,
           value: capabilityUnavailable(name, {
@@ -1125,8 +1127,7 @@ export class McpService {
       return {
         account_id: account.externalAccountId,
         health,
-        businesses:
-          businesses.status === "fulfilled" ? businesses.value : [],
+        businesses: businesses.status === "fulfilled" ? businesses.value : [],
         pages: pages.status === "fulfilled" ? pages.value : [],
         data_status:
           businesses.status === "fulfilled" && pages.status === "fulfilled"
@@ -1162,7 +1163,10 @@ export class McpService {
         moneyValue(campaign.metrics?.spend) > 0 &&
         metricValue(campaign, "conversions") === 0,
     );
-    if (name === "get_no_result_entities" || name === "disable_candidates_skill") {
+    if (
+      name === "get_no_result_entities" ||
+      name === "disable_candidates_skill"
+    ) {
       return {
         account_id: account.externalAccountId,
         period: dates,
@@ -1507,9 +1511,9 @@ function capabilityUnavailable(tool: string, context: JsonObject = {}) {
 function comparisonRanges(args: JsonObject) {
   const hasExplicitRange = Boolean(
     args.current_start_date ||
-      args.currentStartDate ||
-      args.previous_start_date ||
-      args.previousStartDate,
+    args.currentStartDate ||
+    args.previous_start_date ||
+    args.previousStartDate,
   );
   if (hasExplicitRange) {
     return {
@@ -1587,7 +1591,8 @@ function safePreviewPayload(args: JsonObject): JsonObject {
       ["string", "number", "boolean"].includes(typeof value)
     )
       return value;
-    if (Array.isArray(value)) return value.map((item) => visit(item, depth + 1));
+    if (Array.isArray(value))
+      return value.map((item) => visit(item, depth + 1));
     if (value && typeof value === "object") {
       const result: JsonObject = {};
       for (const [key, item] of Object.entries(value)) {

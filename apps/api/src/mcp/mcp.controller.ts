@@ -1,4 +1,11 @@
-import { Controller, Get, Inject, Post, Req, UnauthorizedException } from "@nestjs/common";
+import {
+  Controller,
+  Get,
+  Inject,
+  Post,
+  Req,
+  UnauthorizedException,
+} from "@nestjs/common";
 import type { FastifyRequest } from "fastify";
 import { McpService } from "./mcp.service.js";
 import { ServiceTokenService } from "../service-tokens/service-token.service.js";
@@ -6,7 +13,12 @@ import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
-type JsonRpcRequest = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
+type JsonRpcRequest = {
+  jsonrpc?: string;
+  id?: string | number | null;
+  method?: string;
+  params?: Record<string, unknown>;
+};
 
 @Controller()
 export class McpController {
@@ -25,14 +37,20 @@ export class McpController {
   @Post("mcp")
   public async post(@Req() request: McpRequest) {
     const rawAuthorization = request.headers.authorization;
-    const authorization = Array.isArray(rawAuthorization) ? rawAuthorization[0] : rawAuthorization;
-    const token = authorization?.startsWith("Bearer ") ? authorization.slice(7).trim() : "";
+    const authorization = Array.isArray(rawAuthorization)
+      ? rawAuthorization[0]
+      : rawAuthorization;
+    const token = authorization?.startsWith("Bearer ")
+      ? authorization.slice(7).trim()
+      : "";
     const principal = token ? await this.tokens.authenticate(token) : null;
-    if (!principal) throw new UnauthorizedException("MCP authorization required.");
+    if (!principal)
+      throw new UnauthorizedException("MCP authorization required.");
 
     const input = (request.body ?? {}) as JsonRpcRequest;
     const id = input.id ?? null;
-    if (input.method === "notifications/initialized") return { status: "accepted" };
+    if (input.method === "notifications/initialized")
+      return { status: "accepted" };
     if (input.method === "initialize") {
       return {
         jsonrpc: "2.0",
@@ -80,6 +98,10 @@ export class McpController {
         };
       }
     }
-    return { jsonrpc: "2.0", id, error: { code: -32601, message: "Method not found." } };
+    return {
+      jsonrpc: "2.0",
+      id,
+      error: { code: -32601, message: "Method not found." },
+    };
   }
 }

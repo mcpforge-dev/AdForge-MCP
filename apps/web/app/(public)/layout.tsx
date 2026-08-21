@@ -10,15 +10,13 @@ export const metadata: Metadata = {
     default: "HolyMedia MCP",
     template: "%s | HolyMedia MCP",
   },
-  description:
-    "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
+  description: "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
   alternates: { canonical: "/" },
   openGraph: {
     type: "website",
     siteName: "HolyMedia MCP",
     title: "HolyMedia MCP",
-    description:
-      "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
+    description: "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
     url: "/",
     locale: "ru_RU",
   },

@@ -60,9 +60,7 @@ describe("Billing usage", () => {
     const database = {
       client: {
         entitlement: {
-          findMany: async () => [
-            { featureKey: "legacy_access", value: true },
-          ],
+          findMany: async () => [{ featureKey: "legacy_access", value: true }],
         },
         workspaceSubscription: { findFirst: async () => null },
         plan: { findUnique: async () => null },

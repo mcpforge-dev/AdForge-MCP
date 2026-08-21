@@ -54,13 +54,24 @@ export default function PublicHomePage() {
             <span className="status-dot">Данные получены</span>
           </div>
           <div className="preview-metrics">
-            <article><small>Расход</small><strong>1 284 500 ₸</strong></article>
-            <article><small>Конверсии</small><strong>418</strong></article>
-            <article><small>CTR</small><strong>4,82%</strong></article>
+            <article>
+              <small>Расход</small>
+              <strong>1 284 500 ₸</strong>
+            </article>
+            <article>
+              <small>Конверсии</small>
+              <strong>418</strong>
+            </article>
+            <article>
+              <small>CTR</small>
+              <strong>4,82%</strong>
+            </article>
           </div>
           <div className="preview-chart" aria-hidden="true">
             {[34, 47, 39, 62, 58, 76, 83, 74, 91, 88, 96, 100].map(
-              (height, index) => <i key={index} style={{ height: `${height}%` }} />,
+              (height, index) => (
+                <i key={index} style={{ height: `${height}%` }} />
+              ),
             )}
           </div>
         </div>
@@ -68,10 +79,22 @@ export default function PublicHomePage() {
       <section className="capability-band" aria-labelledby="capabilities">
         <h2 id="capabilities">Рабочий контур для рекламы</h2>
         <div className="capability-grid">
-          <article><strong>Подключения</strong><p>Google Ads, Meta Ads и расширяемая provider-архитектура.</p></article>
-          <article><strong>Отчёты</strong><p>Метрики, сравнение периодов и документы для клиента.</p></article>
-          <article><strong>MCP</strong><p>Scoped service tokens и серверная проверка каждого аккаунта.</p></article>
-          <article><strong>Контроль изменений</strong><p>Preview, подтверждение, commit, повторное чтение и audit.</p></article>
+          <article>
+            <strong>Подключения</strong>
+            <p>Google Ads, Meta Ads и расширяемая provider-архитектура.</p>
+          </article>
+          <article>
+            <strong>Отчёты</strong>
+            <p>Метрики, сравнение периодов и документы для клиента.</p>
+          </article>
+          <article>
+            <strong>MCP</strong>
+            <p>Scoped service tokens и серверная проверка каждого аккаунта.</p>
+          </article>
+          <article>
+            <strong>Контроль изменений</strong>
+            <p>Preview, подтверждение, commit, повторное чтение и audit.</p>
+          </article>
         </div>
       </section>
       <footer className="public-footer">

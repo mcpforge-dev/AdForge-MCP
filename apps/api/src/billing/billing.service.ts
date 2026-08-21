@@ -96,7 +96,9 @@ export class BillingService {
   ): Promise<void> {
     const value = await this.featureValue(workspaceId, featureKey);
     if (value !== true)
-      throw new ForbiddenException("Feature is not available for this workspace.");
+      throw new ForbiddenException(
+        "Feature is not available for this workspace.",
+      );
   }
 
   public async consumeMcpRequest(workspaceId: string): Promise<void> {

@@ -7,7 +7,13 @@ export default function robots(): MetadataRoute.Robots {
   const productionHost = new URL(baseUrl).hostname === "mcp.holymedia.kz";
   return {
     rules: productionHost
-      ? [{ userAgent: "*", allow: "/", disallow: ["/dashboard", "/app", "/auth"] }]
+      ? [
+          {
+            userAgent: "*",
+            allow: "/",
+            disallow: ["/dashboard", "/app", "/auth"],
+          },
+        ]
       : [{ userAgent: "*", disallow: "/" }],
     sitemap: productionHost ? `${baseUrl}/sitemap.xml` : undefined,
     host: productionHost ? baseUrl : undefined,

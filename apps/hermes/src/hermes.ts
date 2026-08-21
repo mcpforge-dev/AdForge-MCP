@@ -48,8 +48,12 @@ export function loadHermesConfig(
     .map((value) => Number(value))
     .filter((value) => Number.isSafeInteger(value));
   const chatAccountIds = new Map<number, string>();
-  for (const binding of (source.HERMES_CHAT_ACCOUNT_BINDINGS ?? "").split(",")) {
-    const [chatId, accountId] = binding.split(":", 2).map((value) => value?.trim());
+  for (const binding of (source.HERMES_CHAT_ACCOUNT_BINDINGS ?? "").split(
+    ",",
+  )) {
+    const [chatId, accountId] = binding
+      .split(":", 2)
+      .map((value) => value?.trim());
     const numericChatId = Number(chatId);
     if (Number.isSafeInteger(numericChatId) && accountId)
       chatAccountIds.set(numericChatId, accountId);
@@ -78,7 +82,11 @@ export function validateHermesConfig(config: HermesConfig): string | null {
     return "HERMES_ALLOWED_CHAT_IDS must contain at least one chat.";
   try {
     const url = new URL(config.mcpUrl);
-    if (!(["http:", "https:"].includes(url.protocol)) || url.username || url.password)
+    if (
+      !["http:", "https:"].includes(url.protocol) ||
+      url.username ||
+      url.password
+    )
       return "HERMES_MCP_URL must be an http(s) URL without credentials.";
   } catch {
     return "HERMES_MCP_URL must be a valid URL.";
@@ -154,7 +162,9 @@ export class OpenAiTextEnhancer implements HermesTextEnhancer {
 
 function sameNumericFacts(source: string, candidate: string): boolean {
   const values = (text: string) =>
-    text.match(/[-+]?\d[\d\s.,%]*/g)?.map((value) => value.replace(/\s/g, "")) ?? [];
+    text
+      .match(/[-+]?\d[\d\s.,%]*/g)
+      ?.map((value) => value.replace(/\s/g, "")) ?? [];
   return JSON.stringify(values(source)) === JSON.stringify(values(candidate));
 }
 
@@ -459,7 +469,10 @@ export class HermesGateway {
   private readonly seen = new Set<number>();
   private botUsername = "";
   private stopped = false;
-  private readonly threadRanges = new Map<string, { days: number; offset: number }>();
+  private readonly threadRanges = new Map<
+    string,
+    { days: number; offset: number }
+  >();
 
   public constructor(
     private readonly config: HermesConfig,
@@ -513,7 +526,10 @@ export class HermesGateway {
     await this.telegram.sendMessage(message, response);
   }
 
-  private async answer(query: string, message: TelegramMessage): Promise<string> {
+  private async answer(
+    query: string,
+    message: TelegramMessage,
+  ): Promise<string> {
     const accounts = arrayValue(await this.mcp.callTool("list_accounts", {}));
     const boundAccountId = this.config.chatAccountIds.get(message.chat.id);
     const account = boundAccountId
@@ -531,17 +547,28 @@ export class HermesGateway {
         query,
       );
     const threadKey = `${message.chat.id}:${message.message_thread_id ?? 0}`;
-    const priorContext = this.threadRanges.get(threadKey) ?? { days: 7, offset: 0 };
-    const requestedDays = Number(query.match(/(?:за|последн\w*)\s+(\d{1,3})\s+д/i)?.[1] ?? 0);
+    const priorContext = this.threadRanges.get(threadKey) ?? {
+      days: 7,
+      offset: 0,
+    };
+    const requestedDays = Number(
+      query.match(/(?:за|последн\w*)\s+(\d{1,3})\s+д/i)?.[1] ?? 0,
+    );
     const asksPrevious = /предыдущ|прошл\w*\s+недел/i.test(query);
     const followUp = /^а\s+/i.test(query);
     const context = {
-      days: requestedDays > 0 && requestedDays <= 90 ? requestedDays : priorContext.days,
+      days:
+        requestedDays > 0 && requestedDays <= 90
+          ? requestedDays
+          : priorContext.days,
       offset: asksPrevious ? 7 : followUp ? priorContext.offset : 0,
     };
     this.threadRanges.set(threadKey, context);
     const current = completedRange(context.days, context.offset);
-    const previous = completedRange(context.days, context.offset + context.days);
+    const previous = completedRange(
+      context.days,
+      context.offset + context.days,
+    );
     const args = (range: { start: string; end: string }) => ({
       provider,
       account_id: accountId,
@@ -554,7 +581,8 @@ export class HermesGateway {
     const campaigns = arrayValue(currentResult.campaigns);
     const currentMetrics = objectValue(currentResult.metrics);
     const onlyConversions = /только\s+конверс/i.test(query);
-    const efficiencyMetrics = /(ctr|стоимост\w+\s+клик|стоимост\w+\s+конверс)/i.test(query);
+    const efficiencyMetrics =
+      /(ctr|стоимост\w+\s+клик|стоимост\w+\s+конверс)/i.test(query);
     let output = onlyConversions
       ? [
           `Период: ${dateLabel(current.start, current.end)}`,

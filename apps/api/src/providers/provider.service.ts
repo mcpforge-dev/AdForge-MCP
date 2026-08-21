@@ -518,8 +518,7 @@ export class ProviderService {
       accountId,
       enabled,
     );
-    if (!updated)
-      throw new NotFoundException("Provider account not found.");
+    if (!updated) throw new NotFoundException("Provider account not found.");
     const account =
       await this.database.client.providerAccount.findUniqueOrThrow({
         where: { id: accountId },
@@ -623,8 +622,7 @@ export class ProviderService {
     );
     return {
       result,
-      reread:
-        reread.items.find((campaign) => campaign.id === objectId) ?? null,
+      reread: reread.items.find((campaign) => campaign.id === objectId) ?? null,
     };
   }
 

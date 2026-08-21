@@ -61,8 +61,6 @@ describe.skipIf(!integrationEnabled)("product analytics integration", () => {
     const summary = await analytics.summary(workspaceA);
     expect(summary.total_events).toBe(1);
     expect(summary.active_users).toBe(1);
-    expect(summary.events).toEqual([
-      { name: "onboarding.started", count: 1 },
-    ]);
+    expect(summary.events).toEqual([{ name: "onboarding.started", count: 1 }]);
   });
 });
