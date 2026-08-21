@@ -91,6 +91,7 @@ model User {
   manualConnectionRequests ManualConnectionRequest[]
   mcpOAuthClients McpOAuthClient[]
   mcpOAuthCodes McpOAuthAuthorizationCode[]
+  serviceIdentities ServiceIdentity[]
 
   @@index([email])
   @@index([status, createdAt])
@@ -224,15 +225,18 @@ model WorkspaceInvitation {
 }
 
 model ServiceIdentity {
-  id          String     @id @default(uuid()) @db.Uuid
-  workspaceId String?    @map("workspace_id") @db.Uuid
-  name        String     @db.VarChar(160)
-  createdAt   DateTime   @default(now()) @map("created_at")
-  revokedAt   DateTime?  @map("revoked_at")
-  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  tokens      ServiceToken[]
+  id            String     @id @default(uuid()) @db.Uuid
+  workspaceId   String?    @map("workspace_id") @db.Uuid
+  createdById   String?    @map("created_by_id") @db.Uuid
+  name          String     @db.VarChar(160)
+  createdAt     DateTime   @default(now()) @map("created_at")
+  revokedAt     DateTime?  @map("revoked_at")
+  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy     User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  tokens        ServiceToken[]
 
   @@index([workspaceId, revokedAt])
+  @@index([createdById, revokedAt])
   @@map("service_identities")
 }
 

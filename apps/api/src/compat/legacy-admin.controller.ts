@@ -159,7 +159,10 @@ export class LegacyAdminController {
     );
     const revoked = await this.database.client.serviceToken.updateMany({
       where: {
-        serviceIdentity: { workspaceId: target.workspaceId },
+        serviceIdentity: {
+          workspaceId: target.workspaceId,
+          createdById: target.userId,
+        },
         revokedAt: null,
       },
       data: { revokedAt: new Date() },

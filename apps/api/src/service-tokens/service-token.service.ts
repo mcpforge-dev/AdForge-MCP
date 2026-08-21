@@ -86,7 +86,11 @@ export class ServiceTokenService {
     const expiresAt = new Date(now.getTime() + expirationDays * 86_400_000);
     const created = await this.database.client.$transaction(async (tx) => {
       const identity = await tx.serviceIdentity.create({
-        data: { workspaceId, name: `HolyMedia MCP: ${input.name}` },
+        data: {
+          workspaceId,
+          createdById: principal.userId,
+          name: `HolyMedia MCP: ${input.name}`,
+        },
       });
       const token = await tx.serviceToken.create({
         data: {
