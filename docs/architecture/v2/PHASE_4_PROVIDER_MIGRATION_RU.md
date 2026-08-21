@@ -4,7 +4,7 @@
 
 ## Security boundary
 
-OAuth state, session binding, encryption-at-rest, refresh lock и tenant authorization переиспользуют Phase 2/3. Provider access/refresh tokens расшифровываются только в API runtime. Они не возвращаются в DTO, не попадают в fixtures, UI, metrics или logs. `ads_management` не включает mutation: v2 registry сохраняет `write=false`; preview/confirmation/commit будет отдельной Phase 5 политикой.
+OAuth state, session binding, encryption-at-rest, refresh lock и tenant authorization переиспользуют Phase 2/3. Provider access/refresh tokens расшифровываются только в API runtime. Они не возвращаются в DTO, не попадают в fixtures, UI, metrics или logs. Phase 4 не открывал широкие provider writes. В текущем Phase A controlled Meta mutation boundary находится в MCP preview service: default `preview_only` остаётся включённым, а реальный commit требует отдельного confirmed-write флага, write scope и allowlists для account/object/operation. Live mutation не считается проверенной автоматически.
 
 ## Google
 
