@@ -1,37 +1,39 @@
-# Feature Inventory и parity baseline
+# Feature inventory и parity baseline
 
-Статус: `implemented` означает подтверждённый кодом/тестами сценарий, `partial` — рабочая часть с ограничением, `planned` — целевой v2 scope, а не обещание текущего MVP.
+Статусы отражают фактическое состояние branch `v2/phase-a-complete-product`.
 
-| Область | v1 status | Evidence / limitation | v2 target |
+| Область | Статус | Текущее подтверждение | Остаток для Phase A |
 |---|---|---|---|
-| Публичный web | partial | static frontend + custom Python handler | Next.js SSR/SSG/ISR |
-| Регистрация/login/logout | implemented | `web/server.py`, `auth_store.py`, unit tests | Identity module + session store |
-| Password reset | implemented | hashed one-time token and TTL tests | transactional email + abuse controls |
-| Users/workspaces | partial | owner workspace created; oldest workspace selected | explicit active workspace and memberships |
-| RBAC | partial | membership exists, role model narrow | policy-based RBAC/permissions |
-| Tenant isolation | partial/strongening | workspace context and tests; no FK/RLS | server policy + FK + optional RLS |
-| Google Ads OAuth/read | implemented | live adapter, reports, account discovery | provider contract + worker-backed reads |
-| Meta Ads OAuth/read | implemented | Ads/Business/Page/Graph reads; permissions depend on Meta | adapter contract + typed capabilities |
-| Meta write | guarded partial | preview/confirmation code; live global preview-only | policy/preview/commit/reread/audit |
-| Yandex Direct | partial | provider exists; reporting preview/placeholder | real adapter or explicitly unavailable capability |
-| TikTok Ads | partial | provider exists; reporting preview/placeholder | real adapter or explicitly unavailable capability |
-| Account selection | implemented | workspace-scoped selected accounts and merge/add flow | normalized account relation with constraints |
-| MCP HTTP | implemented | FastMCP + bearer auth; unauthenticated endpoint 401 | versioned MCP gateway + policy engine |
-| Service tokens | partial | hashed token, scope and account allowlist | expiry, rotation, revocation, audit |
-| Dynamic MCP OAuth | partial | PKCE S256 and one-time codes; provider OAuth paths differ | unified OAuth broker + PKCE where supported |
-| Reports | implemented/partial | Google/Meta data and DOCX/PDF exports; synchronous generation | async report jobs, templates, artifact storage |
-| Site analysis | partial | Playwright/HTML/image analysis and report export | isolated worker, quotas, evidence pipeline |
-| SEO/Search Console | partial | provider code/UI history exists; hidden/limited product state | dedicated SEO module and property isolation |
-| Hermes/Telegram | absent here | no `src/hermes*` or Telegram bot runtime in this repo | separate app using scoped service API |
-| Billing/plans | absent | no billing tables or provider abstraction | Billing domain and payment adapter contract |
-| Product analytics | partial/absent | audit_events exists; no event pipeline/warehouse | privacy-safe event schema and ingestion |
-| Admin | partial | admin session guards/manual onboarding | explicit admin app and permissions |
-| Notifications | absent | no notification domain/queue | notification service/module |
-| Background jobs | absent | reports/external calls in HTTP request path | Redis/BullMQ workers |
-| Observability | partial | request IDs and redacted errors; no OTel pipeline | logs, metrics, traces, error tracking |
-| CI/CD | absent | no `.github` workflow found | gated CI + staged deploy/rollback |
+| Public web/SEO | partial | Next.js App Router, metadata, legal pages, noindex private routes | полноценные публичные страницы, sitemap/robots/JSON-LD и redirect policy |
+| Регистрация/login/logout | implemented | Argon2id, opaque sessions, CSRF, password reset foundation, Google Login compatibility | E2E и email delivery adapter |
+| Users/workspaces/RBAC | implemented | memberships, OWNER/ADMIN/MEMBER/VIEWER, server guards, tenant tests | UI role management parity |
+| Provider connections | implemented/partial | generic OAuth/state/PKCE/vault, Google/Meta real adapters, Yandex/TikTok boundaries | live parity and worker sync |
+| Google Ads | implemented/partial | OAuth, refresh, hierarchy discovery, campaigns, metrics, health | live V2 read verification and edge-case parity |
+| Meta Ads | implemented/partial | OAuth permissions, accounts/campaigns/metrics, Business/Page/posts/Instagram | live V2 verification, missing-permission UX, write adapter |
+| Yandex Direct | partial | OAuth/discovery boundary | real read adapter or explicit unavailable capability |
+| TikTok Ads | partial | OAuth/discovery boundary | real read adapter or explicit unavailable capability |
+| Account selection | implemented | workspace-scoped enable/disable and account allowlists | add-account UX and reconnect preservation E2E |
+| MCP HTTP | implemented | `/mcp`, JSON-RPC initialize/tools/list/tools/call, 401 without bearer | protocol conformance and richer error contract |
+| Service tokens | implemented/partial | hash-at-rest, scopes, expiry, revoke, last-used, account restrictions, creator binding | rotation API and migration rehearsal |
+| MCP read analytics | implemented | performance, comparison, executive/status/top performers, skill routes | detailed entity reports |
+| MCP write policy | guarded partial | preview, confirmation, one-time commit attempt, read/write scope gate, writes blocked | provider mutation adapters and controlled allowlist |
+| Reports | implemented/partial | performance report and DOCX, monthly collect-report compatibility | branded template, async artifacts, PDF parity |
+| Site analysis | implemented/partial | SSRF-hardened live HTML analysis, workspace history, DOCX export | evidence pipeline and richer UX/report |
+| SEO/Search Console | implemented/partial | OAuth adapter, properties, analytics report, MCP tools | full client dashboard and export parity |
+| Hermes | implemented/partial | separate read-only Telegram gateway, deterministic Russian analytics, optional AI boundary | deployment/runtime integration and full V1 scenario parity |
+| Billing/plans | foundation | schema for plans/prices/subscriptions/orders/attempts/usage/entitlements, read API, payment port | checkout/webhook provider and quota enforcement |
+| Product analytics | partial | audit events and provider metrics | privacy-safe product event pipeline |
+| Admin | implemented/partial | workspace-scoped user/status/role/diagnostics and manual requests | full admin UI and specialist OAuth pending flow |
+| Background jobs | foundation | BullMQ, retry/graceful shutdown, discovery queue boundary | actual provider discovery/health jobs |
+| Observability | foundation | structured logs, request IDs, safe errors, provider metrics | OTel exporter, dashboards and alerting |
 
-## Parity rule
+## Rules
 
-В v2 нельзя считать provider готовым по наличию класса. Provider считается migrated только если есть contract tests, real-data smoke в staging, permission/error mapping, pagination, rate-limit/retry policy, audit and tenant-isolation tests.
-
+- An adapter class alone is not parity.
+- Any provider data returned to a client must carry source/provenance and must
+  not be a fixture presented as live data.
+- Any user, connection, account, service token or report lookup is scoped by
+  workspace on the server.
+- Unsupported tools are not registered as fake success responses.
+- Production V1, its database, DNS and OAuth applications are unchanged while
+  Phase A is being developed.
