@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import pg from "../packages/database/node_modules/pg/index.js";
+
+const require = createRequire(import.meta.url);
+const pg = require("../packages/database/node_modules/pg");
 
 const inputPath = process.argv[2];
 const target = process.env.V2_MIGRATION_TARGET;
