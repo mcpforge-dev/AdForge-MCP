@@ -486,7 +486,10 @@ export class McpService {
           account_id: account.externalAccountId,
           current_period: current,
           previous_period: previous,
-          metrics: compareMetrics(currentMetrics, previousMetrics),
+          current: currentMetrics,
+          previous: previousMetrics,
+          changes: compareMetrics(currentMetrics, previousMetrics),
+          source: "provider_read_adapter",
         };
       }
       case "get_spend_overview": {
@@ -855,7 +858,16 @@ function compareMetrics(
   current: ProviderMetricSummary,
   previous: ProviderMetricSummary,
 ) {
-  const keys = ["impressions", "clicks", "ctr", "conversions"] as const;
+  const keys = [
+    "spend",
+    "impressions",
+    "clicks",
+    "ctr",
+    "cpc",
+    "cpm",
+    "conversions",
+    "costPerConversion",
+  ] as const;
   const result: Record<
     string,
     {
@@ -868,23 +880,32 @@ function compareMetrics(
   for (const key of keys) {
     const currentValue = current[key];
     const previousValue = previous[key];
+    const currentNumber = metricNumber(currentValue);
+    const previousNumber = metricNumber(previousValue);
     const absolute =
-      typeof currentValue === "number" && typeof previousValue === "number"
-        ? currentValue - previousValue
+      currentNumber !== null && previousNumber !== null
+        ? currentNumber - previousNumber
         : null;
     result[key] = {
       current: currentValue,
       previous: previousValue,
       absolute,
       percent:
-        absolute !== null &&
-        typeof previousValue === "number" &&
-        previousValue !== 0
-          ? (absolute / previousValue) * 100
+        absolute !== null && previousNumber !== null && previousNumber !== 0
+          ? (absolute / Math.abs(previousNumber)) * 100
           : null,
     };
   }
   return result;
+}
+
+function metricNumber(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (value && typeof value === "object" && "amount" in value) {
+    const amount = Number((value as { amount?: unknown }).amount);
+    return Number.isFinite(amount) ? amount : null;
+  }
+  return null;
 }
 
 function defaultReportRange() {
