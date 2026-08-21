@@ -109,7 +109,8 @@ label {
   font-size: 0.9rem;
 }
 input,
-select {
+select,
+textarea {
   width: 100%;
   min-height: 44px;
   border: 1px solid #303b4c;
@@ -120,7 +121,8 @@ select {
   font: inherit;
 }
 input:focus,
-select:focus {
+select:focus,
+textarea:focus {
   outline: 2px solid #7092ff;
   outline-offset: 1px;
 }
@@ -314,6 +316,54 @@ select:focus {
 .account-row small {
   margin-left: auto;
 }
+.token-form {
+  margin-top: 18px;
+  grid-template-columns: minmax(240px, 1fr) minmax(160px, 0.35fr);
+}
+.token-form .account-picker,
+.token-form > .check-row,
+.token-form > .primary-button {
+  grid-column: 1 / -1;
+}
+.account-picker {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 14px;
+  border: 1px solid #303b4c;
+  border-radius: 7px;
+}
+.account-picker legend {
+  padding: 0 6px;
+  color: #b7c0cf;
+  font-size: 0.9rem;
+}
+.check-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+}
+.check-row input {
+  width: 18px;
+  min-height: 18px;
+}
+.check-row small {
+  color: #8e99aa;
+}
+.one-time-secret {
+  display: grid;
+  gap: 10px;
+  margin-top: 18px;
+  padding: 14px;
+  border: 1px solid #4668db;
+  border-radius: 7px;
+  background: #111b35;
+}
+.one-time-secret textarea {
+  resize: vertical;
+  overflow-wrap: anywhere;
+}
 
 @media (max-width: 720px) {
   main {
@@ -345,5 +395,14 @@ select:focus {
   .account-row small {
     margin-left: 28px;
     width: 100%;
+  }
+  .token-form {
+    grid-template-columns: 1fr;
+  }
+  .check-row {
+    grid-template-columns: 20px minmax(0, 1fr);
+  }
+  .check-row small {
+    grid-column: 2;
   }
 }

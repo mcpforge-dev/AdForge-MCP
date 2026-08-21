@@ -44,6 +44,17 @@ type ManualRequest = {
   specialist_note: string;
   created_at: string;
 };
+type ServiceToken = {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  scopes: string[];
+  accountIds: string[];
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+};
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -76,6 +87,8 @@ export default function DashboardPage() {
   const [readResult, setReadResult] = useState<unknown>(null);
   const [siteResult, setSiteResult] = useState<unknown>(null);
   const [siteUrl, setSiteUrl] = useState("");
+  const [serviceTokens, setServiceTokens] = useState<ServiceToken[]>([]);
+  const [createdServiceToken, setCreatedServiceToken] = useState("");
   const [error, setError] = useState("");
 
   async function loadManualRequests() {
@@ -165,6 +178,18 @@ export default function DashboardPage() {
       setConnections((await connectionResponse.json()) as Connection[]);
   }
 
+  async function loadServiceTokens(workspace: Workspace) {
+    if (!["OWNER", "ADMIN"].includes(workspace.role)) {
+      setServiceTokens([]);
+      return;
+    }
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${workspace.id}/service-tokens`,
+      { credentials: "include" },
+    );
+    if (response.ok) setServiceTokens((await response.json()) as ServiceToken[]);
+  }
+
   useEffect(() => {
     void loadWorkspaces();
   }, []);
@@ -172,6 +197,7 @@ export default function DashboardPage() {
     if (!active) return;
     void loadMembers(active);
     void loadConnections(active);
+    void loadServiceTokens(active);
     void loadManualRequests();
   }, [active]);
 
@@ -391,6 +417,56 @@ export default function DashboardPage() {
     await loadManualRequests();
   }
 
+  async function createServiceToken(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active) return;
+    const form = new FormData(event.currentTarget);
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/service-tokens`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({
+          name: form.get("name"),
+          scopes: form.get("write")
+            ? ["adforge:mcp:read", "adforge:mcp:write"]
+            : ["adforge:mcp:read"],
+          accountIds: form.getAll("account_ids"),
+          expiresInDays: Number(form.get("expires_in_days") || 90),
+        }),
+      },
+    );
+    if (!response.ok) {
+      setError("Не удалось создать служебный MCP-токен.");
+      return;
+    }
+    const token = (await response.json()) as ServiceToken & { token: string };
+    setCreatedServiceToken(token.token);
+    event.currentTarget.reset();
+    await loadServiceTokens(active);
+  }
+
+  async function revokeServiceToken(tokenId: string) {
+    if (!active) return;
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/service-tokens/${tokenId}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "x-csrf-token": await csrf() },
+      },
+    );
+    if (!response.ok) {
+      setError("Не удалось отозвать служебный MCP-токен.");
+      return;
+    }
+    await loadServiceTokens(active);
+  }
+
   async function logout() {
     await fetch(`${API}/api/v1/auth/logout`, {
       method: "POST",
@@ -575,6 +651,95 @@ export default function DashboardPage() {
           })}
         </div>
       </section>
+
+      {active && ["OWNER", "ADMIN"].includes(active.role) && (
+        <section className="panel connections-panel">
+          <div className="section-heading">
+            <div>
+              <p className="eyebrow">MCP</p>
+              <h2>Доступ для AI-клиента и Гермеса</h2>
+            </div>
+            <span className="muted">
+              Токен показывается один раз. Ограничьте его только нужными кабинетами.
+            </span>
+          </div>
+          <form onSubmit={createServiceToken} className="token-form">
+            <label>
+              Название
+              <input name="name" required minLength={2} placeholder="Например, Гермес" />
+            </label>
+            <label>
+              Срок действия
+              <select name="expires_in_days" defaultValue="90">
+                <option value="30">30 дней</option>
+                <option value="90">90 дней</option>
+                <option value="365">1 год</option>
+              </select>
+            </label>
+            <fieldset className="account-picker">
+              <legend>Разрешённые рекламные кабинеты</legend>
+              {connections.flatMap((connection) =>
+                connection.accounts
+                  .filter((account) => account.enabled)
+                  .map((account) => (
+                    <label key={account.id} className="check-row">
+                      <input type="checkbox" name="account_ids" value={account.id} />
+                      <span>{account.displayName}</span>
+                      <small>{connection.provider}</small>
+                    </label>
+                  )),
+              )}
+              {!connections.some((connection) =>
+                connection.accounts.some((account) => account.enabled),
+              ) && <small className="muted">Сначала подключите рекламный кабинет.</small>}
+            </fieldset>
+            <label className="check-row">
+              <input type="checkbox" name="write" />
+              <span>Разрешить подтверждаемые write-запросы</span>
+              <small>Фактические изменения всё ещё блокируются preview-only policy.</small>
+            </label>
+            <button className="primary-button" type="submit">
+              Создать токен
+            </button>
+          </form>
+          {createdServiceToken && (
+            <div className="one-time-secret" role="status">
+              <strong>Сохраните токен сейчас</strong>
+              <textarea readOnly value={createdServiceToken} rows={3} />
+              <button
+                className="ghost-button"
+                type="button"
+                onClick={() => setCreatedServiceToken("")}
+              >
+                Скрыть
+              </button>
+            </div>
+          )}
+          <div className="provider-details">
+            {serviceTokens.map((token) => (
+              <div className="member-row" key={token.id}>
+                <span>
+                  <strong>{token.name}</strong>
+                  <small>
+                    {token.tokenPrefix}… · {token.scopes.join(", ")} · кабинетов: {token.accountIds.length || "все workspace"}
+                  </small>
+                </span>
+                {token.revokedAt ? (
+                  <em>Отозван</em>
+                ) : (
+                  <button
+                    className="ghost-button"
+                    type="button"
+                    onClick={() => void revokeServiceToken(token.id)}
+                  >
+                    Отозвать
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="panel">
         <div className="section-heading">
