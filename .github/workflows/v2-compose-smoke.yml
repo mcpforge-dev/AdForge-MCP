@@ -24,7 +24,23 @@ jobs:
         run: docker compose build
 
       - name: Start the full Compose stack
-        run: docker compose up -d
+        run: docker compose up -d || true
+
+      - name: Diagnose PostgreSQL and Redis startup
+        if: always()
+        run: docker compose up -d postgres redis
+
+      - name: Diagnose API startup
+        if: always()
+        run: docker compose up -d api
+
+      - name: Diagnose worker startup
+        if: always()
+        run: docker compose up -d worker
+
+      - name: Diagnose web startup
+        if: always()
+        run: docker compose up -d web
 
       - name: Verify API and web readiness
         shell: bash
