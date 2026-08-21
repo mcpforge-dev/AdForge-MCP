@@ -34,6 +34,16 @@ jobs:
         if: always()
         run: docker compose up -d api
 
+      - name: Capture API startup diagnostics
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          details=$(docker compose logs --no-color api | tail -n 40 | sed 's/%/%25/g; s/\r/%0D/g; s/\n/%0A/g')
+          if [ -n "$details" ]; then
+            echo "::error title=API container startup diagnostics::$details"
+          fi
+
       - name: Diagnose worker startup
         if: always()
         run: docker compose up -d worker
