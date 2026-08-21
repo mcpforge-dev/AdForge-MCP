@@ -36,7 +36,7 @@ export class LegacyAuthController {
     return { csrfToken: this.cookies.setCsrf(reply) };
   }
 
-  @Post("signup")
+  @Post(["signup", "register"])
   public async signup(
     @Body() input: SignupDto,
     @Req() request: RequestWithAuth,
@@ -107,9 +107,14 @@ export class LegacyAuthController {
   }
 
   @UseGuards(AuthenticationGuard)
-  @Get("session")
+  @Get(["session", "me"])
   public async session(@CurrentPrincipal() principal: HumanPrincipal) {
     return { user: await this.auth.currentUser(principal) };
+  }
+
+  @Get("registration-status")
+  public registrationStatus() {
+    return { enabled: true, requires_access_code: false };
   }
 
   @UseGuards(AuthenticationGuard)

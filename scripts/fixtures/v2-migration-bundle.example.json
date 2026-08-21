@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "source": {
+    "system": "v1",
+    "export": "sanitized",
+    "database_engine": "sqlite"
+  },
+  "users": [
+    {
+      "id": "v1-user-1",
+      "email": "client@example.test",
+      "name": "Client",
+      "password_hash": "pbkdf2_sha256$240000$<salt>$<digest>",
+      "status": "active",
+      "created_at": "2026-01-01T00:00:00.000Z"
+    }
+  ],
+  "workspaces": [
+    {
+      "id": "v1-workspace-1",
+      "name": "Client workspace",
+      "slug": "client-workspace",
+      "status": "active"
+    }
+  ],
+  "memberships": [
+    {
+      "id": "v1-membership-1",
+      "workspace_id": "v1-workspace-1",
+      "user_id": "v1-user-1",
+      "role": "owner"
+    }
+  ],
+  "connections": [
+    {
+      "id": "v1-google-connection-1",
+      "workspace_id": "v1-workspace-1",
+      "provider": "google_ads",
+      "status": "connected",
+      "credential_present": true,
+      "credential": {
+        "encryption_version": 2,
+        "encrypted_payload": "hm1.REDACTED.REDACTED.REDACTED"
+      },
+      "accounts": [
+        {
+          "external_account_id": "1234567890",
+          "display_name": "Example Ads account",
+          "currency": "USD",
+          "timezone": "UTC",
+          "status": "active",
+          "enabled": true
+        }
+      ]
+    },
+    {
+      "id": "v1-meta-connection-1",
+      "workspace_id": "v1-workspace-1",
+      "provider": "meta_ads",
+      "status": "connected",
+      "credential_present": false,
+      "reconnect_required": true,
+      "accounts": []
+    }
+  ],
+  "service_tokens": [
+    {
+      "id": "v1-service-token-1",
+      "service_identity_id": "v1-hermes",
+      "workspace_id": "v1-workspace-1",
+      "token_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      "token_prefix": "mcp_service_example",
+      "name": "Hermes read-only",
+      "scopes": ["adforge:mcp:read"],
+      "account_ids": [],
+      "status": "active",
+      "expires_at": "2027-01-01T00:00:00.000Z"
+    }
+  ],
+  "mcp_oauth_clients": [
+    {
+      "id": "v1-mcp-client-1",
+      "workspace_id": "v1-workspace-1",
+      "user_id": "v1-user-1",
+      "client_id": "client_example_1",
+      "client_secret_digest": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "client_name": "Example MCP client",
+      "redirect_uris": ["https://claude.ai/api/mcp/auth_callback"],
+      "scope": "adforge:mcp:read",
+      "status": "active"
+    }
+  ],
+  "entitlements": []
+}

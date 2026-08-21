@@ -57,6 +57,38 @@ jobs:
       - run: pnpm typecheck
       - run: pnpm migrate:validate
       - run: pnpm --filter @holymedia/database prisma:deploy
+      - name: Migration rehearsal contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          node scripts/v2-provider-migration.mjs validate scripts/fixtures/v2-migration-bundle.example.json
+          node scripts/v2-provider-migration.mjs dry-run scripts/fixtures/v2-migration-bundle.example.json | tee /tmp/v2-migration-plan.json
+          grep -q '"mutatesDatabase": false' /tmp/v2-migration-plan.json
+      - name: Migration rehearsal import on isolated PostgreSQL database
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PGPASSWORD=change-me-local-only
+          psql "postgresql://holymedia@127.0.0.1:5432/holymedia_v2" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE holymedia_v2_rehearsal'
+          export DATABASE_URL=postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_rehearsal
+          pnpm --filter @holymedia/database prisma:deploy
+          export V2_MIGRATION_TARGET=REHEARSAL
+          export V2_DATABASE_URL=$DATABASE_URL
+          node scripts/v2-migration-import.mjs scripts/fixtures/v2-migration-bundle.example.json
+          node scripts/v2-migration-import.mjs scripts/fixtures/v2-migration-bundle.example.json
+      - name: Backup and restore rehearsal database
+        shell: bash
+        run: |
+          set -euo pipefail
+          export PGPASSWORD=change-me-local-only
+          rehearsal_url=postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_rehearsal
+          pg_dump "$rehearsal_url" --format=custom --file=/tmp/holymedia-v2-rehearsal.dump
+          psql "postgresql://holymedia@127.0.0.1:5432/holymedia_v2" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE holymedia_v2_restore'
+          pg_restore --exit-on-error --dbname=postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore /tmp/holymedia-v2-rehearsal.dump
+          restored_users=$(psql "postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore" -Atc 'SELECT COUNT(*) FROM users')
+          restored_workspaces=$(psql "postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore" -Atc 'SELECT COUNT(*) FROM workspaces')
+          test "$restored_users" -ge 1
+          test "$restored_workspaces" -ge 1
       - run: pnpm test
       - run: pnpm build
       - name: API readiness integration smoke
