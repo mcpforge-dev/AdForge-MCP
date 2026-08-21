@@ -2,6 +2,8 @@ import { Controller, Get, Inject, Post, Req, UnauthorizedException } from "@nest
 import type { FastifyRequest } from "fastify";
 import { McpService } from "./mcp.service.js";
 import { ServiceTokenService } from "../service-tokens/service-token.service.js";
+import { BillingService } from "../billing/billing.service.js";
+import { AuditService } from "../audit/audit.service.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
 type JsonRpcRequest = { jsonrpc?: string; id?: string | number | null; method?: string; params?: Record<string, unknown> };
@@ -11,6 +13,8 @@ export class McpController {
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
     @Inject(ServiceTokenService) private readonly tokens: ServiceTokenService,
+    @Inject(BillingService) private readonly billing: BillingService,
+    @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   @Get("mcp")
@@ -48,6 +52,18 @@ export class McpController {
       const name = typeof params.name === "string" ? params.name : "";
       try {
         const result = await this.mcp.call(principal, name, params.arguments);
+        await Promise.allSettled([
+          this.billing.recordUsage(principal.workspaceId, "mcp.requests"),
+          this.audit.record({
+            eventType: "mcp_tool_executed",
+            actorType: "SERVICE",
+            workspaceId: principal.workspaceId,
+            targetType: "mcp_tool",
+            targetId: name.slice(0, 255),
+            requestId: request.id,
+            metadata: { tool: name.slice(0, 120) },
+          }),
+        ]);
         return {
           jsonrpc: "2.0",
           id,

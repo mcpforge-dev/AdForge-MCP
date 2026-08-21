@@ -45,4 +45,42 @@ export class BillingService {
       orderBy: { featureKey: "asc" },
     });
   }
+
+  public async recordUsage(
+    workspaceId: string,
+    metricKey: string,
+    quantity = 1,
+  ): Promise<void> {
+    if (
+      !/^[a-z][a-z0-9_.-]{1,119}$/.test(metricKey) ||
+      /token|secret|password|authorization|cookie/i.test(metricKey)
+    )
+      return;
+    if (!Number.isFinite(quantity) || quantity <= 0) return;
+    const now = new Date();
+    const periodStart = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
+    );
+    const periodEnd = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1),
+    );
+    await this.database.client.usageRecord.upsert({
+      where: {
+        workspaceId_metricKey_periodStart_periodEnd: {
+          workspaceId,
+          metricKey,
+          periodStart,
+          periodEnd,
+        },
+      },
+      create: {
+        workspaceId,
+        metricKey,
+        periodStart,
+        periodEnd,
+        quantity,
+      },
+      update: { quantity: { increment: quantity } },
+    });
+  }
 }
