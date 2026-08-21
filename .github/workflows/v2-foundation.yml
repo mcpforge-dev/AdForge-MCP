@@ -80,13 +80,13 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          export PGPASSWORD=change-me-local-only
-          rehearsal_url=postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_rehearsal
-          pg_dump "$rehearsal_url" --format=plain --clean --if-exists --no-owner --no-privileges --file=/tmp/holymedia-v2-rehearsal.sql
-          psql "postgresql://holymedia@127.0.0.1:5432/holymedia_v2" -v ON_ERROR_STOP=1 -c 'CREATE DATABASE holymedia_v2_restore'
-          psql postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore -v ON_ERROR_STOP=1 -f /tmp/holymedia-v2-rehearsal.sql
-          restored_users=$(psql "postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore" -Atc 'SELECT COUNT(*) FROM users')
-          restored_workspaces=$(psql "postgresql://holymedia:change-me-local-only@127.0.0.1:5432/holymedia_v2_restore" -Atc 'SELECT COUNT(*) FROM workspaces')
+          postgres_container=$(docker ps --filter ancestor=postgres:18-alpine --format '{{.ID}}' | head -n 1)
+          test -n "$postgres_container"
+          docker exec "$postgres_container" psql -U holymedia -d holymedia_v2 -v ON_ERROR_STOP=1 -c 'CREATE DATABASE holymedia_v2_restore'
+          docker exec "$postgres_container" pg_dump -U holymedia -d holymedia_v2_rehearsal --format=plain --clean --if-exists --no-owner --no-privileges > /tmp/holymedia-v2-rehearsal.sql
+          docker exec -i "$postgres_container" psql -U holymedia -d holymedia_v2_restore -v ON_ERROR_STOP=1 < /tmp/holymedia-v2-rehearsal.sql
+          restored_users=$(docker exec "$postgres_container" psql -U holymedia -d holymedia_v2_restore -Atc 'SELECT COUNT(*) FROM users')
+          restored_workspaces=$(docker exec "$postgres_container" psql -U holymedia -d holymedia_v2_restore -Atc 'SELECT COUNT(*) FROM workspaces')
           test "$restored_users" -ge 1
           test "$restored_workspaces" -ge 1
       - run: pnpm test
