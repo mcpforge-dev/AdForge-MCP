@@ -1,45 +1,45 @@
-# Детальные read-only отчёты Google Ads и Meta Ads
+# Детальные рекламные отчёты: статус V2
 
-Расширенные отчёты дополняют `get_basic_metrics` и не выполняют write-действия. Они совместимы с обязательным режимом `preview_only`.
+Этот документ фиксирует фактическое состояние V2, чтобы capability catalog не
+выдавал будущие provider adapters за готовую live-функцию.
 
-## Доступные MCP tools
+## Сейчас доступно
 
-- `list_detailed_ad_report_types(platform)` — список доступных типов отчёта.
-- `get_google_ads_detailed_report(...)` — детальные Google Ads отчёты.
-- `get_meta_ads_detailed_report(...)` — детальные Meta Ads отчёты.
+V2 предоставляет общий read API и MCP-инструменты для:
 
-## Google Ads
+- рекламных кабинетов и их статуса;
+- списка кампаний;
+- campaign status/objective/budget;
+- расхода, показов, кликов, CTR, CPC, CPM, конверсий и стоимости конверсии,
+  когда конкретный provider возвращает эти поля;
+- Google Ads hierarchy/diagnostics;
+- Meta Business, Pages, Page posts и Page → Instagram, если выданные
+  permissions позволяют прочитать объект;
+- безопасной provenance: `source_api`, `real_data`, `data_status`,
+  `fetched_at` в соответствующих provider responses.
 
-Типы `report_type`:
+## Зарегистрированные compatibility names
 
-- `search_terms` — поисковые запросы, статус, match type и метрики;
-- `keywords` — ключи, match type, статус, quality score и метрики;
-- `ads` — объявления, URL, RSA headlines/descriptions и метрики;
-- `ad_groups` — группы, статус, ставки и метрики;
-- `bidding` — стратегия ставок и бюджет кампании;
-- `conversions` — разбивка по conversion action, включая доступные импорты GA4;
-- `auction_insights` — конкуренты и auction metrics;
-- `change_history` — изменения за последние 30 дней;
-- `account_budget` — account-level budget для поддерживаемых billing setup.
+Имена `list_detailed_ad_report_types` и `get_detailed_ad_report_types`
+сохранены в MCP surface V1. Сейчас они возвращают только поддержанный тип
+`campaign_performance` и не делают вид, что детальные provider reports уже
+доступны.
 
-Для отчётов с метриками нужны `start_date` и `end_date`. Можно передать `campaign_id`, `ad_group_id` и `limit`.
+## Пока не реализовано в V2
 
-Google не предоставляет универсальный «остаток кошелька» для каждого типа оплаты. `account_budget` чаще доступен при consolidated/monthly invoicing. Auction Insights появляется только у подходящих кампаний с достаточным объёмом данных.
+- Google search terms, keywords, ads, ad groups, bidding, conversions
+  breakdown, auction insights, change history и account budget;
+- Meta actions breakdown, video, engagement, creatives, adsets/targeting,
+  audiences, pixels, billing и visual creative search;
+- полноценные read adapters для Yandex Direct и TikTok Ads.
 
-## Meta Ads
+Отсутствующие возможности должны возвращать честный `unsupported` или
+`additional_permission_required`, а не локальные snapshots, fixture или
+нулевые метрики.
 
-Типы `report_type`:
+## Следующий implementation block
 
-- `actions` — полный actions breakdown, Results по настроенным `action_metrics`, переписки и cost per action;
-- `video` — plays, ThruPlay и просмотры 25/50/75/95/100%;
-- `engagement` — reactions/comments/shares/saves/follows из actions breakdown;
-- `creatives` — тексты, CTA, destination/story spec, image/video/thumbnail metadata;
-- `ads`, `adsets` — объявления и группы, включая targeting и optimization goal;
-- `audiences`, `saved_audiences` — custom/lookalike/saved audiences при наличии прав;
-- `pixels`, `custom_conversions`, `activities` — связанные объекты;
-- `billing` — balance, spend cap, amount spent и доступные payment metadata;
-- `connected_assets` — страницы, Instagram, pixels и conversions с частичным результатом.
-
-Параметр `query` для `creatives` ищет по текстам и metadata. Он не выполняет распознавание содержимого изображения или видео. Для визуального поиска нужен отдельный индекс изображений и vision-анализ с контролем доступа.
-
-Если Meta не разрешает отдельный edge, например `instagram_accounts`, `connected_assets` возвращает остальные данные, `partial=true` и безопасное предупреждение без токенов.
+Добавлять report types по одному provider-backed adapter с контрактом,
+санитизацией ошибок, pagination, provenance и отдельными contract/integration
+тестами. До live-проверки capability остаётся `IMPLEMENTED`/`TESTED`, но не
+`LIVE_READ_VERIFIED`.

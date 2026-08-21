@@ -1,25 +1,43 @@
-# Клиентский отчёт по рекламе
+# Клиентский отчёт по рекламе V2
 
-В кабинете HolyMedia MCP добавлен раздел **«Отчёт»**. Он собирает данные только из выбранного workspace и рекламного кабинета пользователя.
+В V2 отчёт строится только из выбранного workspace, подключённого provider и
+включённого рекламного кабинета. Google Ads и Meta Ads не смешиваются.
 
-## Форматы
+## Что реализовано
 
-- **PDF-презентация** — клиентский формат 16:9: обложка, KPI, сравнение периодов, кампании, подтверждённые выводы, рекомендации, ограничения и источник данных.
-- **DOCX** — подробная версия для редактирования и внутренней работы.
+- JSON-отчёт с периодом, KPI, кампаниями, provenance и краткими
+  evidence-based выводами в поле `insights`;
+- DOCX-отчёт с обложечным блоком, KPI-таблицей, CPM, ценностью конверсий,
+  таблицей кампаний, источником данных и ограничениями;
+- сортировка кампаний по расходу и ограничение таблицы 50 строк с явным
+  сообщением о сокращении списка;
+- безопасный fallback `Нет данных`, если provider не вернул показатель;
+- entitlement-проверка для новых и legacy compatibility routes;
+- отчёт не содержит OAuth-токены, API keys, cookies или другие секреты.
 
-Оба файла строятся на одном наборе данных `collect_monthly_ads_report`. Отсутствующие значения не заменяются нулями, а неподтверждённые причины изменений не добавляются.
+## Endpoints
 
-## Провайдеры
+- `GET /api/v1/workspaces/:workspaceId/reports/performance` — JSON;
+- `GET /api/v1/workspaces/:workspaceId/reports/performance.docx` — DOCX;
+- `GET|POST /api/meta/skills/collect-report` — V1-compatible JSON;
+- `GET|POST /api/meta/skills/collect-report.docx` — V1-compatible DOCX.
 
-Отчёт получает выбранного провайдера вместе с `account_id`, поэтому Google Ads и Meta Ads не смешиваются. Поддержаны подключения `google_ads`, `meta_ads`, `tiktok_ads` и `yandex_direct`, если источник возвращает совместимый отчётный ответ.
+Запрос содержит `accountId`/`account_id`, `startDate`/`start_date` и
+`endDate`/`end_date`. Сервер заново проверяет workspace, connection, enabled
+account и billing entitlement; frontend не может подменить источник данных.
 
-## Endpoint
+## Форматы и ограничения
 
-- `POST /api/meta/skills/collect-report.pdf`
-- `POST /api/meta/skills/collect-report.docx`
+PDF-презентация 16:9, автоматическое сравнение периодов и детальные отчёты по
+поисковым запросам, ключам, объявлениям, auction insights и Meta creatives не
+считаются реализованными возможностями V2 на текущем этапе. Их нужно добавлять
+отдельными provider-backed adapters, а не заполнять fixture или seeded данными.
 
-Тело запроса содержит `provider`, `account_id` и `lookback_days`. Endpoint доступен только авторизованному пользователю и использует его workspace.
+Текущий DOCX использует абсолютный период и исходные нормализованные поля
+provider contract. Причины изменений не придумываются: выводы описывают только
+фактически полученные расход, показы, клики, CTR и конверсии.
 
-## Деплой
+## Roadmap
 
-Для PDF нужен пакет `reportlab` из optional-группы `site-audit`. Для русского текста генератор использует системный `DejaVuSans` или `LiberationSans`. На Linux-сервере должен быть установлен пакет `fonts-dejavu-core` либо нужно указать путь через `AD_MCP_REPORT_FONT_PATH`.
+Следующий report block: сравнение периодов в одном документе, async artifact
+storage, затем PDF после выбора и проверки production-grade PDF renderer.
