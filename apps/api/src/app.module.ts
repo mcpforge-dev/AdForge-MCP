@@ -34,6 +34,7 @@ import {
   LegacyMeController,
 } from "./compat/legacy-auth.controller.js";
 import { LegacyMcpTokenController } from "./compat/legacy-mcp-token.controller.js";
+import { LegacyHostedController } from "./compat/legacy-hosted.controller.js";
 
 @Module({
   controllers: [
@@ -48,6 +49,7 @@ import { LegacyMcpTokenController } from "./compat/legacy-mcp-token.controller.j
     LegacyAuthController,
     LegacyMeController,
     LegacyMcpTokenController,
+    LegacyHostedController,
   ],
   providers: [
     DatabaseService,
