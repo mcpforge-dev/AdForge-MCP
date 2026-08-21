@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { McpService } from "./mcp.service.js";
 
 function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
@@ -56,7 +56,10 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
           },
   } as never;
   const reports = {
-    performance: async () => ({ reportType: "performance" }),
+    performance: vi.fn(async (_workspaceId: string, input: unknown) => ({
+      reportType: "performance",
+      input,
+    })),
   } as never;
   const previews = {
     create: async () => ({ status: "preview" }),
@@ -68,6 +71,7 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
     currentSubscription: async () => null,
     usage: async () => [],
     entitlements: async () => [],
+    requireFeature: async () => undefined,
   } as never;
   return new McpService(
     database,
@@ -203,5 +207,33 @@ describe("MCP V1-compatible policy", () => {
     )) as { changes: { spend: { absolute: number; percent: number } } };
     expect(result.changes.spend.absolute).toBe(50);
     expect(result.changes.spend.percent).toBe(50);
+  });
+
+  it("adds an equal previous period to the collect report skill", async () => {
+    const service = serviceWithAccounts([account]);
+    const result = (await service.call(
+      {
+        kind: "service",
+        tokenId: "token",
+        serviceIdentityId: "identity",
+        workspaceId: "workspace-a",
+        scopes: ["adforge:mcp:read"],
+        accountIds: [],
+      },
+      "collect_report_skill",
+      {
+        provider: "google_ads",
+        account_id: "1234567890",
+        start_date: "2026-01-08",
+        end_date: "2026-01-14",
+      },
+    )) as {
+      input: {
+        previousStartDate: string;
+        previousEndDate: string;
+      };
+    };
+    expect(result.input.previousStartDate).toBe("2026-01-01");
+    expect(result.input.previousEndDate).toBe("2026-01-07");
   });
 });
