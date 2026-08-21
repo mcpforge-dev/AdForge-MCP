@@ -68,6 +68,9 @@ describe("V2 performance reports", () => {
     expect(report.account.externalAccountId).toBe("1234567890");
     expect(report.metrics.spend?.amount).toBe("10");
     expect(report.provenance.summary.realData).toBe(true);
+    expect(report.insights).toEqual(
+      expect.arrayContaining([expect.stringContaining("Расход")]),
+    );
     const document = await service.performanceDocx("workspace-a", {
       accountId: "1234567890",
       startDate: "2026-01-01",

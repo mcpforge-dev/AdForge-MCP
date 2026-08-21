@@ -46,6 +46,7 @@ export type PerformanceReport = {
   };
   metrics: ProviderMetricSummary;
   campaigns: ProviderCampaign[];
+  insights: string[];
   provenance: {
     summary: ProviderProvenance;
     campaigns: ProviderProvenance[];
@@ -99,7 +100,7 @@ export class ReportService {
         500,
       ),
     ]);
-    return {
+    const report: PerformanceReport = {
       reportType: "performance",
       generatedAt: new Date().toISOString(),
       period,
@@ -112,11 +113,14 @@ export class ReportService {
       },
       metrics,
       campaigns: campaigns.items,
+      insights: [],
       provenance: {
         summary: summary.provenance,
         campaigns: campaigns.items.map((campaign) => campaign.provenance),
       },
     };
+    report.insights = this.reportFindings(metrics);
+    return report;
   }
 
   public async performanceDocx(
@@ -162,7 +166,7 @@ export class ReportService {
         String(campaign.status).toUpperCase(),
       ),
     ).length;
-    const summaryBullets = this.reportFindings(report);
+    const summaryBullets = report.insights;
     const source = report.provenance.summary;
     const sourceLabel =
       source.realData && source.dataStatus === "live"
@@ -342,8 +346,7 @@ export class ReportService {
     return Packer.toBuffer(document);
   }
 
-  private reportFindings(report: PerformanceReport): string[] {
-    const metrics = report.metrics;
+  private reportFindings(metrics: ProviderMetricSummary): string[] {
     const findings: string[] = [];
     if (metrics.spend) {
       findings.push(`Расход за период: ${this.formatMoney(metrics.spend)}.`);
