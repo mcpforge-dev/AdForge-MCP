@@ -8,7 +8,10 @@ import {
 import { AuditService } from "../audit/audit.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
-import type { CreateServiceTokenDto } from "./service-token.dto.js";
+import type {
+  CreateServiceTokenDto,
+  RotateServiceTokenDto,
+} from "./service-token.dto.js";
 
 const READ_SCOPE = "adforge:mcp:read";
 const WRITE_SCOPE = "adforge:mcp:write";
@@ -155,6 +158,59 @@ export class ServiceTokenService {
       ...(request.requestId ? { requestId: request.requestId } : {}),
     });
     return { success: true as const };
+  }
+
+  public async rotate(
+    workspaceId: string,
+    tokenId: string,
+    input: RotateServiceTokenDto,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ) {
+    const rawToken = `hmst_${randomBytes(32).toString("base64url")}`;
+    const now = new Date();
+    const expirationDays = input.expiresInDays ?? 90;
+    const expiresAt = new Date(now.getTime() + expirationDays * 86_400_000);
+    const rotated = await this.database.client.$transaction(async (tx) => {
+      const current = await tx.serviceToken.findFirst({
+        where: {
+          id: tokenId,
+          revokedAt: null,
+          serviceIdentity: { workspaceId },
+        },
+        include: { serviceIdentity: { select: { id: true } } },
+      });
+      if (!current) throw new NotFoundException("Service token not found.");
+      await tx.serviceToken.update({
+        where: { id: current.id },
+        data: { revokedAt: now },
+      });
+      const replacement = await tx.serviceToken.create({
+        data: {
+          serviceIdentityId: current.serviceIdentityId,
+          tokenDigest: hashServiceToken(rawToken),
+          tokenPrefix: rawToken.slice(0, 13),
+          name: current.name,
+          scopes: current.scopes ?? [READ_SCOPE],
+          accountIds: current.accountIds ?? [],
+          expiresAt,
+        },
+      });
+      return { replacement, serviceIdentityId: current.serviceIdentity.id };
+    });
+    await this.audit.record({
+      eventType: "service_token_rotated",
+      actorUserId: principal.userId,
+      workspaceId,
+      targetType: "service_token",
+      targetId: rotated.replacement.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: { replacedTokenId: tokenId },
+    });
+    return {
+      ...this.toView(rotated.replacement, rotated.serviceIdentityId),
+      token: rawToken,
+    };
   }
 
   public async authenticate(

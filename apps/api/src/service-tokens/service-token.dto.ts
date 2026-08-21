@@ -34,3 +34,11 @@ export class CreateServiceTokenDto {
   @Max(3650)
   public expiresInDays?: number;
 }
+
+export class RotateServiceTokenDto {
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(3650)
+  public expiresInDays?: number;
+}

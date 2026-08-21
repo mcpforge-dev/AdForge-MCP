@@ -16,7 +16,10 @@ import {
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
-import type { CreateServiceTokenDto } from "./service-token.dto.js";
+import type {
+  CreateServiceTokenDto,
+  RotateServiceTokenDto,
+} from "./service-token.dto.js";
 import { ServiceTokenService } from "./service-token.service.js";
 
 @Controller("workspaces")
@@ -55,5 +58,18 @@ export class ServiceTokenController {
     @Req() request: RequestWithAuth,
   ) {
     return this.tokens.revoke(id, tokenId, principal, request);
+  }
+
+  @Post(":id/service-tokens/:tokenId/rotate")
+  @UseGuards(WorkspaceAuthorizationGuard)
+  @RequirePermissions("mcp.tokens.manage")
+  public rotate(
+    @Param("id") id: string,
+    @Param("tokenId") tokenId: string,
+    @Body() input: RotateServiceTokenDto,
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.tokens.rotate(id, tokenId, input, principal, request);
   }
 }

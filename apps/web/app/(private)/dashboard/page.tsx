@@ -665,6 +665,29 @@ export default function DashboardPage() {
     await loadServiceTokens(active);
   }
 
+  async function rotateServiceToken(tokenId: string) {
+    if (!active) return;
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/service-tokens/${tokenId}/rotate`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({}),
+      },
+    );
+    if (!response.ok) {
+      setError("Не удалось ротировать служебный MCP-токен.");
+      return;
+    }
+    const token = (await response.json()) as ServiceToken & { token: string };
+    setCreatedServiceToken(token.token);
+    await loadServiceTokens(active);
+  }
+
   async function logout() {
     await fetch(`${API}/api/v1/auth/logout`, {
       method: "POST",
@@ -965,13 +988,22 @@ export default function DashboardPage() {
                 {token.revokedAt ? (
                   <em>Отозван</em>
                 ) : (
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => void revokeServiceToken(token.id)}
-                  >
-                    Отозвать
-                  </button>
+                  <div className="provider-actions">
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void rotateServiceToken(token.id)}
+                    >
+                      Ротировать
+                    </button>
+                    <button
+                      className="ghost-button"
+                      type="button"
+                      onClick={() => void revokeServiceToken(token.id)}
+                    >
+                      Отозвать
+                    </button>
+                  </div>
                 )}
               </div>
             ))}
