@@ -78,7 +78,9 @@ test.describe("V2 browser cutover smoke", () => {
     await expect(page.locator("body")).toContainText("Meta onboarding");
 
     await expect(page.locator("form.token-form")).toHaveCount(1);
-    await expect(page.locator('input[name="name"]')).toHaveCount(1);
+    await expect(
+      page.locator('form.token-form input[name="name"]'),
+    ).toHaveCount(1);
     await expect(page.locator("header.dashboard-header button")).toHaveCount(1);
     expect(failures, failures.join("\n")).toEqual([]);
   });
