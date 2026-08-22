@@ -1,0 +1,2 @@
+# Pinned upstream source. Do not replace this with an unpinned install.
+memora-mcp @ git+https://github.com/agentic-box/memora.git@c32b40e0ac48029ddd252d3a3e958547f9a26b50

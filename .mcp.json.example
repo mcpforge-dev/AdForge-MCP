@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "memora": {
+      "command": ".venv\\Scripts\\python.exe",
+      "args": ["-m", "memora.server", "--no-graph"],
+      "env": {
+        "MEMORA_DB_PATH": ".local/memora/memories.db",
+        "MEMORA_EMBEDDING_MODEL": "tfidf",
+        "MEMORA_LLM_ENABLED": "false",
+        "MEMORA_TAGS": "project,decision,provider,security,report,task",
+        "MEMORA_GRAPH_PORT": "0"
+      }
+    }
+  }
+}

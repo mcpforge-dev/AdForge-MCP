@@ -32,3 +32,4 @@ src/generated/
 .agents/
 .claude/
 .codex/
+.mcp.json
