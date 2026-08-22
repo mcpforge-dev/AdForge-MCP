@@ -98,6 +98,7 @@ services:
     image: ${V2_IMAGE:?V2_IMAGE is required}
     restart: unless-stopped
     init: true
+    working_dir: /workspace/apps/web
     env_file:
       - /etc/holymedia-v2/web.env
     command: ["./node_modules/.bin/next", "start"]
