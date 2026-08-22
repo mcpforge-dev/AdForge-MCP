@@ -597,7 +597,8 @@ export default function DashboardPage() {
 
   async function createWorkspace(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const response = await fetch(`${API}/api/v1/workspaces`, {
       method: "POST",
       credentials: "include",
@@ -611,7 +612,7 @@ export default function DashboardPage() {
       setError("Не удалось создать workspace.");
       return;
     }
-    event.currentTarget.reset();
+    formElement.reset();
     await loadWorkspaces();
   }
 
