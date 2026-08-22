@@ -44,11 +44,22 @@ test.describe("V2 browser cutover smoke", () => {
       .first()
       .locator("input")
       .fill(workspaceName);
+    const createWorkspaceResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" &&
+        new URL(response.url()).pathname === "/api/v1/workspaces",
+    );
     await page
       .locator("form.inline-form")
       .first()
       .locator('button[type="submit"]')
       .click();
+    const workspaceResponse = await createWorkspaceResponse;
+    const workspaceResponseBody = await workspaceResponse.text();
+    expect(
+      workspaceResponse.ok(),
+      `workspace create failed: HTTP ${workspaceResponse.status()} ${workspaceResponseBody.slice(0, 500)}`,
+    ).toBeTruthy();
     await expect(
       page.locator("form.inline-form").first().locator('input[name="name"]'),
     ).toHaveValue("");
