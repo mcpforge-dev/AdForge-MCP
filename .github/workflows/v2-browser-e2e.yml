@@ -70,7 +70,7 @@ jobs:
 
       - name: Run desktop and mobile Playwright E2E
         env:
-          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          PLAYWRIGHT_BASE_URL: http://localhost:3000
         run: pnpm test:e2e
 
       - name: Collect runtime diagnostics on failure
