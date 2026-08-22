@@ -11,7 +11,7 @@ V1 — рабочий Python-продукт с legacy auth, файловым/JSO
 
 Основное ядро V2 уже способно заменить V1 по identity, tenant isolation, миграции данных, MCP read-контракту и проверенным Google/Meta read-сценариям. Это ещё не 100% функциональный drop-in replacement: Yandex/TikTok не имеют подтверждённого live reporting parity, часть старых имен инструментов остаётся честным `unsupported` alias, не завершены browser E2E, настоящий Telegram E2E и smoke конкретного сохранённого production service token.
 
-**Production readiness: 80%.** До 100% не хватает операторских доказательств совместимости конкретных legacy clients и нескольких production-операционных функций; V1 production пока продолжает работать.
+**Production readiness: 95%.** Основные pre-cutover проверки закрыты; обязательным остаётся только отдельный безопасный Telegram-контур для настоящего Hermes E2E, если Hermes входит в Phase C scope.
 
 **Текущий verdict: NO — Phase C прямо сейчас не выполнять.**
 
@@ -261,8 +261,40 @@ V2 production не deployилась. Не менялись production Nginx, DNS
 
 До Phase C остаётся **3 обязательных операторских блока** из принятого Phase B списка: legacy service-token smoke/transition, Telegram test-contour E2E и Playwright browser E2E. Дополнительно перед переключением обязательно закрыть compatibility smoke Google Login и всех legacy routes. Если Hermes или Yandex/TikTok не входят в cutover scope, их следует явно исключить из production promise, а не считать реализованными.
 
-**Estimated readiness: 80%.** Core migration, encryption, identity, tenant security и Google/Meta read parity подтверждены; оставшиеся 20% — это проверка конкретных legacy clients, browser/Telegram proof, route sign-off, unsupported provider scope и production operations.
+**Estimated readiness: 95%.** Core migration, encryption, identity, tenant security, service-token compatibility, browser CI, external route smoke и Google/Meta read parity подтверждены; оставшиеся 5% — отдельный Telegram test-contour E2E и явное решение, входит ли Hermes в cutover scope.
 
 ## 25. Memora и источник истины
 
 Memora используется только как локальная память разработки, без credentials и пользовательских секретов. Canonical artifacts остаются в `docs/architecture/v2/`, Git остаётся источником точного состояния кода, а текущий operator report имеет приоритет над более ранними статусными документами.
+
+## 26. Финальная pre-cutover verification
+
+Этот раздел supersedes устаревшие статусы из ранних Phase B таблиц.
+
+### Existing service-token compatibility
+
+**EXISTING SERVICE TOKEN COMPATIBILITY = VERIFIED (technical compatibility).** V1 хранит SHA-256 digest, plaintext восстановлению не подлежит и не требуется. В V2 добавлен integration proof: synthetic plaintext token хешируется тем же `hashServiceToken`, digest переносится без изменения, а V2 authentication возвращает исходные token/workspace restrictions. Production service tokens не инвалидировались и не reissue-ились. Controlled smoke именно существующего внешнего клиента не выполнялся, потому что plaintext клиента недоступен в безопасном operator-контуре.
+
+### Browser and external contract
+
+**BROWSER PLAYWRIGHT E2E = VERIFIED.** GitHub Actions run `32588367941` на commit `b791f9f0fb4988308b22ddeb2614a7ac46e9c33d` успешно выполнил desktop Chromium и mobile Chromium: transitional legacy login, register, dashboard, workspace creation/switching, connections, advertising-account surface, MCP/service-token surface, reports, billing/legacy entitlement и profile/admin-critical surface. Browser console errors и failed requests не обнаружены.
+
+**EXTERNAL CONTRACT COMPATIBILITY = VERIFIED.** Run `32588367941` прошёл `scripts/v2-compatibility-smoke.mjs`: `/health`, `/ready`, `/mcp`, OAuth metadata, legacy auth/CSRF/registration routes, Google/Meta/Yandex/TikTok callback routes, legacy report и MCP-token routes. В CI provider OAuth credentials не выдавались, поэтому это route/contract smoke, а не новый OAuth exchange. Production hostname `mcp.holymedia.kz`, DNS, OAuth applications и callback URLs не менялись.
+
+### CI result
+
+На финальном commit `b791f9f0fb4988308b22ddeb2614a7ac46e9c33d` зелёные:
+
+- foundation run `32588367932`: PostgreSQL 18, Redis 7.4, migrations, migration/restore rehearsal, integration tests, readiness/degradation, worker job, secret scan и dependency audit;
+- full-stack Compose run `32588367945`: build/up для PostgreSQL, Redis, API, worker и web, `/health`, `/ready`, Redis, worker и teardown;
+- browser/compatibility run `32588367941`: Playwright desktop/mobile и external route smoke.
+
+Локально после исправлений: format, lint, typecheck, build, secret scan и dependency audit зелёные; Vitest: API `56 passed`, `15 skipped` (DB/Redis-only skipped без локального Docker), Hermes `9 passed`; ранее V1 pytest `238 passed`. Обязательные DB/Redis/Compose checks подтверждены CI, а не локальными skipped-тестами.
+
+### Единственный оставшийся обязательный блокер
+
+**PHASE B NOT READY.** Для включения Hermes в Phase C нужен отдельный безопасный Telegram test contour, которого нет в текущей среде. Ручное действие: создать отдельного бота через BotFather, создать закрытую test group/chat, добавить бота, сохранить token только в закрытом V2 rehearsal env и указать allowlisted chat id. После этого выполнить Telegram → Hermes → scoped service identity → V2 MCP/API → migrated account для расходов, активных кампаний, ranking, сравнения, follow-up, write rejection, duplicate-update protection и deterministic fallback без OpenAI. Production Telegram bot/chat не использовать.
+
+Billing payment provider, Yandex/TikTok live reporting, broad write adapters, production monitoring/alerting и automated promotion остаются post-cutover или scope decisions: их отсутствие не блокирует V1 → V2 drop-in cutover, если они не заявлены как существующие V1 capabilities.
+
+**Актуальный verdict:** Phase C не выполнять до закрытия Telegram E2E либо до отдельного явного решения не включать Hermes в cutover scope. После этого изменения не затрагивали V1 production, Nginx, DNS, OAuth applications, callback URLs или public traffic.
