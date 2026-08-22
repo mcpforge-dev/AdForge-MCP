@@ -3,7 +3,10 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { AuditService } from "../audit/audit.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
-import { ServiceTokenService } from "./service-token.service.js";
+import {
+  hashServiceToken,
+  ServiceTokenService,
+} from "./service-token.service.js";
 
 const integrationEnabled =
   process.env.V2_INTEGRATION_TESTS === "true" &&
@@ -80,6 +83,38 @@ describe.skipIf(!integrationEnabled)(
         where: { id: rotated.id },
       });
       expect(stored.tokenDigest).not.toContain(rotated.token);
+    });
+
+    it("authenticates an imported V1-compatible digest without token reissue", async () => {
+      const rawToken = `hmst_migrated_${randomUUID()}`;
+      const identity = await database.client.serviceIdentity.create({
+        data: { workspaceId, createdById: userId, name: "Migrated identity" },
+      });
+      const token = await database.client.serviceToken.create({
+        data: {
+          serviceIdentityId: identity.id,
+          tokenDigest: hashServiceToken(rawToken),
+          tokenPrefix: rawToken.slice(0, 13),
+          name: "Migrated token",
+          scopes: ["adforge:mcp:read"],
+          accountIds: [],
+          expiresAt: new Date(Date.now() + 60_000),
+        },
+      });
+
+      const principal = await serviceTokens.authenticate(rawToken);
+
+      expect(principal?.tokenId).toBe(token.id);
+      expect(principal?.workspaceId).toBe(workspaceId);
+      expect(
+        await database.client.serviceToken.findUniqueOrThrow({
+          where: { id: token.id },
+          select: { tokenDigest: true },
+        }),
+      ).toEqual({ tokenDigest: hashServiceToken(rawToken) });
+      await database.client.serviceIdentity.delete({
+        where: { id: identity.id },
+      });
     });
   },
 );

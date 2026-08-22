@@ -1,0 +1,84 @@
+name: HolyMedia MCP v2 browser and compatibility E2E
+
+on:
+  push:
+    branches: [main, "v2/**", "feat/**"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  browser-e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      COMPOSE_FILE: infra/docker-compose.v2.yml
+      DATABASE_URL: postgresql://holymedia:local-only-password@127.0.0.1:5433/holymedia_v2
+      REDIS_URL: redis://127.0.0.1:6380
+      V2_CONFIG_STRICT: "true"
+      V2_E2E_EMAIL: phase-b-legacy-user@example.test
+      V2_E2E_PASSWORD: Phase-B-legacy-password-123!
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.1.3
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - name: Build and start isolated V2 Compose
+        run: |
+          set -euo pipefail
+          docker compose build
+          docker compose up -d postgres redis api worker web
+
+      - name: Wait for V2 runtime
+        run: |
+          set -euo pipefail
+          for attempt in {1..60}; do
+            if curl --fail --silent http://127.0.0.1:4000/ready >/tmp/v2-ready.json \
+              && curl --fail --silent http://127.0.0.1:3000/api/health >/tmp/v2-web-health.json; then
+              exit 0
+            fi
+            if [ "$attempt" -eq 60 ]; then
+              docker compose ps
+              docker compose logs --no-color api web worker
+              exit 1
+            fi
+            sleep 2
+          done
+
+      - name: Build database package and seed browser fixture
+        run: |
+          set -euo pipefail
+          pnpm --filter @holymedia/database prisma:generate
+          pnpm --filter @holymedia/database build
+          node scripts/v2-playwright-seed.mjs
+
+      - name: Verify V1 external route compatibility
+        run: pnpm test:compat
+
+      - name: Run desktop and mobile Playwright E2E
+        env:
+          PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+        run: pnpm test:e2e
+
+      - name: Collect runtime diagnostics on failure
+        if: failure()
+        run: |
+          docker compose ps
+          docker compose logs --no-color api web worker || true
+
+      - name: Stop and remove isolated V2 environment
+        if: always()
+        run: docker compose down -v --remove-orphans
