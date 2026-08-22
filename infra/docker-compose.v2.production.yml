@@ -1,0 +1,125 @@
+name: holymedia-v2
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    restart: unless-stopped
+    env_file:
+      - /etc/holymedia-v2/compose.env
+    environment:
+      POSTGRES_DB: ${V2_POSTGRES_DB}
+      POSTGRES_USER: ${V2_POSTGRES_USER}
+      POSTGRES_PASSWORD: ${V2_POSTGRES_PASSWORD}
+    volumes:
+      - /var/lib/holymedia-v2/postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  redis:
+    image: redis:7.4-alpine
+    restart: unless-stopped
+    env_file:
+      - /etc/holymedia-v2/compose.env
+    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$V2_REDIS_PASSWORD\""]
+    volumes:
+      - /var/lib/holymedia-v2/redis:/data
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli -a \"$$V2_REDIS_PASSWORD\" ping | grep -q PONG"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+
+  api:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.v2
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://mcp.holymedia.kz
+    restart: unless-stopped
+    init: true
+    env_file:
+      - /etc/holymedia-v2/app.env
+    command: ["sh", "-c", "pnpm --filter @holymedia/database prisma:deploy && pnpm --filter @holymedia/api start"]
+    ports:
+      - "127.0.0.1:${V2_API_PORT}:4000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  worker:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.v2
+    restart: unless-stopped
+    init: true
+    env_file:
+      - /etc/holymedia-v2/app.env
+    command: ["pnpm", "--filter", "@holymedia/worker", "start"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "import('ioredis').then(async ({ default: Redis }) => { const redis = new Redis(process.env.REDIS_URL); await redis.ping(); await redis.quit(); }).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 15s
+    depends_on:
+      redis:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
+
+  web:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.v2
+      args:
+        NEXT_PUBLIC_API_BASE_URL: https://mcp.holymedia.kz
+    restart: unless-stopped
+    init: true
+    env_file:
+      - /etc/holymedia-v2/web.env
+    command: ["./node_modules/.bin/next", "start"]
+    ports:
+      - "127.0.0.1:${V2_WEB_PORT}:3000"
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+    depends_on:
+      api:
+        condition: service_healthy
+    logging:
+      driver: json-file
+      options:
+        max-size: 20m
+        max-file: "5"
