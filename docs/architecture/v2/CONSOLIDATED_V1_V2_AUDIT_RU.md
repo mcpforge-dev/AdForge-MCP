@@ -339,3 +339,23 @@ Final operator verdict: `PHASE C COMPLETE - V2 IS PRODUCTION`.
 - Production V1, Nginx, DNS, OAuth applications, callback URLs и public traffic до фактического cutover не изменялись.
 
 Операторские production gates выполнены: backup и checksum, финальная миграция, V2 internal runtime, internal smoke, Nginx switch и public smoke. V1 runtime сохранён для rollback/observation period.
+
+## 29. Post-cutover stabilization
+
+- Disk remediation: free space increased from approximately `1.4 GB / 93% used` to `3.4 GB / 83% used`.
+- Removed only archived systemd journal data and apt cache. Journal retention is now capped by `/etc/systemd/journald.conf.d/holymedia-retention.conf` at 250 MB system usage / 100 MB runtime usage / 14 days.
+- Preserved: V2 production image and active containerd layers, PostgreSQL and Redis state, V1 runtime and ports, all Phase C backups, encryption material and active configuration.
+- Docker log rotation is active: json-file, API/worker/web `20m x 5`, PostgreSQL/Redis `10m x 5`.
+- V2 PostgreSQL, Redis, API, worker and web remained healthy with restart count `0`. Public `/health` and `/ready` remained `200/200`; OOM events and disk-full warnings were `0` for the checked 24-hour window.
+- Latest Meta read observation passed: campaigns, metrics, diagnostics, Business, Pages and live Page posts. Temporary scoped token checks confirmed read access, foreign-account rejection, write rejection, revoked-token rejection and expired-token rejection. Temporary identities/tokens were removed.
+- Yandex/TikTok remain V1-compatible OAuth/discovery capabilities; no unsupported live reporting was claimed. Google remains `N/A - no production connection`.
+- Browser desktop/mobile production regression passed with no console errors or failed requests.
+- Existing Phase C backup remained readable and checksum-valid. New post-cutover backup: `/var/backups/adforge-mcp/post-cutover-v2-20260822T214700Z`; PostgreSQL dump, Redis state, V2 config, current Nginx config and immutable V1 rollback config were checksum-verified.
+- Rollback readiness is confirmed without switching public traffic: V1 services are active, ports `8765/8766` respond, V1 commit `c700fb7` is retained, and the new backup contains `nginx-v1-rollback.conf` with MCP `8766` and web/API `8765` upstreams.
+- Security regression: secret scan passed, dependency audit reported no known vulnerabilities, Critical `0`, High `0`.
+
+Post-cutover verdict: `POST-CUTOVER STABILIZATION PASSED`.
+
+V1 verdict: `V1 DECOMMISSION READY - AWAITING OWNER APPROVAL`.
+
+V1 was not stopped, deleted or decommissioned. Telegram Hermes E2E remains `DEFERRED BY PROJECT DECISION`; payment gateway and extended Yandex/TikTok reporting remain non-blocking scope items.
