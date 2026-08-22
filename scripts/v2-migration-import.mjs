@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { accountMetadata } from "./v2-account-metadata.mjs";
 
 const require = createRequire(import.meta.url);
 const pg = require("../packages/database/node_modules/pg");
@@ -253,7 +254,7 @@ try {
           nullableText(account.timezone, 80),
           nullableText(account.status, 80),
           Boolean(account.enabled),
-          JSON.stringify(safeMetadata(account.metadata)),
+          JSON.stringify(accountMetadata(account)),
           dateOrNow(account.discovered_at || account.discoveredAt),
         ],
       );
@@ -358,13 +359,15 @@ try {
 } catch (error) {
   await client.query("ROLLBACK").catch(() => undefined);
   const diagnostic =
-    error && typeof error === "object"
-      ? error
-      : { message: String(error) };
-  const code = typeof diagnostic.code === "string" ? diagnostic.code : "unknown";
+    error && typeof error === "object" ? error : { message: String(error) };
+  const code =
+    typeof diagnostic.code === "string" ? diagnostic.code : "unknown";
   const message =
     typeof diagnostic.message === "string"
-      ? diagnostic.message.replace(/(password|token|secret|authorization)\s*[:=]\s*[^\s,;]+/gi, "$1=[REDACTED]")
+      ? diagnostic.message.replace(
+          /(password|token|secret|authorization)\s*[:=]\s*[^\s,;]+/gi,
+          "$1=[REDACTED]",
+        )
       : "unknown migration error";
   console.error(
     `Migration failed; transaction rolled back. code=${code}; message=${message.slice(0, 240)}`,

@@ -25,6 +25,7 @@ import { ProviderError, toSafeProviderException } from "./provider.errors.js";
 import { ProviderRefreshCoordinator } from "./refresh-coordinator.service.js";
 import { ProviderRegistry } from "./provider.registry.js";
 import { ProviderMetricsService } from "./provider.metrics.js";
+import { createLogger, type Logger } from "@holymedia/observability";
 import type {
   MetaReadAdapter,
   NormalizedProviderAccount,
@@ -41,6 +42,7 @@ import {
 @Injectable()
 export class ProviderService {
   private readonly config: AppConfig = loadConfig();
+  private readonly logger: Logger = createLogger("holymedia-mcp-v2-provider");
 
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
@@ -540,12 +542,19 @@ export class ProviderService {
     accountId: string,
     range?: ProviderDateRange,
   ) {
-    const context = await this.readContext(
+    return this.withReadFailure(
       workspaceId,
       connectionId,
-      accountId,
+      "account_summary",
+      async () => {
+        const context = await this.readContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.getAccountSummary(context.read, range);
+      },
     );
-    return context.adapter.getAccountSummary(context.read, range);
   }
 
   public async readCampaigns(
@@ -556,12 +565,24 @@ export class ProviderService {
     limit?: number,
     cursor?: string,
   ) {
-    const context = await this.readContext(
+    return this.withReadFailure(
       workspaceId,
       connectionId,
-      accountId,
+      "campaigns",
+      async () => {
+        const context = await this.readContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.listCampaigns(
+          context.read,
+          range,
+          limit,
+          cursor,
+        );
+      },
     );
-    return context.adapter.listCampaigns(context.read, range, limit, cursor);
   }
 
   public async readMetrics(
@@ -571,12 +592,19 @@ export class ProviderService {
     range: ProviderDateRange,
     campaignId?: string,
   ) {
-    const context = await this.readContext(
+    return this.withReadFailure(
       workspaceId,
       connectionId,
-      accountId,
+      "metrics",
+      async () => {
+        const context = await this.readContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.getMetrics(context.read, range, campaignId);
+      },
     );
-    return context.adapter.getMetrics(context.read, range, campaignId);
   }
 
   public async readHealth(
@@ -590,6 +618,49 @@ export class ProviderService {
       accountId,
     );
     return context.adapter.health(context.read);
+  }
+
+  private async withReadFailure<T>(
+    workspaceId: string,
+    connectionId: string,
+    operation: string,
+    read: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await read();
+    } catch (error) {
+      const code =
+        error instanceof ProviderError
+          ? error.code
+          : "provider_response_invalid";
+      await this.database.client.providerConnection.updateMany({
+        where: { id: connectionId, workspaceId },
+        data: {
+          status: "DEGRADED",
+          lastErrorAt: new Date(),
+          lastErrorCode: [
+            code,
+            error instanceof ProviderError ? error.providerCode : undefined,
+          ]
+            .filter(Boolean)
+            .join(":")
+            .slice(0, 120),
+        },
+      });
+      this.logger.warn(
+        {
+          operation,
+          providerErrorCode: code,
+          providerStatus:
+            error instanceof ProviderError ? error.providerStatus : undefined,
+          providerCode:
+            error instanceof ProviderError ? error.providerCode : undefined,
+          retryable: error instanceof ProviderError ? error.retryable : false,
+        },
+        "provider read failed",
+      );
+      throw error;
+    }
   }
 
   public async mutateCampaign(
@@ -638,6 +709,48 @@ export class ProviderService {
         "Meta Business read is not configured.",
       );
     return adapter.listBusinesses(context.credentials);
+  }
+
+  public async metaPermissions(workspaceId: string, connectionId: string) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    const adapter = context.adapter as unknown as MetaReadAdapter;
+    const permissions = await adapter.getPermissions(context.credentials);
+    const requested = this.registry.get("META_ADS").definition.scopes;
+    const missing = requested.filter(
+      (scope) => !permissions.granted.includes(scope),
+    );
+    const metadata = {
+      ...((context.connection.metadata as Record<string, unknown> | null) ??
+        {}),
+      requestedScopes: requested,
+      grantedScopes: permissions.granted,
+      missingScopes: missing,
+    };
+    const encrypted = this.vault.encrypt({
+      ...context.credentials,
+      scopes: permissions.granted,
+    });
+    await this.database.client.providerConnection.update({
+      where: { id: context.connection.id },
+      data: {
+        metadata,
+        credential: {
+          update: {
+            encryptedPayload: encrypted.ciphertext,
+            encryptionVersion: encrypted.encryptionVersion,
+          },
+        },
+      },
+    });
+    return {
+      requested,
+      granted: permissions.granted,
+      missing,
+      declined: permissions.declined,
+    };
   }
 
   public async metaPages(workspaceId: string, connectionId: string) {
@@ -898,23 +1011,24 @@ export class ProviderService {
       workspaceId,
       connectionId,
     );
+    const fresh = await this.refreshForRead(context);
     const account = await this.database.client.providerAccount.findFirst({
       where: { id: accountId, connectionId, workspaceId, enabled: true },
     });
     if (!account)
       throw new NotFoundException("Selected provider account not found.");
-    if (!isProviderReadAdapter(context.adapter))
+    if (!isProviderReadAdapter(fresh.adapter))
       throw new ProviderError(
         "provider_not_configured",
         "Provider read is not configured.",
       );
     const loginCustomerId = stringMetadata(account.metadata, "loginCustomerId");
     return {
-      ...context,
+      ...fresh,
       account,
-      adapter: context.adapter,
+      adapter: fresh.adapter,
       read: {
-        credentials: context.credentials,
+        credentials: fresh.credentials,
         accountId: account.externalAccountId,
         ...(account.currency ? { currency: account.currency } : {}),
         ...(loginCustomerId ? { loginCustomerId } : {}),

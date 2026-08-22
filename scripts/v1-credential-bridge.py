@@ -76,7 +76,7 @@ def main() -> int:
         if not isinstance(encrypted, str) or not encrypted.startswith("v1:"):
             continue
         plaintext = fernet.decrypt(encrypted[3:].encode("ascii"))
-        payload = json.loads(plaintext.decode("utf-8"))
+        payload = _normalize_credential_payload(json.loads(plaintext.decode("utf-8")))
         if not isinstance(payload, dict):
             raise SystemExit("V1 credential payload must be a JSON object.")
         nonce = secrets.token_bytes(12)
@@ -111,6 +111,57 @@ def _connections(bundle: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(values, list):
         return []
     return [item for item in values if isinstance(item, dict)]
+
+
+def _normalize_credential_payload(value: Any) -> dict[str, Any]:
+    if not isinstance(value, dict):
+        raise SystemExit("V1 credential payload must be a JSON object.")
+
+    def first(*keys: str) -> Any:
+        for key in keys:
+            candidate = value.get(key)
+            if candidate not in (None, ""):
+                return candidate
+        return None
+
+    normalized: dict[str, Any] = {}
+    mappings = {
+        "accessToken": ("accessToken", "access_token"),
+        "refreshToken": ("refreshToken", "refresh_token"),
+        "expiresAt": ("expiresAt", "expires_at"),
+        "tokenType": ("tokenType", "token_type"),
+        "externalSubjectId": ("externalSubjectId", "external_subject_id"),
+        "displayName": ("displayName", "display_name"),
+    }
+    for target, keys in mappings.items():
+        candidate = first(*keys)
+        if candidate is not None:
+            normalized[target] = candidate
+
+    scopes = first("scopes", "scope")
+    if isinstance(scopes, str):
+        normalized["scopes"] = [item for item in scopes.split() if item]
+    elif isinstance(scopes, list):
+        normalized["scopes"] = [item for item in scopes if isinstance(item, str)]
+    else:
+        normalized["scopes"] = []
+
+    metadata = first("providerMetadata", "provider_metadata")
+    if isinstance(metadata, dict):
+        normalized["providerMetadata"] = {
+            str(key): item
+            for key, item in metadata.items()
+            if isinstance(item, (str, int, float, bool)) or item is None
+        }
+
+    if "accessToken" not in normalized:
+        raise SystemExit("V1 credential payload does not contain an access token.")
+    if "refreshToken" in normalized and "expiresAt" not in normalized:
+        # Legacy V1 records do not persist the short-lived access-token expiry.
+        # Force one server-side refresh after migration; the refreshed payload
+        # then stores the provider-provided expiry normally.
+        normalized["expiresAt"] = "1970-01-01T00:00:00.000Z"
+    return normalized
 
 
 def _reject_plaintext(value: Any, path: str = "bundle") -> None:

@@ -231,7 +231,6 @@ export class MetaAdsAdapter
       {
         fields:
           "id,name,status,effective_status,objective,daily_budget,lifetime_budget",
-        ...(range ? { date_preset: "lifetime" } : {}),
       },
       context.credentials.accessToken,
       Math.min(Math.max(limit, 1), 500),
@@ -310,7 +309,7 @@ export class MetaAdsAdapter
   public async health(
     context: ProviderReadContext,
   ): Promise<ProviderHealthView> {
-    const missingScopes = this.definition.scopes.filter(
+    let missingScopes = this.definition.scopes.filter(
       (scope) => !context.credentials.scopes.includes(scope),
     );
     try {
@@ -319,6 +318,12 @@ export class MetaAdsAdapter
           fields: "id",
           access_token: context.credentials.accessToken,
         }),
+      );
+      const permissions = await this.permissionPayload(
+        context.credentials.accessToken,
+      );
+      missingScopes = this.definition.scopes.filter(
+        (scope) => !permissions.granted.includes(scope),
       );
       return {
         credentialsValid: true,
@@ -406,6 +411,12 @@ export class MetaAdsAdapter
         provenance: provenance("META_ADS", "Meta Graph API /me/businesses"),
       }))
       .filter((row) => row.id);
+  }
+
+  public async getPermissions(
+    credentials: ProviderCredentialPayload,
+  ): Promise<{ granted: string[]; declined: string[] }> {
+    return this.permissionPayload(credentials.accessToken);
   }
 
   public async listPages(
@@ -508,15 +519,29 @@ export class MetaAdsAdapter
     limit = 25,
   ) {
     const token = await this.pageAccessToken(credentials.accessToken, pageId);
-    const rows = await this.listEdge(
-      `${assertExternalId(pageId, "page id")}/published_posts`,
-      {
-        fields:
-          "id,message,story,created_time,permalink_url,full_picture,shares,reactions.limit(0).summary(true),comments.limit(0).summary(true)",
-      },
-      token,
-      limit,
-    );
+    const edge = `${assertExternalId(pageId, "page id")}/published_posts`;
+    const fieldVariants = [
+      "id,message,story,created_time,permalink_url,full_picture,attachments{description,title,type,url},shares,reactions.limit(0).summary(true),comments.limit(0).summary(true)",
+      "id,message,story,created_time,permalink_url,full_picture,attachments{description,title,type,url},shares,reactions.limit(0).summary(true)",
+      "id,message,story,created_time,permalink_url,full_picture,attachments{description,title,type,url},shares",
+    ];
+    let rows: MetaResponse[] = [];
+    for (const [index, fields] of fieldVariants.entries()) {
+      try {
+        rows = await this.listEdge(edge, { fields }, token, limit);
+        break;
+      } catch (error) {
+        if (
+          !(error instanceof ProviderError) ||
+          !["provider_response_invalid", "insufficient_permissions"].includes(
+            error.code,
+          ) ||
+          index === fieldVariants.length - 1
+        ) {
+          throw error;
+        }
+      }
+    }
     return {
       items: rows,
       provenance: provenance(

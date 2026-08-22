@@ -23,12 +23,18 @@ export async function providerJson<T>(
             ? "insufficient_permissions"
             : "authentication_failed",
           "Provider authorization was rejected.",
+          false,
+          String(response.status),
+          error.providerCode,
         );
       }
       if (response.status === 404) {
         throw new ProviderError(
           "invalid_account",
           "Provider account was not found.",
+          false,
+          String(response.status),
+          error.providerCode,
         );
       }
       if (response.status === 429) {
@@ -36,6 +42,8 @@ export async function providerJson<T>(
           "rate_limited",
           "Provider rate limit was reached.",
           true,
+          String(response.status),
+          error.providerCode,
         );
       }
       if (response.status >= 500) {
@@ -43,9 +51,17 @@ export async function providerJson<T>(
           "provider_unavailable",
           "Provider is temporarily unavailable.",
           true,
+          String(response.status),
+          error.providerCode,
         );
       }
-      throw new ProviderError(error.code, "Provider rejected the request.");
+      throw new ProviderError(
+        error.code,
+        "Provider rejected the request.",
+        false,
+        String(response.status),
+        error.providerCode,
+      );
     }
     return payload as T;
   } catch (error) {
@@ -77,19 +93,34 @@ export function assertExternalId(value: string, label: string): string {
 
 function safeProviderError(payload: unknown): {
   code: "provider_response_invalid" | "insufficient_permissions";
+  providerCode?: string;
 } {
   if (!payload || typeof payload !== "object") {
     return { code: "provider_response_invalid" };
   }
   const value = payload as Record<string, unknown>;
   const error = value.error;
+  const providerCode =
+    error && typeof error === "object"
+      ? String(
+          (error as Record<string, unknown>).status ??
+            (error as Record<string, unknown>).code ??
+            "",
+        ).slice(0, 80) || undefined
+      : undefined;
   const message =
     error && typeof error === "object"
       ? String((error as Record<string, unknown>).message ?? "").toLowerCase()
       : "";
   return /permission|access|scope|forbidden|unauthorized/.test(message)
-    ? { code: "insufficient_permissions" }
-    : { code: "provider_response_invalid" };
+    ? {
+        code: "insufficient_permissions",
+        ...(providerCode ? { providerCode } : {}),
+      }
+    : {
+        code: "provider_response_invalid",
+        ...(providerCode ? { providerCode } : {}),
+      };
 }
 
 export function encodeJson(value: unknown): string {

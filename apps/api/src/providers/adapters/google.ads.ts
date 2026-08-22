@@ -146,7 +146,7 @@ export class GoogleAdsAdapter
       const direct = await this.customerRows(
         credentials,
         customerId,
-        customerId,
+        this.configuredLoginCustomerId(credentials),
       );
       accounts.push(...direct);
       let clients: Array<Record<string, unknown>> = [];
@@ -196,7 +196,7 @@ export class GoogleAdsAdapter
       await this.customerRows(
         context.credentials,
         customerId,
-        context.loginCustomerId ?? customerId,
+        this.contextLoginCustomerId(context),
       )
     )[0];
     if (!account)
@@ -234,8 +234,8 @@ export class GoogleAdsAdapter
     const rows = await this.searchStream(
       context.credentials.accessToken,
       customerId,
-      context.loginCustomerId ?? customerId,
-      `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign_budget.amount_micros, campaign_budget.currency_code${range ? ", metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion" : ""} FROM campaign${range ? ` WHERE segments.date BETWEEN '${validateDateRange(range).startDate}' AND '${validateDateRange(range).endDate}'` : ""} ORDER BY campaign.id`,
+      this.contextLoginCustomerId(context),
+      `SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, campaign_budget.amount_micros${range ? ", metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion" : ""} FROM campaign${range ? ` WHERE segments.date BETWEEN '${validateDateRange(range).startDate}' AND '${validateDateRange(range).endDate}'` : ""} ORDER BY campaign.id`,
     );
     const items = rows
       .slice(
@@ -290,7 +290,7 @@ export class GoogleAdsAdapter
     const rows = await this.searchStream(
       context.credentials.accessToken,
       customerId,
-      context.loginCustomerId ?? customerId,
+      this.contextLoginCustomerId(context),
       `SELECT ${entity}segments.date, metrics.cost_micros, metrics.impressions, metrics.clicks, metrics.ctr, metrics.average_cpc, metrics.conversions, metrics.conversions_value, metrics.cost_per_conversion FROM ${resource} WHERE ${filter}segments.date BETWEEN '${normalized.startDate}' AND '${normalized.endDate}'`,
     );
     const currency =
@@ -375,7 +375,7 @@ export class GoogleAdsAdapter
     const rows = await this.searchStream(
       credentials.accessToken,
       managerId,
-      this.loginCustomerId(credentials, managerId),
+      this.configuredLoginCustomerId(credentials),
       `SELECT customer_client.client_customer, customer_client.descriptive_name, customer_client.id, customer_client.manager, customer_client.level, customer_client.status, customer_client.currency_code, customer_client.time_zone FROM customer_client WHERE customer_client.level <= 1`,
     );
     return rows.map((row) => {
@@ -396,7 +396,7 @@ export class GoogleAdsAdapter
   private async customerRows(
     credentials: ProviderCredentialPayload,
     customerId: string,
-    loginCustomerId: string,
+    loginCustomerId?: string,
   ) {
     const rows = await this.searchStream(
       credentials.accessToken,
@@ -428,11 +428,11 @@ export class GoogleAdsAdapter
   private async searchStream(
     accessToken: string,
     customerId: string,
-    loginCustomerId: string,
+    loginCustomerId: string | undefined,
     query: string,
   ): Promise<Record<string, unknown>[]> {
     const data = await providerJson<unknown>(
-      `${this.apiBase()}/customers/${assertCustomerId(customerId)}:searchStream`,
+      `${this.apiBase()}/customers/${assertCustomerId(customerId)}/googleAds:searchStream`,
       {
         method: "POST",
         headers: {
@@ -482,13 +482,21 @@ export class GoogleAdsAdapter
   private apiBase(): string {
     return `https://googleads.googleapis.com/${this.config.providerGoogleApiVersion.replace(/^v?/, "v")}`;
   }
-  private loginCustomerId(
+  private configuredLoginCustomerId(
     credentials: ProviderCredentialPayload,
-    fallback: string,
-  ): string {
-    return assertCustomerId(
-      String(credentials.providerMetadata?.loginCustomerId || fallback),
-    );
+  ): string | undefined {
+    const value =
+      credentials.providerMetadata?.loginCustomerId ??
+      this.config.providerGoogleLoginCustomerId;
+    return value ? assertCustomerId(String(value)) : undefined;
+  }
+
+  private contextLoginCustomerId(
+    context: ProviderReadContext,
+  ): string | undefined {
+    return context.loginCustomerId
+      ? assertCustomerId(context.loginCustomerId)
+      : this.configuredLoginCustomerId(context.credentials);
   }
   private required(value: string | undefined): string {
     if (!value)

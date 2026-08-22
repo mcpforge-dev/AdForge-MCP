@@ -39,15 +39,18 @@ suite("provider discovery worker boundary", () => {
       { connection, concurrency: 1 },
     );
     resources.push({ queue, worker });
+    await worker.waitUntilReady();
     const data = {
       workspaceId: "workspace-test",
-      connectionId: "connection-test",
+      connectionId: `connection-test-${Date.now()}`,
       provider: "TEST_PROVIDER",
       requestedAt: new Date().toISOString(),
     };
     await enqueueProviderDiscovery(queue, data);
     await enqueueProviderDiscovery(queue, data);
-    await new Promise((resolve) => setTimeout(resolve, 350));
-    expect(processed).toEqual(["connection-test"]);
+    for (let attempt = 0; attempt < 20 && processed.length < 1; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    expect(processed).toEqual([data.connectionId]);
   });
 });

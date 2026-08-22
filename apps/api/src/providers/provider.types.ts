@@ -158,6 +158,9 @@ export type MetaPage = {
 };
 
 export interface MetaReadAdapter extends ProviderReadAdapter {
+  getPermissions(
+    credentials: ProviderCredentialPayload,
+  ): Promise<{ granted: string[]; declined: string[] }>;
   listBusinesses(
     credentials: ProviderCredentialPayload,
   ): Promise<MetaBusiness[]>;

@@ -11,6 +11,7 @@ import { McpService } from "./mcp.service.js";
 import { ServiceTokenService } from "../service-tokens/service-token.service.js";
 import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
+import { ProviderError } from "../providers/provider.errors.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
 type JsonRpcRequest = {
@@ -87,13 +88,18 @@ export class McpController {
           id,
           result: { content: [{ type: "text", text: JSON.stringify(result) }] },
         };
-      } catch {
+      } catch (error) {
+        const message =
+          error instanceof ProviderError &&
+          error.code === "insufficient_permissions"
+            ? "У подключения Meta недостаточно разрешений для этой операции."
+            : "Запрос к рекламной платформе не выполнен.";
         return {
           jsonrpc: "2.0",
           id,
           result: {
             isError: true,
-            content: [{ type: "text", text: "MCP tool request was rejected." }],
+            content: [{ type: "text", text: JSON.stringify({ message }) }],
           },
         };
       }

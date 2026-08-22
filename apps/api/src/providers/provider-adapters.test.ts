@@ -73,10 +73,10 @@ describe("Google Ads v2 adapter", () => {
   });
 
   it("normalizes campaign budgets from micros and keeps read responses source-backed", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn().mockResolvedValue(jsonResponse(googleCampaignFixture)),
-    );
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse(googleCampaignFixture));
+    vi.stubGlobal("fetch", fetchMock);
     const adapter = new GoogleAdsAdapter(config);
     const result = await adapter.listCampaigns(
       {
@@ -94,10 +94,43 @@ describe("Google Ads v2 adapter", () => {
       realData: true,
       dataStatus: "live",
     });
+    expect(fetchMock.mock.calls[0]?.[0]).toContain(
+      "/customers/1234567890/googleAds:searchStream",
+    );
+    expect(
+      String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
+    ).not.toContain("campaign_budget.currency_code");
   });
 });
 
 describe("Meta Ads v2 adapter", () => {
+  it("does not mix a date preset into campaign discovery", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        data: [
+          {
+            id: "campaign-1",
+            name: "Campaign",
+            status: "PAUSED",
+            effective_status: "PAUSED",
+            objective: "OUTCOME_TRAFFIC",
+          },
+        ],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new MetaAdsAdapter(config);
+    await adapter.listCampaigns(
+      {
+        credentials: { accessToken: "user-token", scopes: ["ads_read"] },
+        accountId: "act_1",
+      },
+      { startDate: "2026-08-15", endDate: "2026-08-21" },
+    );
+    const [url] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).searchParams.has("date_preset")).toBe(false);
+  });
+
   it("executes only an explicit campaign mutation with ads_management", async () => {
     const fetchMock = vi
       .fn()

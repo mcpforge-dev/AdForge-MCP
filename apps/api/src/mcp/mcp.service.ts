@@ -477,16 +477,15 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        const permissions = await this.providers.metaPermissions(
+          principal.workspaceId,
+          account.connectionId,
+        );
         const connection = await this.providers.getConnection(
           principal.workspaceId,
           account.connectionId,
         );
-        return {
-          requested: connection.requestedScopes,
-          granted: connection.grantedScopes,
-          missing: connection.missingScopes,
-          status: connection.status,
-        };
+        return { ...permissions, status: connection.status };
       }
       case "list_meta_businesses": {
         const account = await this.account(principal, {
@@ -1349,7 +1348,7 @@ export class McpService {
         ...(principal.accountIds.length
           ? { id: { in: principal.accountIds } }
           : {}),
-        connection: { status: "CONNECTED" },
+        connection: { status: { in: ["CONNECTED", "DEGRADED"] } },
       },
       orderBy: { displayName: "asc" },
     });
@@ -1429,13 +1428,17 @@ export class McpService {
     const provider = providerId(args.provider);
     const requested = text(args.account_id || args.accountId);
     if (!requested) throw new ForbiddenException("account_id is required.");
+    const identifiers: Array<Record<string, string>> = [
+      { externalAccountId: requested },
+    ];
+    if (isUuid(requested)) identifiers.unshift({ id: requested });
     const account = await this.database.client.providerAccount.findFirst({
       where: {
         workspaceId: principal.workspaceId,
         provider,
         enabled: true,
-        connection: { status: "CONNECTED" },
-        OR: [{ id: requested }, { externalAccountId: requested }],
+        connection: { status: { in: ["CONNECTED", "DEGRADED"] } },
+        OR: identifiers,
       },
     });
     if (
@@ -1449,6 +1452,12 @@ export class McpService {
     }
     return account;
   }
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
 function requiredRange(args: JsonObject, prefix: "current" | "previous") {

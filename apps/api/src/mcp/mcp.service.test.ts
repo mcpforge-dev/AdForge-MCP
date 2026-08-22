@@ -184,6 +184,23 @@ describe("MCP V1-compatible policy", () => {
     ).rejects.toThrow("Account is not available to this service token.");
   });
 
+  it("accepts numeric external account ids without treating them as UUIDs", async () => {
+    const service = serviceWithAccounts([account]);
+    const result = await service.call(
+      {
+        kind: "service",
+        tokenId: "token",
+        serviceIdentityId: "identity",
+        workspaceId: "workspace-a",
+        scopes: ["adforge:mcp:read"],
+        accountIds: [],
+      },
+      "get_account_status",
+      { provider: "google_ads", account_id: "1234567890" },
+    );
+    expect(result).toMatchObject({ account_id: "1234567890" });
+  });
+
   it("compares two periods using the provider read adapter", async () => {
     const service = serviceWithAccounts([account]);
     const result = (await service.call(
