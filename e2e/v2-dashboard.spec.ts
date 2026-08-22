@@ -49,6 +49,9 @@ test.describe("V2 browser cutover smoke", () => {
       .first()
       .locator('button[type="submit"]')
       .click();
+    await expect(
+      page.locator("form.inline-form").first().locator('input[name="name"]'),
+    ).toHaveValue("");
     await expect(workspaceSelect.locator("option")).toHaveCount(
       initialWorkspaceCount + 1,
     );

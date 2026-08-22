@@ -282,6 +282,7 @@ export default function DashboardPage() {
   async function loadWorkspaces() {
     const response = await fetch(`${API}/api/v1/workspaces`, {
       credentials: "include",
+      cache: "no-store",
     });
     if (!response.ok) {
       window.location.assign("/auth");
