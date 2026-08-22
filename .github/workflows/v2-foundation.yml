@@ -2,7 +2,7 @@ name: HolyMedia MCP v2 foundation
 
 on:
   push:
-    branches: [main, "v2/**"]
+    branches: [main, "v2/**", "feat/**"]
   pull_request:
 
 permissions:
