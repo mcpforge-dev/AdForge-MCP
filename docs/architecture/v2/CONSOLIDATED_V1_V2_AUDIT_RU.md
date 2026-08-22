@@ -11,9 +11,9 @@ V1 — рабочий Python-продукт с legacy auth, файловым/JSO
 
 Основное ядро V2 уже способно заменить V1 по identity, tenant isolation, миграции данных, MCP read-контракту и проверенным Google/Meta read-сценариям. Это ещё не 100% функциональный drop-in replacement: Yandex/TikTok не имеют подтверждённого live reporting parity, часть старых имен инструментов остаётся честным `unsupported` alias, не завершены browser E2E, настоящий Telegram E2E и smoke конкретного сохранённого production service token.
 
-**Production readiness: 95%.** Основные pre-cutover проверки закрыты; обязательным остаётся только отдельный безопасный Telegram-контур для настоящего Hermes E2E, если Hermes входит в Phase C scope.
+**Production readiness: 95%.** Основные pre-cutover проверки закрыты. Real Telegram/Hermes E2E зафиксирован как `DEFERRED BY PROJECT DECISION` и не является условием текущего cutover по решению владельца проекта.
 
-**Текущий verdict: NO — Phase C прямо сейчас не выполнять.**
+**Текущий verdict: PHASE B ACCEPTED FOR PRODUCTION CUTOVER — TELEGRAM E2E DEFERRED BY PROJECT DECISION.**
 
 ## 2. Новый стек
 
@@ -298,3 +298,16 @@ Memora используется только как локальная памя�
 Billing payment provider, Yandex/TikTok live reporting, broad write adapters, production monitoring/alerting и automated promotion остаются post-cutover или scope decisions: их отсутствие не блокирует V1 → V2 drop-in cutover, если они не заявлены как существующие V1 capabilities.
 
 **Актуальный verdict:** Phase C не выполнять до закрытия Telegram E2E либо до отдельного явного решения не включать Hermes в cutover scope. После этого изменения не затрагивали V1 production, Nginx, DNS, OAuth applications, callback URLs или public traffic.
+
+## 27. Phase C operator decision
+
+Этот раздел является актуальным решением владельца проекта и supersedes ранние формулировки о Telegram как обязательном blocker:
+
+- Telegram real E2E: `DEFERRED BY PROJECT DECISION` — проверка не выполнялась и не считается `VERIFIED`.
+- Hermes не удаляется и не меняет архитектуру; Telegram E2E будет выполнен отдельной задачей.
+- Остальные pre-cutover проверки приняты: service-token compatibility, Playwright, external routes/OAuth callbacks, `/mcp`, migration rehearsal, Google/Meta parity, idempotency, backup/restore, CI и security gates.
+- Critical findings: `0`.
+- High findings: `0`.
+- Production V1, Nginx, DNS, OAuth applications, callback URLs и public traffic до фактического cutover не изменялись.
+
+Операторский cutover допускается только после выполнения конкретных production gates на VPS: backup и checksum, финальная миграция, запуск V2 internal runtime, internal smoke, затем Nginx switch и public smoke. На момент этой редакции эти live-операции ещё не выполнены.
