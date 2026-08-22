@@ -299,6 +299,34 @@ Billing payment provider, Yandex/TikTok live reporting, broad write adapters, pr
 
 **Актуальный verdict:** Phase C не выполнять до закрытия Telegram E2E либо до отдельного явного решения не включать Hermes в cutover scope. После этого изменения не затрагивали V1 production, Nginx, DNS, OAuth applications, callback URLs или public traffic.
 
+## 28. Phase C execution result (2026-08-22/23)
+
+This section supersedes earlier pre-cutover wording. It records the actual
+operator execution without secrets.
+
+- V1 production source: `c700fb7cf46884ad91bf4f8edc7b723a673f1446`.
+- V2 runtime/config source: `346ea45`; immutable GHCR image: `sha-0821907ed669eb96a1a7d1ab4b4ae894dc11dc47`.
+- V2 was built in GitHub Actions and pulled on the VPS. No heavy production-VPS build was used.
+- VPS protection added before runtime start: 2 GiB swap and persistent overcommit setting. V1 remained active during the operation.
+- Verified backup: `/var/backups/adforge-mcp/phase-c-20260822T204959Z`; manifest, read check and SHA-256 checksums verified.
+- Actual production-copy migration counts: users 11, workspaces 11, memberships 11, connections 10, credential envelopes 9, accounts 191, service identities 7, service tokens 12, MCP OAuth clients 1, legacy entitlements 11.
+- Prisma migrations applied to PostgreSQL 18. Repeated import produced no duplicates and stable counts. All 9 migrated credential envelopes decrypted successfully in V2; source credentials remained untouched.
+- V2 runtime: PostgreSQL 18, Redis 7.4.11, API, worker and web all healthy. Direct `/health` and `/ready` returned 200. BullMQ foundation job completed. V1 ports `8765/8766` remained healthy for rollback.
+- Technical service-token compatibility: the complete SHA-256 digest set is identical before/after migration (`12/12` intersection, no missing or extra digest). No production plaintext token was available or reissued.
+- Production provider reality: Meta, Yandex and TikTok connections exist; no Google production connection exists, so Google live smoke is `N/A - no production connection`.
+- Meta V2 read smoke passed on migrated data: 4 campaigns, live metrics, diagnostics, 10 businesses, 1 business ad-account relation, 38 pages, 2 live page posts, 6 granted permissions and no missing permissions. No writes were executed.
+- Yandex and TikTok credential decrypt/discovery smoke passed. Their V2 scope remains the V1-compatible OAuth/discovery surface; no unsupported live reporting was claimed.
+- Internal compatibility smoke passed for health/readiness, MCP unauthenticated 401, legacy auth/session/me/hosted-report routes, provider callback contracts and OAuth metadata.
+- Nginx was switched in place from V1 upstreams to V2 loopback upstreams. DNS, `mcp.holymedia.kz`, TLS, OAuth applications and callback URLs were unchanged. V1 systemd services remain active and previous Nginx configs are backed up for rollback.
+- Public smoke passed after the switch: HTTPS root, health/readiness and unauthenticated `/mcp` contract. The `/auth` exact route was corrected to avoid an unintended prefix-slash 404. Next inline hydration CSP was aligned with the built application without enabling `unsafe-eval`.
+- Browser smoke passed on desktop and mobile for public/auth surfaces. A controlled signup -> session -> dashboard -> workspace selector -> Billing flow passed on desktop with zero console/request failures; the temporary smoke account was removed after the test.
+- Telegram Hermes real E2E remains `DEFERRED BY PROJECT DECISION`; Hermes was not removed and no Telegram credentials were created.
+- Critical findings: `0`. High findings: `0`. Payment gateway, Yandex/TikTok reporting expansion and Hermes Telegram E2E remain non-blocking deferred items.
+
+Final operator verdict: `PHASE C COMPLETE - V2 IS PRODUCTION`.
+
+`V1 RETAINED FOR ROLLBACK / OBSERVATION PERIOD`.
+
 ## 27. Phase C operator decision
 
 Этот раздел является актуальным решением владельца проекта и supersedes ранние формулировки о Telegram как обязательном blocker:
@@ -310,4 +338,4 @@ Billing payment provider, Yandex/TikTok live reporting, broad write adapters, pr
 - High findings: `0`.
 - Production V1, Nginx, DNS, OAuth applications, callback URLs и public traffic до фактического cutover не изменялись.
 
-Операторский cutover допускается только после выполнения конкретных production gates на VPS: backup и checksum, финальная миграция, запуск V2 internal runtime, internal smoke, затем Nginx switch и public smoke. На момент этой редакции эти live-операции ещё не выполнены.
+Операторские production gates выполнены: backup и checksum, финальная миграция, V2 internal runtime, internal smoke, Nginx switch и public smoke. V1 runtime сохранён для rollback/observation period.
