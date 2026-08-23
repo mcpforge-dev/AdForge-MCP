@@ -173,3 +173,81 @@ reported no known vulnerabilities. The accepted CI workflows for commit
 **V1 -> V2 account mapping requires operator reconciliation for Meta and TikTok**
 
 Telegram Hermes real E2E remains **DEFERRED BY PROJECT DECISION**.
+
+## Final parity closure
+
+This section preserves the original findings above and records the
+source-of-truth reconciliation and the corrective change.
+
+### Meta and TikTok mapping conclusion
+
+The initial `0/1` comparison used the legacy global `connections` entries in
+the V1 storage file. Those entries are not tenant-bound production
+connections. The canonical V1 records are the workspace-scoped connections
+under `workspaces[*].connections`, which are the records consumed by the V1
+exporter and importer.
+
+Read-only reconciliation against the final V1 archive and current V2
+PostgreSQL produced:
+
+| Provider | Canonical V1 workspace-scoped rows | V2 rows | Exact canonical external-ID matches | Missing | Classification |
+|---|---:|---:|---:|---:|---|
+| Meta Ads | 1 | 1 | 1 | 0 | `MATCH - SAME PROVIDER ACCOUNT` |
+| TikTok Ads | 5 | 5 | 5 | 0 | `MATCH - SAME PROVIDER ACCOUNT` |
+| Yandex Direct | 2 | 2 | 1 unique ID | 0 | `MATCH - SAME PROVIDER ACCOUNT` |
+
+Meta was compared as the Meta ad-account identifier, including the canonical
+`act_<id>` representation. It was not compared against Business, Page or
+Instagram identifiers. TikTok `account_id` and `advertiser_id` were present
+and equal in every canonical V1 row; V2 `externalAccountId` uses the same
+19-digit advertiser identity. Workspace ownership, connection context,
+names/statuses and account counts reconcile, with no provider account loss.
+
+The unmatched legacy global Meta/TikTok rows are unscoped legacy records and
+are not evidence of a lost tenant-bound advertising account. No production
+provider data was changed.
+
+### Google classification
+
+The final V1 archive does contain Google Ads workspace-scoped data: 5
+connections, 181 account rows and 111 unique customer IDs. All canonical V1
+rows were `connected` and had encrypted credential envelopes. V2 contains the
+same 5 connections, 181 rows and 111 unique customer IDs; the exact customer
+ID set and credential-envelope presence reconcile. Therefore the earlier
+`N/A - no production connection` statement was an inventory error, not a
+credential-migration result.
+
+The historical `REAUTH_REQUIRED` interpretation is **Category A: NOT A
+MIGRATION REGRESSION - CONNECTION WAS ALREADY STALE/REAUTH_REQUIRED**. The
+current persisted Google Ads state is one `DEGRADED/provider_response_invalid`
+connection and four healthy connections, not a missing-envelope state. The
+degraded connection contains a legacy mixed manager/customer hierarchy with
+provider-side `CANCELED`/`CLOSED` account states; V1 has no successful-read
+telemetry or last-success evidence for that archived connection. No V1
+working credential was demonstrated to have been lost by migration, and no
+reauthorization was performed. Google Search Console remains **Category B:
+NOT A PRODUCTION CAPABILITY - INCOMPLETE/LEGACY CONNECTION** because it is
+absent from the final V1 archive and has no V2 credential envelope.
+
+### Rate-limit closure
+
+The shared `RateLimitExceededError` is now mapped centrally by
+`ApiExceptionFilter` to HTTP `429`, error code `rate_limited` and the
+sanitized message `Too many requests.`. No `Retry-After` header is emitted
+because the current limiter does not expose a reliable remaining-window
+value. Ordinary client errors remain `400/request_invalid`, and unexpected
+errors remain `500/internal_error`.
+
+Regression coverage exercises the shared signup/login rate-limit mapping,
+the generic exception mapping and the ordinary unexpected-error path. A
+controlled production verification after deployment must confirm `429` on
+the configured public endpoint without creating accounts or provider writes.
+
+### Closure status
+
+The original Meta/TikTok mapping finding is closed as a source-selection
+error, the Google signal is classified as provider/legacy state rather than a
+proven migration loss, and the rate-limit serialization defect is fixed in
+code with regression coverage. Final production verification remains
+conditional on the post-deploy controlled `429` smoke and the normal CI/image
+promotion checks.

@@ -6,6 +6,7 @@ import {
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { createLogger } from "@holymedia/observability";
+import { RateLimitExceededError } from "./infrastructure/redis-rate-limit.service.js";
 
 type RequestWithId = FastifyRequest & { requestId?: string };
 
@@ -22,23 +23,31 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const requestId = request.requestId ?? "unknown";
     const response =
       exception instanceof HttpException ? exception.getResponse() : undefined;
-    const message =
-      typeof response === "string"
+    const rateLimited = exception instanceof RateLimitExceededError;
+    const message = rateLimited
+      ? "Too many requests."
+      : typeof response === "string"
         ? response
         : status < 500
           ? "Request failed."
           : "Internal server error.";
-    const code = status < 500 ? "request_invalid" : "internal_error";
+    const code = rateLimited
+      ? "rate_limited"
+      : status < 500
+        ? "request_invalid"
+        : "internal_error";
+
+    const resolvedStatus = rateLimited ? 429 : status;
 
     this.logger.error(
       {
-        status,
+        status: resolvedStatus,
         requestId,
         errorType:
           exception instanceof Error ? exception.constructor.name : "unknown",
       },
       "request failed",
     );
-    reply.status(status).send({ error: { code, message, requestId } });
+    reply.status(resolvedStatus).send({ error: { code, message, requestId } });
   }
 }
