@@ -2,16 +2,18 @@
 
 Verification date: `2026-08-23`
 
-This is a sanitized read-only verification record. No provider writes,
-OAuth reconnects, DNS changes, Nginx changes or deployments were performed.
-The only database cleanup was removal of five temporary `example.invalid`
-users/workspaces created by this verification run; provider records were not
+This is a sanitized verification record. The baseline and findings sections
+capture the initial read-only snapshot before parity closure; the closure
+section records the narrowly scoped rate-limit deployment afterward. No
+provider writes or OAuth reconnects were performed. DNS, Nginx routing and
+OAuth applications were not changed. The only database cleanup was removal
+of temporary verification identities/workspaces; provider records were not
 changed.
 
 ## Baseline
 
 - Public production: `https://mcp.holymedia.kz`
-- Repository HEAD at start and end of verification: `296a15ca210e0857e645b359b5fb8d9f21ac67e8`
+- Repository HEAD at initial verification snapshot: `296a15ca210e0857e645b359b5fb8d9f21ac67e8`
 - Production tag: `v2-production-2026-08-23`
 - V2 image: `sha-0821907...`
 - Production configuration: `346ea45`
@@ -23,17 +25,17 @@ changed.
 After cleanup, the production counts are unchanged from the accepted
 migration baseline:
 
-| Entity | Current V2 | Accepted baseline |
-|---|---:|---:|
-| Users | 11 | 11 |
-| Workspaces | 11 | 11 |
-| Memberships | 11 | 11 |
-| Provider connections | 10 | 10 |
-| Provider accounts | 191 | 191 |
-| Service tokens | 12 | 12 |
-| Credential envelopes | 9 | 9 |
-| Workspace entitlements | 11 | 11 |
-| MCP OAuth clients | 1 | 1 |
+| Entity                 | Current V2 | Accepted baseline |
+| ---------------------- | ---------: | ----------------: |
+| Users                  |         11 |                11 |
+| Workspaces             |         11 |                11 |
+| Memberships            |         11 |                11 |
+| Provider connections   |         10 |                10 |
+| Provider accounts      |        191 |               191 |
+| Service tokens         |         12 |                12 |
+| Credential envelopes   |          9 |                 9 |
+| Workspace entitlements |         11 |                11 |
+| MCP OAuth clients      |          1 |                 1 |
 
 All 11 workspaces have an entitlement. All 12 service-token digests have the
 expected SHA-256 shape; no duplicate digest was found. Seven tokens are
@@ -73,11 +75,11 @@ The final V1 archive contains one account record for each of `meta_ads`,
 `tiktok_ads` and `yandex_direct` in the legacy global connections file. Safe
 external-ID set comparison against current V2 produced:
 
-| Provider | V1 archive accounts | V2 matching IDs | V1 IDs missing from V2 |
-|---|---:|---:|---:|
-| Meta Ads | 1 | 0 | 1 |
-| TikTok Ads | 1 | 0 | 1 |
-| Yandex Direct | 1 | 1 | 0 |
+| Provider      | V1 archive accounts | V2 matching IDs | V1 IDs missing from V2 |
+| ------------- | ------------------: | --------------: | ---------------------: |
+| Meta Ads      |                   1 |               0 |                      1 |
+| TikTok Ads    |                   1 |               0 |                      1 |
+| Yandex Direct |                   1 |               1 |                      0 |
 
 The V2 records remain structurally valid and the current Meta connection is
 readable, but the Meta and TikTok external IDs cannot be declared preserved
@@ -190,11 +192,11 @@ exporter and importer.
 Read-only reconciliation against the final V1 archive and current V2
 PostgreSQL produced:
 
-| Provider | Canonical V1 workspace-scoped rows | V2 rows | Exact canonical external-ID matches | Missing | Classification |
-|---|---:|---:|---:|---:|---|
-| Meta Ads | 1 | 1 | 1 | 0 | `MATCH - SAME PROVIDER ACCOUNT` |
-| TikTok Ads | 5 | 5 | 5 | 0 | `MATCH - SAME PROVIDER ACCOUNT` |
-| Yandex Direct | 2 | 2 | 1 unique ID | 0 | `MATCH - SAME PROVIDER ACCOUNT` |
+| Provider      | Canonical V1 workspace-scoped rows | V2 rows | Exact canonical external-ID matches | Missing | Classification                  |
+| ------------- | ---------------------------------: | ------: | ----------------------------------: | ------: | ------------------------------- |
+| Meta Ads      |                                  1 |       1 |                                   1 |       0 | `MATCH - SAME PROVIDER ACCOUNT` |
+| TikTok Ads    |                                  5 |       5 |                                   5 |       0 | `MATCH - SAME PROVIDER ACCOUNT` |
+| Yandex Direct |                                  2 |       2 |                         1 unique ID |       0 | `MATCH - SAME PROVIDER ACCOUNT` |
 
 Meta was compared as the Meta ad-account identifier, including the canonical
 `act_<id>` representation. It was not compared against Business, Page or
@@ -243,11 +245,59 @@ the generic exception mapping and the ordinary unexpected-error path. A
 controlled production verification after deployment must confirm `429` on
 the configured public endpoint without creating accounts or provider writes.
 
+### Post-deploy verification
+
+The rate-limit fix was built by the existing GitHub Actions production-image
+workflow and deployed as immutable image
+`ghcr.io/mcpforge-dev/holymedia-mcp-v2:sha-82e4d22ac4f00cd9faacff6dacf0b3907fb29f1f`.
+Only the API/worker/web image reference changed; DNS, Nginx routing, OAuth
+applications, callback URLs, database records and provider data were not
+changed.
+
+Post-deploy public checks passed:
+
+- `/health`: `200`;
+- `/ready`: `200` with PostgreSQL and Redis dependencies healthy;
+- `/mcp` without a token: `401`;
+- all V2 PostgreSQL, Redis, API, Worker and Web containers: healthy;
+- no temporary closure identities or tokens remained: `0`.
+
+The controlled login rate-limit smoke used the existing V2 route with an
+invalid email/password and did not create an account. It observed `401` for
+the allowed attempts and `429` after the configured threshold; no `500` was
+returned for the rate-limit condition. Meta read-only smoke passed with 4
+campaigns, healthy diagnostics and 10 businesses. Yandex and TikTok
+V1-compatible account discovery, account status and diagnostics returned
+successful responses without provider errors. No provider writes were
+executed.
+
+GitHub Actions run IDs for commit `82e4d22...` were all successful: foundation
+`32654754916`, full-stack Compose `32654754814`, production image
+`32654754876` and browser/compatibility E2E `32654754869`. Local format,
+lint, typecheck, build, API tests (`60 passed`, `15 skipped` for unavailable
+local service containers), secret scan and dependency audit passed. Critical
+findings remain `0`; High findings remain `0`.
+
 ### Closure status
 
 The original Meta/TikTok mapping finding is closed as a source-selection
 error, the Google signal is classified as provider/legacy state rather than a
 proven migration loss, and the rate-limit serialization defect is fixed in
 code with regression coverage. Final production verification remains
-conditional on the post-deploy controlled `429` smoke and the normal CI/image
+confirmed by the post-deploy controlled `429` smoke and the green CI/image
 promotion checks.
+
+## Final verdict
+
+**FINAL PRODUCTION PARITY VERIFIED**
+
+**NO UNRESOLVED V1 -> V2 MIGRATION REGRESSIONS**
+
+Meta and TikTok canonical workspace-scoped provider accounts were not lost;
+the earlier mismatch was caused by comparing unscoped legacy global records.
+Google Ads customer IDs and encrypted credential-envelope presence reconcile;
+the one degraded hierarchy is classified as legacy/provider state, while
+Google Search Console remains an incomplete legacy connection outside the V1
+production capability set.
+
+**TELEGRAM HERMES REAL E2E - DEFERRED BY PROJECT DECISION**
