@@ -340,6 +340,18 @@ Final operator verdict: `PHASE C COMPLETE - V2 IS PRODUCTION`.
 
 Операторские production gates выполнены: backup и checksum, финальная миграция, V2 internal runtime, internal smoke, Nginx switch и public smoke. V1 runtime сохранён для rollback/observation period.
 
+## 30. Final V1 decommission (2026-08-23)
+
+- Final V1 archive: `/var/backups/adforge-mcp/v1-decommission-20260823T155459Z`. The PostgreSQL dump, source/runtime, storage, configuration, unit files and immutable rollback Nginx configuration were archived. SHA-256 verification and readability checks passed.
+- Live and staging V1 units were stopped and disabled: `adforge-mcp-web.service`, `adforge-mcp-http.service`, `adforge-mcp-staging-web.service` and `adforge-mcp-staging-http.service`.
+- V1 ports `8765`, `8766`, `18765` and `18766` are closed. V1 autostart is disabled. V1 source, production data and configuration remain preserved; only archived disposable production `.venv` and `.cache` were removed from the active filesystem.
+- Active Nginx is V2-only and `nginx -t` passed. Public `/health=200`, `/ready=200` and unauthenticated `/mcp=401` remained healthy after V1 shutdown.
+- Compatibility smoke, browser desktop/mobile smoke and Meta read smoke passed after decommission. Yandex/TikTok retain their V1-compatible OAuth/discovery capability. Google remains `N/A - no production connection`.
+- Free disk increased from approximately `2.8 GB` to `4.3 GB` (`86%` to `78%` used). V2 data, images, encryption material, Phase C backup, post-cutover backup and final V1 archive were retained.
+- Critical findings: `0`. High findings: `0`. Telegram Hermes real E2E remains `DEFERRED BY PROJECT DECISION`.
+
+Final verdict: `V1 DECOMMISSION COMPLETE` / `HOLYMEDIA MCP V2 FULLY PRODUCTION`.
+
 ## 29. Post-cutover stabilization
 
 - Disk remediation: free space increased from approximately `1.4 GB / 93% used` to `3.4 GB / 83% used`.
