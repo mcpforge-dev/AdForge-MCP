@@ -37,9 +37,28 @@ digests and entitlements are not modified by this change.
 
 ## Verification
 
-- V2 web lint, typecheck and production build pass locally.
-- Playwright coverage was updated for the restored tabbed flows: landing,
-  auth, dashboard, workspace creation, connections, MCP, reports and billing.
-- Desktop/mobile screenshot evidence was captured locally for landing and auth
-  without user, workspace, provider or token data.
-- Production deployment remains a separate step after full CI approval.
+- Historical source: V1 commit `c700fb7`; the V2 presentation layer was
+  restored without reverting the V2 backend, auth, provider or storage
+  architecture. The implementation commit is `020bccb5`.
+- The final CI chain for the deployed code is green: foundation, PostgreSQL /
+  Redis and Compose smoke, Playwright desktop/mobile E2E, and the immutable
+  production image workflow. The final deployed code commit is
+  `1900d901fbb56f888c295e263df2dee812af6644`.
+- Production image deployed: `ghcr.io/mcpforge-dev/holymedia-mcp-v2:sha-1900d901fbb56f888c295e263df2dee812af6644`.
+- Post-deploy public smoke passed on desktop and mobile for the public landing
+  and auth shell. Production `/health` and `/ready` return `200`; `/mcp`
+  without authentication returns `401`. Authenticated dashboard flows passed
+  in the isolated Playwright CI environment, with no production test data
+  created.
+- Production V2 containers (API, Web, Worker, PostgreSQL and Redis) are
+  healthy. Nginx, DNS, OAuth applications and callback URLs were not changed.
+- Read-only integrity check after deployment: 11 users, 11 workspaces, 11
+  memberships, 10 connections, 191 provider accounts, 12 service tokens and
+  11 entitlements; orphan accounts, cross-tenant mismatches and duplicate
+  bindings are all `0`.
+- The current production database and the pre-deploy UI backup both contain 8
+  provider credential rows. The previously quoted count of 9 was a stale
+  baseline discrepancy; the UI deployment did not change credentials or
+  provider data.
+- No provider writes, reconnects, account-ID changes or migration actions were
+  performed during the UI restoration.
