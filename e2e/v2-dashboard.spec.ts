@@ -40,7 +40,7 @@ test.describe("V2 browser cutover smoke", () => {
     await expect(workspaceSelect.locator("option")).not.toHaveCount(0);
 
     const workspaceName = `Playwright workspace ${test.info().project.name}`;
-    await page.getByRole("button", { name: "Workspace" }).click();
+    await page.getByRole("button", { name: "Workspace", exact: true }).click();
     await page
       .locator("form.inline-form")
       .first()
@@ -74,18 +74,22 @@ test.describe("V2 browser cutover smoke", () => {
     expect(createdWorkspaceValue).toBeTruthy();
     await workspaceSelect.selectOption(createdWorkspaceValue!);
 
-    await page.getByRole("button", { name: "Подключения" }).click();
+    await page
+      .getByRole("button", { name: "Подключения", exact: true })
+      .click();
     await expect(page.locator(".connections-panel").first()).toBeVisible();
     await expect(page.locator("body")).toContainText("Meta onboarding");
 
-    await page.getByRole("button", { name: "AI-клиент" }).click();
+    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
     await expect(page.locator("form.token-form")).toHaveCount(1);
     await expect(
       page.locator('form.token-form input[name="name"]'),
     ).toHaveCount(1);
-    await page.getByRole("button", { name: "Отчёты" }).click();
+    await page.getByRole("button", { name: "Отчёты", exact: true }).click();
     await expect(page.locator("#reports-title")).toBeVisible();
-    await page.getByRole("button", { name: "Тариф и использование" }).click();
+    await page
+      .getByRole("button", { name: "Тариф и использование", exact: true })
+      .click();
     await expect(page.locator("body")).toContainText("Тариф и использование");
     await expect(page.locator("header.dashboard-header button")).toHaveCount(1);
     expect(failures, failures.join("\n")).toEqual([]);
