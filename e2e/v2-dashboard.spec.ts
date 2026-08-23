@@ -91,7 +91,9 @@ test.describe("V2 browser cutover smoke", () => {
       .getByRole("button", { name: "Тариф и использование", exact: true })
       .click();
     await expect(page.locator("body")).toContainText("Тариф и использование");
-    await expect(page.locator("header.dashboard-header button")).toHaveCount(1);
+    await expect(
+      page.locator("header.dashboard-header .dashboard-actions > button"),
+    ).toHaveCount(1);
     expect(failures, failures.join("\n")).toEqual([]);
   });
 
