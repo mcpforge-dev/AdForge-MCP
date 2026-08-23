@@ -38,9 +38,6 @@ test.describe("V2 browser cutover smoke", () => {
     const workspaceSelect = page.locator("main.dashboard-shell select").first();
     await expect(workspaceSelect).toBeVisible();
     await expect(workspaceSelect.locator("option")).not.toHaveCount(0);
-    const initialWorkspaceCount = await workspaceSelect
-      .locator("option")
-      .count();
 
     const workspaceName = `Playwright workspace ${test.info().project.name}`;
     await page.getByRole("button", { name: "Workspace" }).click();
@@ -68,13 +65,12 @@ test.describe("V2 browser cutover smoke", () => {
     await expect(
       page.locator("form.inline-form").first().locator('input[name="name"]'),
     ).toHaveValue("");
-    await expect(workspaceSelect.locator("option")).toHaveCount(
-      initialWorkspaceCount + 1,
-    );
-    const createdWorkspaceValue = await workspaceSelect
+    const createdWorkspaceOption = workspaceSelect
       .locator("option")
-      .last()
-      .getAttribute("value");
+      .filter({ hasText: workspaceName });
+    await expect(createdWorkspaceOption).toHaveCount(1);
+    const createdWorkspaceValue =
+      await createdWorkspaceOption.getAttribute("value");
     expect(createdWorkspaceValue).toBeTruthy();
     await workspaceSelect.selectOption(createdWorkspaceValue!);
 
