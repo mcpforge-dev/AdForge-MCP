@@ -12,6 +12,8 @@ export default function ResetPasswordPage() {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    setMessage("");
+    setError("");
     const form = new FormData(event.currentTarget);
     const csrfResponse = await fetch(`${API}/api/v1/auth/csrf`, {
       credentials: "include",
@@ -31,23 +33,29 @@ export default function ResetPasswordPage() {
     });
     if (!response.ok) {
       const data = (await response.json()) as { error?: { message?: string } };
-      setError(data.error?.message ?? "Ссылка недействительна.");
+      setError(data.error?.message ?? "Ссылка недействительна или устарела.");
       return;
     }
-    setMessage("Пароль изменён. Можно войти.");
+    setMessage("Пароль изменён. Теперь можно войти в кабинет.");
   }
 
   return (
     <main className="auth-shell">
       <section className="auth-card">
         <Link className="back-link" href="/auth">
-          Назад ко входу
+          ← Назад ко входу
         </Link>
         <h1>Новый пароль</h1>
+        <p className="muted">Введите код из письма и задайте новый пароль.</p>
         <form onSubmit={submit}>
           <label>
             Код из письма
-            <input name="token" required minLength={32} />
+            <input
+              name="token"
+              required
+              minLength={32}
+              autoComplete="one-time-code"
+            />
           </label>
           <label>
             Новый пароль
@@ -57,14 +65,23 @@ export default function ResetPasswordPage() {
               minLength={12}
               type="password"
               autoComplete="new-password"
+              placeholder="Минимум 12 символов"
             />
           </label>
           <button className="primary-button" type="submit">
             Сохранить пароль
           </button>
         </form>
-        {message && <p className="success">{message}</p>}
-        {error && <p className="error">{error}</p>}
+        {message && (
+          <p className="success" role="status">
+            {message}
+          </p>
+        )}
+        {error && (
+          <p className="error" role="alert">
+            {error}
+          </p>
+        )}
       </section>
     </main>
   );

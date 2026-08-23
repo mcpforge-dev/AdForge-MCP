@@ -6,10 +6,7 @@ const publicBaseUrl =
 
 export const metadata: Metadata = {
   metadataBase: new URL(publicBaseUrl),
-  title: {
-    default: "HolyMedia MCP",
-    template: "%s | HolyMedia MCP",
-  },
+  title: { default: "HolyMedia MCP", template: "%s | HolyMedia MCP" },
   description: "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
   alternates: { canonical: "/" },
   openGraph: {
@@ -19,12 +16,6 @@ export const metadata: Metadata = {
     description: "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
     url: "/",
     locale: "ru_RU",
-  },
-  twitter: {
-    card: "summary",
-    title: "HolyMedia MCP",
-    description:
-      "Рекламные кабинеты, аналитика, отчёты и AI-клиенты в одном защищённом workspace.",
   },
   robots: { index: true, follow: true },
 };

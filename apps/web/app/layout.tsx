@@ -5,7 +5,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "HolyMedia MCP",
   description:
-    "Единое рабочее пространство для безопасной аналитики Google Ads, Meta Ads и других рекламных платформ.",
+    "Единое рабочее пространство для безопасной аналитики рекламных платформ.",
   icons: { icon: "/icon.svg" },
 };
 

@@ -54,9 +54,7 @@ export default function AuthPage() {
       if (!response.ok)
         throw new Error(data.error?.message ?? "Не удалось выполнить запрос.");
       if (mode === "forgot")
-        setMessage(
-          "Если аккаунт существует, инструкции отправлены на электронную почту.",
-        );
+        setMessage("Если аккаунт существует, инструкции отправлены на email.");
       else window.location.assign("/dashboard");
     } catch (requestError) {
       setError(
@@ -71,9 +69,9 @@ export default function AuthPage() {
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="auth-title">
         <Link className="back-link" href="/">
-          HolyMedia MCP v2
+          ← Вернуться на главную
         </Link>
-        <div className="tabs" role="tablist" aria-label="Аутентификация">
+        <div className="tabs" role="tablist" aria-label="Вход или регистрация">
           <button
             className={mode === "login" ? "tab active" : "tab"}
             onClick={() => setMode("login")}
@@ -108,7 +106,7 @@ export default function AuthPage() {
             ? "Откройте рабочее пространство HolyMedia."
             : mode === "signup"
               ? "Создайте защищённое рабочее пространство."
-              : "Введите email. Ответ не раскрывает наличие аккаунта."}
+              : "Введите email — наличие аккаунта не раскрывается."}
         </p>
         <a
           className="secondary-button google-login-button"
@@ -127,6 +125,7 @@ export default function AuthPage() {
                 minLength={2}
                 maxLength={160}
                 autoComplete="name"
+                placeholder="Ваше имя"
               />
             </label>
           )}
@@ -138,6 +137,7 @@ export default function AuthPage() {
               type="email"
               maxLength={320}
               autoComplete="email"
+              placeholder="name@company.com"
             />
           </label>
           {mode !== "forgot" && (
@@ -152,6 +152,7 @@ export default function AuthPage() {
                 autoComplete={
                   mode === "login" ? "current-password" : "new-password"
                 }
+                placeholder="Минимум 12 символов"
               />
             </label>
           )}
@@ -160,7 +161,7 @@ export default function AuthPage() {
               ? "Войти"
               : mode === "signup"
                 ? "Зарегистрироваться"
-                : "Отправить"}
+                : "Отправить инструкции"}
           </button>
         </form>
         {message && (
