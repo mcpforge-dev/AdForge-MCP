@@ -37,6 +37,7 @@ test.describe("V2 browser cutover smoke", () => {
 
     const workspaceSelect = page.locator("main.dashboard-shell select").first();
     await expect(workspaceSelect).toBeVisible();
+    await expect(workspaceSelect.locator("option")).not.toHaveCount(0);
     const initialWorkspaceCount = await workspaceSelect
       .locator("option")
       .count();

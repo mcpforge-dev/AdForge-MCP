@@ -2,7 +2,7 @@ name: HolyMedia MCP v2 production image
 
 on:
   push:
-    branches: ["feat/install-memora"]
+    branches: [main, "feat/install-memora"]
   workflow_dispatch:
 
 permissions:

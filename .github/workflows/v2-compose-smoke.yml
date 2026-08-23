@@ -2,9 +2,9 @@ name: HolyMedia MCP v2 full-stack Compose smoke
 
 on:
   push:
-    branches: ["v2/**", "feat/**"]
+    branches: [main, "v2/**", "feat/**"]
   pull_request:
-    branches: ["v2/**"]
+    branches: [main, "v2/**"]
   workflow_dispatch:
 
 permissions:
