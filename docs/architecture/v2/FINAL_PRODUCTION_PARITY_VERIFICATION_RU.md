@@ -242,8 +242,8 @@ errors remain `500/internal_error`.
 
 Regression coverage exercises the shared signup/login rate-limit mapping,
 the generic exception mapping and the ordinary unexpected-error path. A
-controlled production verification after deployment must confirm `429` on
-the configured public endpoint without creating accounts or provider writes.
+controlled production verification confirmed `429` on the configured public
+endpoint without creating accounts or provider writes.
 
 ### Post-deploy verification
 
