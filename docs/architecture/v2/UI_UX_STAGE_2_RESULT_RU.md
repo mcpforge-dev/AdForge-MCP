@@ -60,9 +60,36 @@ applications, публичные callback URLs, DNS и Nginx contract. Provider 
 файлах монорепо. Для затронутых файлов применена и проверена актуальная
 Prettier-конфигурация; массовый unrelated rewrite не выполнялся.
 
-## Предстоящая операционная проверка
+## CI и production deploy
 
-После публикации immutable GHCR image должны быть выполнены существующие
-GitHub Actions foundation, Compose smoke и browser/compatibility workflows,
-затем безопасный production deploy и read-only integrity check connections /
-accounts. Telegram Hermes real E2E остаётся `DEFERRED BY PROJECT DECISION`.
+- GitHub Actions для code commit `7f246be8e36e4566f61f798b27da16e4dfdfac6d`:
+  foundation PASS, Compose smoke PASS, browser/compatibility PASS (`9 passed`,
+  `1 skipped`) и GHCR production-image PASS.
+- immutable image: `ghcr.io/mcpforge-dev/holymedia-mcp-v2:sha-7f246be8e36e4566f61f798b27da16e4dfdfac6d`;
+  registry digest: `sha256:89f11840e176ff0e40d4bf795e891dfd067ef5a134fd25ee957d53d9e73dc8b5`.
+- predeploy checkpoint: `/var/backups/adforge-mcp/ui-stage2-predeploy-20260824T134939Z`;
+  PostgreSQL custom dump ненулевой, V2 env/config, production compose config и
+  Nginx config сохранены, SHA-256 проверены.
+- Обновлены только `api`, `web`, `worker` через `docker compose pull` и
+  `up -d --no-deps --force-recreate`. PostgreSQL и Redis volumes, Nginx, DNS,
+  OAuth applications и callback URLs не менялись. Предыдущий image
+  `sha-ff3bb7...` сохранён как rollback artifact.
+- после deploy: `/health` `200`, `/ready` `200`, `/mcp` без token `401`,
+  `/auth?mode=signup` `200`; API/Web healthy, Worker running.
+- standalone production Playwright desktop/mobile: `9 passed`, `1 skipped`;
+  axe automated violations `0`. Все запросы, которые E2E имитирует как
+  пользовательские API actions, были изолированы Playwright route mocks,
+  поэтому production provider data не изменялись.
+
+## Provider/account integrity
+
+Post-deploy read-only PostgreSQL validation: users `11`, workspaces `11`,
+memberships `11`, connections `11`, accounts `255`, credential envelopes `9`,
+service tokens `12`, entitlements `11`. Orphan accounts `0`, cross-tenant
+mismatches `0`, duplicate connection/account bindings `0`. Состояния Meta,
+Yandex и TikTok connections сохранены; V2 provider code и credential boundary
+этим UI deploy не менялись, provider writes `0`. Current runtime readiness
+green; sensitive-log pattern scan не обнаружил plaintext credentials, OAuth
+tokens, service-token plaintext или passwords.
+
+Telegram Hermes real E2E остаётся `DEFERRED BY PROJECT DECISION`.
