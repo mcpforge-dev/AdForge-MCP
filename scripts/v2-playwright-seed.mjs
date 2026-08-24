@@ -99,6 +99,26 @@ try {
       update: { connectionId: connection.id, displayName, status: "ENABLED" },
     });
   }
+
+  await database.client.entitlement.upsert({
+    where: {
+      workspaceId_featureKey: {
+        workspaceId,
+        featureKey: "legacy_access",
+      },
+    },
+    create: {
+      workspaceId,
+      featureKey: "legacy_access",
+      value: true,
+      source: "legacy_internal",
+    },
+    update: {
+      value: true,
+      source: "legacy_internal",
+      expiresAt: null,
+    },
+  });
 } finally {
   await database.client.$disconnect();
   await database.pool.end();
