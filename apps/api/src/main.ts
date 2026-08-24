@@ -14,6 +14,7 @@ import { createLogger, requestId } from "@holymedia/observability";
 import { AppModule } from "./app.module.js";
 import { ApiExceptionFilter } from "./api-exception.filter.js";
 import { ReadinessService } from "./readiness.service.js";
+import { requestPath } from "./infrastructure/request-path.js";
 
 type RequestWithId = { requestId?: string };
 
@@ -49,7 +50,7 @@ async function bootstrap(): Promise<void> {
       {
         requestId: requestWithId.requestId,
         method: request.method,
-        path: request.url,
+        path: requestPath(request.url),
         status: reply.statusCode,
       },
       "request complete",
