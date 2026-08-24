@@ -63,15 +63,18 @@ export class ProviderController {
   }
 
   @Get("oauth/:provider/callback")
-  @UseGuards(AuthenticationGuard)
   public async callback(
     @Param("provider") provider: string,
     @Query("state") state: string,
     @Query("code") code: string,
-    @CurrentPrincipal() principal: HumanPrincipal,
     @Req() request: RequestWithAuth,
     @Res() reply: FastifyReply,
   ) {
+    const providerId = this.provider(provider);
+    const redirect = (outcome: "success" | "error") =>
+      reply.redirect(
+        `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}`,
+      );
     if (
       typeof state !== "string" ||
       state.length < 32 ||
@@ -80,21 +83,16 @@ export class ProviderController {
       code.length < 1 ||
       code.length > 512
     )
-      throw new BadRequestException("OAuth callback is incomplete.");
+      return redirect("error");
     try {
-      await this.providers.completeOAuth(
-        this.provider(provider),
+      await this.providers.completeOAuthCallback(
+        providerId,
         { state, code },
-        principal,
         request,
       );
-      return reply.redirect(
-        `/dashboard?section=connections&oauth=success&provider=${encodeURIComponent(provider)}`,
-      );
+      return redirect("success");
     } catch {
-      return reply.redirect(
-        `/dashboard?section=connections&oauth=error&provider=${encodeURIComponent(provider)}`,
-      );
+      return redirect("error");
     }
   }
 

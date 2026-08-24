@@ -1,13 +1,13 @@
-import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { ProviderController } from "./provider.controller.js";
 
-const principal = { userId: "user-a" } as never;
 const request = { ip: "127.0.0.1" } as never;
 const validState = "s".repeat(48);
 
-function setup(completeOAuth = vi.fn(async () => ({ id: "connection-a" }))) {
-  const providers = { completeOAuth };
+function setup(
+  completeOAuthCallback = vi.fn(async () => ({ id: "connection-a" })),
+) {
+  const providers = { completeOAuthCallback };
   const reply = { redirect: vi.fn((location: string) => location) };
   return {
     controller: new ProviderController(providers as never),
@@ -24,15 +24,13 @@ describe("provider OAuth callback UX", () => {
       "google",
       validState,
       "authorization-code",
-      principal,
       request,
       reply as never,
     );
 
-    expect(providers.completeOAuth).toHaveBeenCalledWith(
+    expect(providers.completeOAuthCallback).toHaveBeenCalledWith(
       "GOOGLE_ADS",
       { state: validState, code: "authorization-code" },
-      principal,
       request,
     );
     expect(reply.redirect).toHaveBeenCalledWith(
@@ -53,15 +51,13 @@ describe("provider OAuth callback UX", () => {
         pathProvider,
         validState,
         "authorization-code",
-        principal,
         request,
         reply as never,
       );
 
-      expect(providers.completeOAuth).toHaveBeenCalledWith(
+      expect(providers.completeOAuthCallback).toHaveBeenCalledWith(
         provider,
         { state: validState, code: "authorization-code" },
-        principal,
         request,
       );
       expect(reply.redirect).toHaveBeenCalledWith(
@@ -81,7 +77,6 @@ describe("provider OAuth callback UX", () => {
       "google",
       validState,
       "authorization-code",
-      principal,
       request,
       reply as never,
     );
@@ -91,17 +86,11 @@ describe("provider OAuth callback UX", () => {
     );
   });
 
-  it("rejects malformed callback values", async () => {
+  it("returns an actionable safe error for malformed callback values", async () => {
     const { controller, reply } = setup();
-    await expect(
-      controller.callback(
-        "google",
-        "short",
-        "",
-        principal,
-        request,
-        reply as never,
-      ),
-    ).rejects.toBeInstanceOf(BadRequestException);
+    await controller.callback("google", "short", "", request, reply as never);
+    expect(reply.redirect).toHaveBeenCalledWith(
+      "/dashboard?section=connections&oauth=error&provider=google",
+    );
   });
 });

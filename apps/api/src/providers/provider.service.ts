@@ -14,6 +14,7 @@ import type {
 import type { Prisma } from "@holymedia/database";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import { AuditService } from "../audit/audit.service.js";
+import { SessionService } from "../auth/session.service.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { BillingService } from "../billing/billing.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
@@ -49,6 +50,7 @@ export class ProviderService {
     @Inject(AuditService) private readonly audit: AuditService,
     @Inject(ProviderRegistry) private readonly registry: ProviderRegistry,
     @Inject(OAuthStateService) private readonly states: OAuthStateService,
+    @Inject(SessionService) private readonly sessions: SessionService,
     @Inject(CredentialVaultService)
     private readonly vault: CredentialVaultService,
     @Inject(ProviderRefreshCoordinator)
@@ -161,6 +163,30 @@ export class ProviderService {
     request: RequestWithAuth,
     workspaceId?: string,
   ): Promise<ProviderConnectionView> {
+    return this.completeOAuthForState(
+      provider,
+      input,
+      request,
+      principal,
+      workspaceId,
+    );
+  }
+
+  public async completeOAuthCallback(
+    provider: ProviderId,
+    input: { state: string; code: string },
+    request: RequestWithAuth,
+  ): Promise<ProviderConnectionView> {
+    return this.completeOAuthForState(provider, input, request);
+  }
+
+  private async completeOAuthForState(
+    provider: ProviderId,
+    input: { state: string; code: string },
+    request: RequestWithAuth,
+    principal?: HumanPrincipal,
+    workspaceId?: string,
+  ): Promise<ProviderConnectionView> {
     const entry = this.registry.get(provider);
     if (!entry.adapter)
       throw toSafeProviderException(
@@ -174,16 +200,35 @@ export class ProviderService {
       30,
       900,
     );
+    let callbackPrincipal = principal;
+    let callbackWorkspaceId = workspaceId;
     try {
       const startedAt = Date.now();
       const state = await this.states.consume({
         state: input.state,
         expected: {
-          principal,
+          ...(principal ? { principal } : {}),
           provider,
           ...(workspaceId ? { workspaceId } : {}),
         },
       });
+      callbackWorkspaceId = state.workspaceId;
+      if (!callbackPrincipal) {
+        const session = await this.sessions.validateById(
+          state.sessionId,
+          state.userId,
+        );
+        if (!session)
+          throw new ProviderError(
+            "invalid_oauth_state",
+            "OAuth state is invalid or expired.",
+          );
+        callbackPrincipal = {
+          kind: "human",
+          userId: session.userId,
+          sessionId: session.id,
+        };
+      }
       const credentials = await entry.adapter.exchangeCode({
         code: input.code,
         redirectUri: this.redirectUri(provider),
@@ -270,7 +315,7 @@ export class ProviderService {
       await this.record(
         "oauth_completed",
         request,
-        principal,
+        callbackPrincipal,
         state.workspaceId,
         provider,
         connection.id,
@@ -279,7 +324,7 @@ export class ProviderService {
         await this.record(
           "connection_reconnected",
           request,
-          principal,
+          callbackPrincipal,
           state.workspaceId,
           provider,
           connection.id,
@@ -289,15 +334,16 @@ export class ProviderService {
       return this.getConnection(state.workspaceId, connection.id);
     } catch (error) {
       this.metrics.record("oauth_failure", provider);
-      await this.record(
-        "oauth_failed",
-        request,
-        principal,
-        workspaceId,
-        provider,
-        undefined,
-        error,
-      );
+      if (callbackPrincipal)
+        await this.record(
+          "oauth_failed",
+          request,
+          callbackPrincipal,
+          callbackWorkspaceId,
+          provider,
+          undefined,
+          error,
+        );
       throw toSafeProviderException(error);
     }
   }

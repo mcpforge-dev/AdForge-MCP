@@ -83,7 +83,7 @@ export class OAuthStateService {
   public async consume(input: {
     state: string;
     expected: {
-      principal: HumanPrincipal;
+      principal?: HumanPrincipal;
       workspaceId?: string;
       provider: ProviderId;
     };
@@ -106,8 +106,9 @@ export class OAuthStateService {
     });
     if (
       !record ||
-      record.userId !== input.expected.principal.userId ||
-      record.sessionId !== input.expected.principal.sessionId ||
+      (input.expected.principal &&
+        (record.userId !== input.expected.principal.userId ||
+          record.sessionId !== input.expected.principal.sessionId)) ||
       (input.expected.workspaceId &&
         record.workspaceId !== input.expected.workspaceId) ||
       record.provider !== input.expected.provider ||

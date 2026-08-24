@@ -72,6 +72,34 @@ export class SessionService {
     return { id: session.id, userId: session.userId };
   }
 
+  public async validateById(
+    sessionId: string,
+    userId: string,
+  ): Promise<SessionRecord | null> {
+    const session = await this.database.client.session.findFirst({
+      where: { id: sessionId, userId },
+      select: {
+        id: true,
+        userId: true,
+        expiresAt: true,
+        revokedAt: true,
+        user: { select: { status: true } },
+      },
+    });
+    if (
+      !session ||
+      session.revokedAt ||
+      session.expiresAt <= new Date() ||
+      session.user.status !== "active"
+    )
+      return null;
+    await this.database.client.session.update({
+      where: { id: session.id },
+      data: { lastSeenAt: new Date() },
+    });
+    return { id: session.id, userId: session.userId };
+  }
+
   public async revoke(sessionId: string): Promise<void> {
     await this.database.client.session.updateMany({
       where: { id: sessionId, revokedAt: null },

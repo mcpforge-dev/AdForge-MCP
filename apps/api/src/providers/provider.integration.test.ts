@@ -58,6 +58,7 @@ describe.skipIf(!integrationEnabled)(
       audit,
       registry,
       states,
+      sessions,
       vault,
       coordinator,
       limits,
@@ -170,6 +171,34 @@ describe.skipIf(!integrationEnabled)(
           ciphertext.encryptionVersion,
         ).accessToken,
       ).toBe("test-access-test-code");
+    });
+
+    it("completes a callback from its one-time state without a browser session cookie", async () => {
+      const started = await providers.startOAuth(
+        workspaceId,
+        "TEST_PROVIDER",
+        principal,
+        request,
+      );
+      const state = new URL(started.authorizationUrl).searchParams.get(
+        "state",
+      )!;
+
+      await expect(
+        providers.completeOAuthCallback(
+          "TEST_PROVIDER",
+          { state, code: "callback-code" },
+          request,
+        ),
+      ).resolves.toMatchObject({ status: "CONNECTED" });
+
+      await expect(
+        providers.completeOAuthCallback(
+          "TEST_PROVIDER",
+          { state, code: "callback-code" },
+          request,
+        ),
+      ).rejects.toThrow();
     });
 
     it("enforces workspace scope and blocks invalid OAuth state", async () => {
