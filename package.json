@@ -25,6 +25,7 @@
     "test:migration-metadata": "node scripts/v2-account-metadata.test.mjs"
   },
   "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
     "@eslint/js": "10.0.1",
     "@playwright/test": "1.55.1",
     "@types/node": "26.2.0",
