@@ -16,6 +16,8 @@ import {
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
+// Nest needs these DTO classes at runtime for whitelist validation metadata.
+// eslint-disable-next-line @typescript-eslint/consistent-type-imports
 import {
   CreateServiceTokenDto,
   RotateServiceTokenDto,
