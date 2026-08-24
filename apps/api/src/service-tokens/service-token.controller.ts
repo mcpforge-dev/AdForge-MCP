@@ -16,7 +16,7 @@ import {
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
-import type {
+import {
   CreateServiceTokenDto,
   RotateServiceTokenDto,
 } from "./service-token.dto.js";
