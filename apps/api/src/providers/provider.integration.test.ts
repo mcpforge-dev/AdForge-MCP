@@ -187,7 +187,7 @@ describe.skipIf(!integrationEnabled)(
       await expect(
         providers.completeOAuthCallback(
           "TEST_PROVIDER",
-          { state, code: "callback-code" },
+          { state, code: "test-code" },
           request,
         ),
       ).resolves.toMatchObject({ status: "CONNECTED" });
@@ -195,7 +195,7 @@ describe.skipIf(!integrationEnabled)(
       await expect(
         providers.completeOAuthCallback(
           "TEST_PROVIDER",
-          { state, code: "callback-code" },
+          { state, code: "test-code" },
           request,
         ),
       ).rejects.toThrow();
