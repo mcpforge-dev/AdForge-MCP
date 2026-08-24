@@ -89,8 +89,8 @@ test.describe("restored HolyMedia client UX", () => {
     const metaCard = page
       .locator(".connection-card")
       .filter({ hasText: "Meta Ads" });
-    const accountCheckboxes = metaCard.locator('input[type="checkbox"]');
-    if ((await accountCheckboxes.locator(":checked").count()) > 0) {
+    const checkedAccounts = metaCard.locator('input[type="checkbox"]:checked');
+    if ((await checkedAccounts.count()) > 0) {
       await metaCard.getByRole("button", { name: "Снять все" }).click();
       const clearResponse = page.waitForResponse(
         (response) =>
@@ -99,7 +99,7 @@ test.describe("restored HolyMedia client UX", () => {
       );
       await metaCard.getByRole("button", { name: "Сохранить выбор" }).click();
       expect((await clearResponse).ok()).toBeTruthy();
-      await expect(accountCheckboxes.locator(":checked")).toHaveCount(0);
+      await expect(checkedAccounts).toHaveCount(0);
     }
     await metaCard.getByRole("button", { name: "Выбрать все" }).click();
     const saveResponse = page.waitForResponse(
@@ -110,7 +110,7 @@ test.describe("restored HolyMedia client UX", () => {
     await metaCard.getByRole("button", { name: "Сохранить выбор" }).click();
     expect((await saveResponse).ok()).toBeTruthy();
     await expect(page.getByText("Выбранные кабинеты сохранены.")).toBeVisible();
-    await expect(accountCheckboxes.locator(":checked")).toHaveCount(2);
+    await expect(checkedAccounts).toHaveCount(2);
 
     await metaCard.getByRole("button", { name: "Отключить" }).click();
     await expect(page.getByRole("dialog")).toContainText("Отключить Meta Ads?");
