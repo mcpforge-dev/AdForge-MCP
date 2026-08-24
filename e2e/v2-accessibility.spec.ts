@@ -41,7 +41,12 @@ test.describe("axe accessibility", () => {
     await installMockApi(page);
     await login(page);
     await expectAccessible(page, "overview");
-    for (const label of ["Подключения", "AI-клиент", "Отчёты"]) {
+    for (const label of [
+      "Подключения",
+      "AI-клиент",
+      "Отчёты",
+      "Анализ сайта",
+    ]) {
       await page.getByRole("button", { name: label, exact: true }).click();
       await expectAccessible(page, label);
     }

@@ -40,8 +40,27 @@ type ServiceToken = {
   lastUsedAt: string | null;
 };
 type Profile = { name: string; email: string };
-type Section = "overview" | "connections" | "mcp" | "reports" | "profile";
+type Section =
+  "overview" | "connections" | "mcp" | "reports" | "analysis" | "profile";
 type Client = "codex" | "claude" | "chatgpt";
+type SiteAnalysis = {
+  id: string;
+  url: string;
+  result: {
+    status?: number;
+    title?: string | null;
+    description?: string | null;
+    h1Count?: number;
+    linkCount?: number;
+    checks?: {
+      https?: boolean;
+      hasTitle?: boolean;
+      hasDescription?: boolean;
+      hasSingleH1?: boolean;
+    };
+  };
+  created_at: string;
+};
 type ConfirmAction = {
   title: string;
   description: string;
@@ -126,9 +145,19 @@ export default function DashboardPage() {
   const [section, setSection] = useState<Section>("overview");
   const [client, setClient] = useState<Client>("codex");
   const [drafts, setDrafts] = useState<Record<string, string[]>>({});
+  const [openAccountsId, setOpenAccountsId] = useState<string | null>(null);
+  const [highlightedProvider, setHighlightedProvider] = useState<string | null>(
+    null,
+  );
   const [savingAccounts, setSavingAccounts] = useState<string | null>(null);
   const [createdToken, setCreatedToken] = useState("");
   const [reportDays, setReportDays] = useState(7);
+  const [analysisUrl, setAnalysisUrl] = useState("");
+  const [analysisHistory, setAnalysisHistory] = useState<SiteAnalysis[]>([]);
+  const [analysisResult, setAnalysisResult] = useState<SiteAnalysis | null>(
+    null,
+  );
+  const [analysisBusy, setAnalysisBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -220,6 +249,12 @@ export default function DashboardPage() {
           ]),
         ),
       );
+      if (highlightedProvider) {
+        const matching = data.find(
+          (connection) => connection.provider === highlightedProvider,
+        );
+        if (matching) setOpenAccountsId(matching.id);
+      }
     }
   }
 
@@ -244,16 +279,31 @@ export default function DashboardPage() {
       requestedSection === "connections" ||
       requestedSection === "mcp" ||
       requestedSection === "reports" ||
+      requestedSection === "analysis" ||
       requestedSection === "profile"
     )
       setSection(requestedSection);
+    const oauthProvider = query.get("provider")?.toUpperCase();
+    const oauthProviderAliases: Record<string, string> = {
+      GOOGLE: "GOOGLE_ADS",
+      META: "META_ADS",
+      YANDEX: "YANDEX_DIRECT",
+      TIKTOK: "TIKTOK_ADS",
+    };
+    if (oauthProvider)
+      setHighlightedProvider(
+        oauthProviderAliases[oauthProvider] ?? oauthProvider,
+      );
     if (query.get("oauth") === "success")
-      notify("Платформа подключена. Выберите кабинеты для работы.");
+      notify(
+        "Платформа подключена. Откройте список кабинетов и выберите нужные.",
+      );
     if (query.get("oauth") === "error")
       fail(
         "Подключение не завершено. Попробуйте ещё раз или обратитесь в поддержку.",
       );
-    if (query.has("oauth")) window.history.replaceState({}, "", "/dashboard");
+    if (query.has("oauth"))
+      window.history.replaceState({}, "", "/dashboard?section=connections");
   }, []);
 
   useEffect(() => {
@@ -261,6 +311,10 @@ export default function DashboardPage() {
     void loadConnections(active);
     void loadTokens(active);
   }, [active]);
+
+  useEffect(() => {
+    if (section === "analysis" && active) void loadAnalysisHistory();
+  }, [active, section]);
 
   useEffect(() => {
     if (!confirm) return;
@@ -388,9 +442,9 @@ export default function DashboardPage() {
     if (!active) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const accountIds = form.getAll("account_ids");
+    const accountIds = enabledAccounts.map(({ account }) => account.id);
     if (!accountIds.length) {
-      fail("Выберите хотя бы один кабинет для ключа.");
+      fail("Сначала выберите кабинеты в разделе «Подключения».");
       return;
     }
     setBusy(true);
@@ -494,6 +548,77 @@ export default function DashboardPage() {
     }
   }
 
+  async function loadAnalysisHistory(): Promise<SiteAnalysis[]> {
+    const response = await fetch(`${API}/api/site/history`, {
+      credentials: "include",
+      cache: "no-store",
+    });
+    if (!response.ok) return [];
+    const data = (await response.json()) as { items: SiteAnalysis[] };
+    setAnalysisHistory(data.items);
+    return data.items;
+  }
+
+  async function analyzeSite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active || !analysisUrl.trim()) return;
+    setAnalysisBusy(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/site-analysis`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": await csrf(),
+          },
+          body: JSON.stringify({ url: analysisUrl.trim() }),
+        },
+      );
+      const data = (await response.json()) as { error?: { message?: string } };
+      if (!response.ok)
+        throw new Error(data.error?.message ?? "Не удалось проверить сайт.");
+      const items = await loadAnalysisHistory();
+      setAnalysisResult(items[0] ?? null);
+      notify("Проверка сайта завершена.");
+    } catch (requestError) {
+      fail(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось проверить сайт.",
+      );
+    } finally {
+      setAnalysisBusy(false);
+    }
+  }
+
+  async function downloadSiteAnalysis(item: SiteAnalysis) {
+    try {
+      const response = await fetch(`${API}/api/site/report.docx`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({ history_id: item.id }),
+      });
+      if (!response.ok) throw new Error();
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "holymedia-site-analysis.docx";
+      link.click();
+      URL.revokeObjectURL(url);
+      notify("Отчёт анализа скачан.");
+    } catch {
+      fail("Не удалось скачать отчёт анализа.");
+    }
+  }
+
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const response = await fetch(`${API}/api/profile`, {
@@ -579,6 +704,7 @@ export default function DashboardPage() {
     { id: "connections", label: "Подключения" },
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
+    { id: "analysis", label: "Анализ сайта" },
     { label: "Тарифы", disabled: true },
   ];
   const allProviderIds = [
@@ -586,7 +712,6 @@ export default function DashboardPage() {
     "META_ADS",
     "YANDEX_DIRECT",
     "TIKTOK_ADS",
-    "GOOGLE_SEARCH_CONSOLE",
   ];
 
   return (
@@ -758,13 +883,20 @@ export default function DashboardPage() {
                   (item) => item.provider === providerId,
                 );
                 const copyText = providerCopy(providerId);
-                const comingSoon = providerId === "GOOGLE_SEARCH_CONSOLE";
                 const status = connectionStatus(connection?.status ?? "");
                 const selected = new Set(
                   connection ? (drafts[connection.id] ?? []) : [],
                 );
+                const accountsOpen = connection
+                  ? openAccountsId === connection.id
+                  : false;
                 return (
-                  <article className="connection-card" key={providerId}>
+                  <article
+                    className={`connection-card ${
+                      highlightedProvider === providerId ? "is-highlighted" : ""
+                    }`}
+                    key={providerId}
+                  >
                     <div className="connection-card__head">
                       <span
                         className={`provider-mark provider-mark--${providerId.toLowerCase()}`}
@@ -776,20 +908,17 @@ export default function DashboardPage() {
                         <h2>{copyText.name}</h2>
                         <p>{copyText.description}</p>
                       </div>
-                      {comingSoon ? (
-                        <span className="status-badge info">В разработке</span>
-                      ) : (
-                        <span className={`status-badge ${status.tone}`}>
-                          {status.label}
-                        </span>
-                      )}
+                      <span className={`status-badge ${status.tone}`}>
+                        {status.label}
+                      </span>
                     </div>
-                    {comingSoon ? (
-                      <p className="connection-note">
-                        Подключение появится позже.
-                      </p>
-                    ) : connection ? (
+                    {connection ? (
                       <>
+                        <p className="connection-count">
+                          {connection.accounts.length
+                            ? `${connection.accounts.length} кабинетов · ${selected.size} выбрано`
+                            : "Кабинеты ещё не найдены"}
+                        </p>
                         <div className="connection-actions">
                           <button
                             className="secondary-button btn--small"
@@ -798,6 +927,21 @@ export default function DashboardPage() {
                             onClick={() => void discover(connection)}
                           >
                             Обновить кабинеты
+                          </button>
+                          <button
+                            className="secondary-button btn--small"
+                            type="button"
+                            aria-expanded={accountsOpen}
+                            aria-controls={`accounts-${connection.id}`}
+                            onClick={() =>
+                              setOpenAccountsId(
+                                accountsOpen ? null : connection.id,
+                              )
+                            }
+                          >
+                            {accountsOpen
+                              ? "Скрыть кабинеты"
+                              : "Посмотреть кабинеты"}
                           </button>
                           <button
                             className="ghost-button btn--small"
@@ -822,93 +966,103 @@ export default function DashboardPage() {
                             Отключить
                           </button>
                         </div>
-                        <div className="account-selector">
-                          <div className="account-selector__head">
-                            <div>
-                              <h3>Выберите кабинеты</h3>
-                              <p>
-                                {selected.size} из {connection.accounts.length}
-                              </p>
+                        {accountsOpen && (
+                          <div
+                            className="account-selector"
+                            id={`accounts-${connection.id}`}
+                          >
+                            <div className="account-selector__head">
+                              <div>
+                                <h3>Выберите кабинеты</h3>
+                                <p>
+                                  {selected.size} из{" "}
+                                  {connection.accounts.length}
+                                </p>
+                              </div>
+                              {connection.accounts.length > 0 && (
+                                <div className="bulk-actions">
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDrafts((current) => ({
+                                        ...current,
+                                        [connection.id]:
+                                          connection.accounts.map(
+                                            (account) => account.id,
+                                          ),
+                                      }))
+                                    }
+                                  >
+                                    Выбрать все
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setDrafts((current) => ({
+                                        ...current,
+                                        [connection.id]: [],
+                                      }))
+                                    }
+                                  >
+                                    Снять все
+                                  </button>
+                                </div>
+                              )}
                             </div>
-                            {connection.accounts.length > 0 && (
-                              <div className="bulk-actions">
+                            {connection.accounts.length ? (
+                              <div className="account-list">
+                                {connection.accounts.map((account) => (
+                                  <label
+                                    className="account-row"
+                                    key={account.id}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={selected.has(account.id)}
+                                      onChange={() =>
+                                        toggleDraft(connection.id, account.id)
+                                      }
+                                    />
+                                    <span>
+                                      <strong>{account.displayName}</strong>
+                                      <small>
+                                        {account.status === "ENABLED" ||
+                                        !account.status
+                                          ? "Доступен"
+                                          : "Проверьте статус в платформе"}
+                                      </small>
+                                    </span>
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <div className="empty-state">
+                                <p>Кабинеты пока не найдены.</p>
                                 <button
+                                  className="secondary-button"
                                   type="button"
-                                  onClick={() =>
-                                    setDrafts((current) => ({
-                                      ...current,
-                                      [connection.id]: connection.accounts.map(
-                                        (account) => account.id,
-                                      ),
-                                    }))
-                                  }
+                                  onClick={() => void discover(connection)}
                                 >
-                                  Выбрать все
+                                  Найти кабинеты
                                 </button>
+                              </div>
+                            )}
+                            {connection.accounts.length > 0 && (
+                              <div className="account-selector__save">
                                 <button
+                                  className="primary-button"
                                   type="button"
-                                  onClick={() =>
-                                    setDrafts((current) => ({
-                                      ...current,
-                                      [connection.id]: [],
-                                    }))
-                                  }
+                                  disabled={savingAccounts === connection.id}
+                                  onClick={() => void saveAccounts(connection)}
                                 >
-                                  Снять все
+                                  {savingAccounts === connection.id
+                                    ? "Сохраняем…"
+                                    : "Сохранить выбор"}
                                 </button>
                               </div>
                             )}
                           </div>
-                          {connection.accounts.length ? (
-                            <div className="account-list">
-                              {connection.accounts.map((account) => (
-                                <label className="account-row" key={account.id}>
-                                  <input
-                                    type="checkbox"
-                                    checked={selected.has(account.id)}
-                                    onChange={() =>
-                                      toggleDraft(connection.id, account.id)
-                                    }
-                                  />
-                                  <span>
-                                    <strong>{account.displayName}</strong>
-                                    <small>
-                                      {account.status === "ENABLED" ||
-                                      !account.status
-                                        ? "Доступен"
-                                        : "Проверьте статус в платформе"}
-                                    </small>
-                                  </span>
-                                </label>
-                              ))}
-                            </div>
-                          ) : (
-                            <div className="empty-state">
-                              <p>Кабинеты пока не найдены.</p>
-                              <button
-                                className="secondary-button"
-                                type="button"
-                                onClick={() => void discover(connection)}
-                              >
-                                Найти кабинеты
-                              </button>
-                            </div>
-                          )}
-                          {connection.accounts.length > 0 && (
-                            <div className="account-selector__save">
-                              <button
-                                className="primary-button"
-                                type="button"
-                                disabled={savingAccounts === connection.id}
-                                onClick={() => void saveAccounts(connection)}
-                              >
-                                {savingAccounts === connection.id
-                                  ? "Сохраняем…"
-                                  : "Сохранить выбор"}
-                              </button>
-                            </div>
-                          )}
-                        </div>
+                        )}
                       </>
                     ) : (
                       <div className="connection-empty">
@@ -992,28 +1146,10 @@ export default function DashboardPage() {
                           </select>
                         </label>
                       </div>
-                      <fieldset className="account-picker">
-                        <legend>Кабинеты</legend>
-                        {enabledAccounts.length ? (
-                          enabledAccounts.map(({ account, connection }) => (
-                            <label className="check-row" key={account.id}>
-                              <input
-                                type="checkbox"
-                                name="account_ids"
-                                value={account.id}
-                              />
-                              <span>{account.displayName}</span>
-                              <small>
-                                {providerCopy(connection.provider).name}
-                              </small>
-                            </label>
-                          ))
-                        ) : (
-                          <p className="empty-inline">
-                            Сначала выберите кабинеты в разделе «Подключения».
-                          </p>
-                        )}
-                      </fieldset>
+                      <p className="scope-note">
+                        Ключ получит доступ к {enabledAccounts.length} выбранным
+                        кабинетам из раздела «Подключения».
+                      </p>
                       <details className="advanced-settings">
                         <summary>Дополнительные настройки</summary>
                         <label className="check-row">
@@ -1171,59 +1307,211 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            <section className="panel report-panel">
-              <form className="report-form" onSubmit={downloadReport}>
-                <label>
-                  Рекламный кабинет
-                  <select name="account_id" required defaultValue="">
-                    <option value="" disabled>
-                      Выберите кабинет
-                    </option>
-                    {enabledAccounts.map(({ account, connection }) => (
-                      <option key={account.id} value={account.id}>
-                        {account.displayName} ·{" "}
-                        {providerCopy(connection.provider).name}
+            <div className="report-layout">
+              <section className="panel report-panel">
+                <form className="report-form" onSubmit={downloadReport}>
+                  <label>
+                    Рекламный кабинет
+                    <select name="account_id" required defaultValue="">
+                      <option value="" disabled>
+                        Выберите кабинет
                       </option>
-                    ))}
-                  </select>
-                </label>
-                <label>
-                  Период
-                  <select
-                    name="period"
-                    value={reportDays}
-                    onChange={(event) =>
-                      setReportDays(Number(event.target.value))
-                    }
-                  >
-                    <option value="7">Последние 7 дней</option>
-                    <option value="14">Последние 14 дней</option>
-                    <option value="30">Последние 30 дней</option>
-                  </select>
-                </label>
-                <button
-                  className="primary-button"
-                  type="submit"
-                  disabled={busy || !enabledAccounts.length}
-                >
-                  {busy ? "Готовим…" : "Скачать DOCX"}
-                </button>
-              </form>
-              {!enabledAccounts.length && (
-                <div className="empty-state">
-                  <p>
-                    Чтобы создать отчёт, сначала выберите рекламный кабинет.
-                  </p>
+                      {enabledAccounts.map(({ account, connection }) => (
+                        <option key={account.id} value={account.id}>
+                          {account.displayName} ·{" "}
+                          {providerCopy(connection.provider).name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    Период
+                    <select
+                      name="period"
+                      value={reportDays}
+                      onChange={(event) =>
+                        setReportDays(Number(event.target.value))
+                      }
+                    >
+                      <option value="7">Последние 7 дней</option>
+                      <option value="14">Последние 14 дней</option>
+                      <option value="30">Последние 30 дней</option>
+                    </select>
+                  </label>
+                  <label>
+                    Формат
+                    <select name="format" defaultValue="docx">
+                      <option value="docx">DOCX</option>
+                    </select>
+                  </label>
                   <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() => setSection("connections")}
+                    className="primary-button"
+                    type="submit"
+                    disabled={busy || !enabledAccounts.length}
                   >
-                    Перейти к подключениям
+                    {busy ? "Готовим…" : "Скачать отчёт"}
                   </button>
+                </form>
+                {!enabledAccounts.length && (
+                  <div className="empty-state">
+                    <p>
+                      Чтобы создать отчёт, сначала выберите рекламный кабинет.
+                    </p>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => setSection("connections")}
+                    >
+                      Перейти к подключениям
+                    </button>
+                  </div>
+                )}
+              </section>
+              <aside className="report-preview-card" aria-label="Отчёт">
+                <div className="report-preview-card__topline">
+                  <span>HOLYMEDIA MCP</span>
+                  <span>ОТЧЁТ</span>
                 </div>
-              )}
-            </section>
+                <div className="report-preview-card__body">
+                  <span>Рекламная эффективность</span>
+                  <strong>{reportDays} дней</strong>
+                  <em>
+                    {enabledAccounts.length
+                      ? `${enabledAccounts.length} выбранных кабинетов`
+                      : "Выберите кабинет для отчёта"}
+                  </em>
+                </div>
+                <p className="report-preview-card__footer">
+                  Расходы, показы, клики, конверсии и сравнение периода.
+                </p>
+              </aside>
+            </div>
+          </section>
+        )}
+
+        {section === "analysis" && (
+          <section className="section" aria-labelledby="analysis-title">
+            <div className="section-head">
+              <div>
+                <p className="eyebrow">Инструменты</p>
+                <h1 id="analysis-title">Анализ сайта</h1>
+                <p className="section-head__sub">
+                  Быстро проверьте основные технические и SEO-признаки публичной
+                  страницы.
+                </p>
+              </div>
+            </div>
+            <div className="analysis-layout">
+              <section className="panel analysis-panel">
+                <form className="site-analysis-form" onSubmit={analyzeSite}>
+                  <label className="full-field">
+                    Адрес сайта
+                    <input
+                      type="url"
+                      required
+                      value={analysisUrl}
+                      onChange={(event) => setAnalysisUrl(event.target.value)}
+                      placeholder="https://example.com"
+                    />
+                  </label>
+                  <button
+                    className="primary-button"
+                    type="submit"
+                    disabled={analysisBusy}
+                  >
+                    {analysisBusy ? "Проверяем…" : "Запустить анализ"}
+                  </button>
+                </form>
+                {analysisResult && (
+                  <div className="analysis-result" aria-live="polite">
+                    <div className="analysis-result__head">
+                      <div>
+                        <span className="eyebrow">Результат</span>
+                        <h2>{analysisResult.url}</h2>
+                      </div>
+                      <span className="status-badge ok">Готово</span>
+                    </div>
+                    <div className="analysis-metrics">
+                      <div>
+                        <strong>{analysisResult.result.h1Count ?? 0}</strong>
+                        <span>H1 на странице</span>
+                      </div>
+                      <div>
+                        <strong>{analysisResult.result.linkCount ?? 0}</strong>
+                        <span>ссылок</span>
+                      </div>
+                      <div>
+                        <strong>{analysisResult.result.status ?? "—"}</strong>
+                        <span>HTTP-статус</span>
+                      </div>
+                    </div>
+                    <dl className="analysis-checks">
+                      <div>
+                        <dt>HTTPS</dt>
+                        <dd>
+                          {analysisResult.result.checks?.https ? "Да" : "Нет"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Заголовок страницы</dt>
+                        <dd>
+                          {analysisResult.result.checks?.hasTitle
+                            ? "Есть"
+                            : "Нет"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Описание</dt>
+                        <dd>
+                          {analysisResult.result.checks?.hasDescription
+                            ? "Есть"
+                            : "Нет"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt>Один H1</dt>
+                        <dd>
+                          {analysisResult.result.checks?.hasSingleH1
+                            ? "Да"
+                            : "Проверьте"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => void downloadSiteAnalysis(analysisResult)}
+                    >
+                      Скачать отчёт DOCX
+                    </button>
+                  </div>
+                )}
+              </section>
+              <aside className="analysis-aside">
+                <h2>Последние проверки</h2>
+                {analysisHistory.length ? (
+                  <ul className="analysis-history">
+                    {analysisHistory.slice(0, 5).map((item) => (
+                      <li key={item.id}>
+                        <button
+                          type="button"
+                          onClick={() => setAnalysisResult(item)}
+                        >
+                          <strong>{item.url}</strong>
+                          <small>
+                            {new Date(item.created_at).toLocaleDateString(
+                              "ru-RU",
+                            )}
+                          </small>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="empty-inline">Здесь появятся ваши проверки.</p>
+                )}
+              </aside>
+            </div>
           </section>
         )}
 
@@ -1305,8 +1593,8 @@ export default function DashboardPage() {
                     />
                     <small>Не менее 12 символов</small>
                   </label>
-                  <button className="secondary-button" type="submit">
-                    Изменить пароль
+                  <button className="primary-button" type="submit">
+                    Сменить пароль
                   </button>
                 </form>
               </section>

@@ -9,7 +9,12 @@ const legacyPassword =
 function collectClientFailures(page: Page) {
   const failures: string[] = [];
   page.on("console", (message) => {
-    if (message.type() === "error") failures.push(`console: ${message.text()}`);
+    if (
+      message.type() === "error" &&
+      !message.text().includes("eval() is not supported in this environment") &&
+      !message.text().includes("React will never use eval() in production mode")
+    )
+      failures.push(`console: ${message.text()}`);
   });
   page.on("requestfailed", (request) => {
     if (request.url().includes("favicon")) return;
@@ -81,14 +86,22 @@ test.describe("restored HolyMedia client UX", () => {
       fullPage: true,
     });
 
-    await page
-      .getByRole("button", { name: "Подключения", exact: true })
-      .click();
+    await page.goto(
+      "/dashboard?section=connections&oauth=success&provider=meta_ads",
+    );
+    await expect(
+      page.getByText(
+        "Платформа подключена. Откройте список кабинетов и выберите нужные.",
+      ),
+    ).toBeVisible();
     await expect(page.getByRole("heading", { name: "Meta Ads" })).toBeVisible();
-    await expect(page.getByText("В разработке")).toBeVisible();
     const metaCard = page
       .locator(".connection-card")
       .filter({ hasText: "Meta Ads" });
+    await expect(metaCard.locator('input[type="checkbox"]')).toHaveCount(2);
+    await metaCard.getByRole("button", { name: "Скрыть кабинеты" }).click();
+    await expect(metaCard.locator('input[type="checkbox"]')).toHaveCount(0);
+    await metaCard.getByRole("button", { name: "Посмотреть кабинеты" }).click();
     const checkedAccounts = metaCard.locator('input[type="checkbox"]:checked');
     if ((await checkedAccounts.count()) > 0) {
       await metaCard.getByRole("button", { name: "Снять все" }).click();
@@ -136,9 +149,12 @@ test.describe("restored HolyMedia client UX", () => {
 
     const tokenForm = page.locator("form.token-form");
     await tokenForm.locator('input[name="name"]').fill("Playwright client");
-    await tokenForm.locator('input[name="account_ids"]').first().check();
     await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
     await expect(page.locator(".one-time-secret")).toBeVisible();
+    await expect(page.locator(".account-picker")).toHaveCount(0);
+    await expect(page.locator(".scope-note")).toContainText(
+      "выбранным кабинетам",
+    );
     await expect(tokenForm.locator('input[name="name"]')).toHaveValue("");
     await expect(page.locator(".notice--error")).toHaveCount(0);
     await page.getByRole("button", { name: "Скрыть" }).click();
@@ -160,7 +176,7 @@ test.describe("restored HolyMedia client UX", () => {
     });
     await page.locator('select[name="account_id"]').selectOption({ index: 1 });
     await page.locator('select[name="period"]').selectOption("14");
-    await page.getByRole("button", { name: "Скачать DOCX" }).click();
+    await page.getByRole("button", { name: "Скачать отчёт" }).click();
     await expect.poll(() => reportUrl).not.toBe("");
     const reportParams = new URL(reportUrl).searchParams;
     expect(
@@ -172,6 +188,15 @@ test.describe("restored HolyMedia client UX", () => {
       path: testInfo.outputPath("reports.png"),
       fullPage: true,
     });
+
+    await page
+      .getByRole("button", { name: "Анализ сайта", exact: true })
+      .click();
+    await page.locator('input[type="url"]').fill("https://example.com");
+    await page.getByRole("button", { name: "Запустить анализ" }).click();
+    await expect(
+      page.getByRole("heading", { name: "https://example.com" }),
+    ).toBeVisible();
 
     await page
       .getByRole("button", {
@@ -200,6 +225,12 @@ test.describe("restored HolyMedia client UX", () => {
     const layout = await page.evaluate(() => ({
       viewport: document.documentElement.clientWidth,
       document: document.documentElement.scrollWidth,
+      shell: document
+        .querySelector("main.dashboard-shell")
+        ?.getBoundingClientRect(),
+      footer: document
+        .querySelector("footer.footer--app")
+        ?.getBoundingClientRect(),
       buttons: [...document.querySelectorAll("button")].map((button) => ({
         label: button.textContent?.trim(),
         width: button.getBoundingClientRect().width,
@@ -207,6 +238,8 @@ test.describe("restored HolyMedia client UX", () => {
       })),
     }));
     expect(layout.document).toBeLessThanOrEqual(layout.viewport + 1);
+    expect(layout.footer?.left).toBeCloseTo(layout.shell?.left ?? 0, 0);
+    expect(layout.footer?.right).toBeCloseTo(layout.shell?.right ?? 0, 0);
     expect(
       layout.buttons.filter(
         (button) =>

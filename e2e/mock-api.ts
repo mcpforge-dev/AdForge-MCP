@@ -66,6 +66,40 @@ export async function installMockApi(page: Page) {
         profile: { name: "Анна", email: "phase-b-legacy-user@example.test" },
       });
     if (path === "/api/profile/avatar") return json(route, { dataUrl: null });
+    if (path === "/api/site/history")
+      return json(route, {
+        items: [
+          {
+            id: "analysis-1",
+            url: "https://example.com",
+            result: {
+              status: 200,
+              title: "Example",
+              h1Count: 1,
+              linkCount: 4,
+              checks: {
+                https: true,
+                hasTitle: true,
+                hasDescription: false,
+                hasSingleH1: true,
+              },
+            },
+            created_at: new Date().toISOString(),
+          },
+        ],
+      });
+    if (path.includes("/site-analysis"))
+      return json(route, { status: 200, title: "Example" });
+    if (path === "/api/site/report.docx" && request.method() === "POST")
+      return route.fulfill({
+        status: 200,
+        headers: {
+          ...cors,
+          "content-type":
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        },
+        body: "PK-test",
+      });
     if (path === "/api/v1/providers")
       return json(
         route,
