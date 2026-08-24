@@ -72,9 +72,11 @@ export class ProviderController {
   ) {
     const providerId = this.provider(provider);
     const redirect = (outcome: "success" | "error") =>
-      reply.redirect(
-        `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}`,
-      );
+      reply
+        .code(302)
+        .redirect(
+          `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}`,
+        );
     if (
       typeof state !== "string" ||
       state.length < 32 ||

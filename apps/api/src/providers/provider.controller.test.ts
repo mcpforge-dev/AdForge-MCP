@@ -8,7 +8,10 @@ function setup(
   completeOAuthCallback = vi.fn(async () => ({ id: "connection-a" })),
 ) {
   const providers = { completeOAuthCallback };
-  const reply = { redirect: vi.fn((location: string) => location) };
+  const reply = {
+    code: vi.fn(() => reply),
+    redirect: vi.fn((location: string) => location),
+  };
   return {
     controller: new ProviderController(providers as never),
     providers,
@@ -36,6 +39,7 @@ describe("provider OAuth callback UX", () => {
     expect(reply.redirect).toHaveBeenCalledWith(
       "/dashboard?section=connections&oauth=success&provider=google",
     );
+    expect(reply.code).toHaveBeenCalledWith(302);
   });
 
   it.each([
@@ -84,6 +88,7 @@ describe("provider OAuth callback UX", () => {
     expect(reply.redirect).toHaveBeenCalledWith(
       "/dashboard?section=connections&oauth=error&provider=google",
     );
+    expect(reply.code).toHaveBeenCalledWith(302);
   });
 
   it("returns an actionable safe error for malformed callback values", async () => {
