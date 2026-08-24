@@ -302,6 +302,9 @@ describe.skipIf(!integrationEnabled)(
       await expect(
         providers.discover(workspaceId, connection.id, principal, request),
       ).rejects.toThrow();
+      await expect(
+        providers.disconnect(workspaceId, connection.id, principal, request),
+      ).resolves.toEqual({ success: true });
     });
 
     it("keeps provider error responses free of provider internals", async () => {

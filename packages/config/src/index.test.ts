@@ -134,4 +134,17 @@ describe("v2 configuration", () => {
       "https://mcp.holymedia.kz/auth/google/callback",
     );
   });
+
+  it("keeps the historical Google Login callback when the V1 path is implicit", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      AD_MCP_PUBLIC_BASE_URL: "https://mcp.holymedia.kz",
+      AD_MCP_GOOGLE_LOGIN_CLIENT_ID: "login-client",
+      AD_MCP_GOOGLE_LOGIN_CLIENT_SECRET: "login-secret",
+    });
+
+    expect(config.providerGoogleLoginRedirectUri).toBe(
+      "https://mcp.holymedia.kz/auth/google/callback",
+    );
+  });
 });

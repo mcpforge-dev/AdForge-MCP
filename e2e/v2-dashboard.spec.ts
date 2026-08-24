@@ -18,6 +18,7 @@ function collectClientFailures(page: Page) {
   });
   page.on("requestfailed", (request) => {
     if (request.url().includes("favicon")) return;
+    if (request.failure()?.errorText === "net::ERR_ABORTED") return;
     failures.push(
       `request: ${request.method()} ${request.url()} ${request.failure()?.errorText ?? "failed"}`,
     );
@@ -81,6 +82,7 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(page.getByText("Workspace", { exact: true })).toHaveCount(0);
     await expect(page.getByText("OWNER", { exact: true })).toHaveCount(0);
     await expect(page.getByRole("button", { name: /Тарифы/ })).toBeDisabled();
+    await expect(page.getByRole("button", { name: /SEO/ })).toBeDisabled();
     await page.screenshot({
       path: testInfo.outputPath("dashboard.png"),
       fullPage: true,
@@ -95,6 +97,13 @@ test.describe("restored HolyMedia client UX", () => {
       ),
     ).toBeVisible();
     await expect(page.getByRole("heading", { name: "Meta Ads" })).toBeVisible();
+    const googleCard = page
+      .locator(".connection-card")
+      .filter({ hasText: "Google Ads" });
+    await expect(googleCard).toContainText("Платформа ещё не подключена.");
+    await expect(
+      googleCard.getByRole("button", { name: "Подключить Google Ads" }),
+    ).toBeVisible();
     const metaCard = page
       .locator(".connection-card")
       .filter({ hasText: "Meta Ads" });
@@ -193,10 +202,18 @@ test.describe("restored HolyMedia client UX", () => {
       .getByRole("button", { name: "Анализ сайта", exact: true })
       .click();
     await page.locator('input[type="url"]').fill("https://example.com");
-    await page.getByRole("button", { name: "Запустить анализ" }).click();
+    await page.getByRole("button", { name: "Полная", exact: true }).click();
+    await page.locator(".analysis-brief > summary").click();
+    await page
+      .locator('input[placeholder="Кому вы продаёте"]')
+      .fill("Маркетологи");
+    await page.getByRole("button", { name: "Проанализировать сайт" }).click();
     await expect(
       page.getByRole("heading", { name: "https://example.com" }),
     ).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Приоритеты" })).toBeVisible();
+    await page.getByRole("tab", { name: "Первый экран" }).click();
+    await expect(page.getByText("Получите консультацию")).toBeVisible();
 
     await page
       .getByRole("button", {

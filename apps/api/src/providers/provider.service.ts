@@ -308,10 +308,12 @@ export class ProviderService {
     principal: HumanPrincipal,
     request: RequestWithAuth,
   ): Promise<{ success: true }> {
-    const connection = await this.connectionWithCredential(
+    const connection = await this.connectionForDisconnect(
       workspaceId,
       connectionId,
     );
+    if (connection.status === "DISCONNECTED" || connection.status === "REVOKED")
+      return { success: true };
     if (connection.credential) {
       try {
         const credentials = this.vault.decrypt<ProviderCredentialPayload>(
@@ -1168,6 +1170,19 @@ export class ProviderService {
     return connection;
   }
 
+  private async connectionForDisconnect(
+    workspaceId: string,
+    connectionId: string,
+  ) {
+    const connection = await this.database.client.providerConnection.findFirst({
+      where: { id: connectionId, workspaceId },
+      include: { credential: true },
+    });
+    if (!connection)
+      throw new NotFoundException("Provider connection not found.");
+    return connection;
+  }
+
   private connectionWithAccounts(workspaceId: string, connectionId: string) {
     return this.database.client.providerConnection.findFirstOrThrow({
       where: { id: connectionId, workspaceId },
@@ -1260,6 +1275,10 @@ export class ProviderService {
       return this.config.providerGoogleSearchConsoleRedirectUri;
     if (provider === "META_ADS" && this.config.providerMetaRedirectUri)
       return this.config.providerMetaRedirectUri;
+    if (provider === "TIKTOK_ADS" && this.config.providerTikTokRedirectUri)
+      return this.config.providerTikTokRedirectUri;
+    if (provider === "YANDEX_DIRECT" && this.config.providerYandexRedirectUri)
+      return this.config.providerYandexRedirectUri;
     return `http://localhost:${this.config.apiPort}/api/v1/oauth/${provider}/callback`;
   }
 

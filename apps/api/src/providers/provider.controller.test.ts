@@ -40,6 +40,36 @@ describe("provider OAuth callback UX", () => {
     );
   });
 
+  it.each([
+    ["meta", "META_ADS"],
+    ["yandex", "YANDEX_DIRECT"],
+    ["tiktok", "TIKTOK_ADS"],
+  ])(
+    "returns %s OAuth callbacks to the matching connections card",
+    async (pathProvider, provider) => {
+      const { controller, providers, reply } = setup();
+
+      await controller.callback(
+        pathProvider,
+        validState,
+        "authorization-code",
+        principal,
+        request,
+        reply as never,
+      );
+
+      expect(providers.completeOAuth).toHaveBeenCalledWith(
+        provider,
+        { state: validState, code: "authorization-code" },
+        principal,
+        request,
+      );
+      expect(reply.redirect).toHaveBeenCalledWith(
+        `/dashboard?section=connections&oauth=success&provider=${pathProvider}`,
+      );
+    },
+  );
+
   it("returns a safe dashboard error when provider completion fails", async () => {
     const { controller, reply } = setup(
       vi.fn(async () => {

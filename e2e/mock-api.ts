@@ -39,8 +39,7 @@ async function json(route: Route, body: unknown) {
 }
 
 export async function installMockApi(page: Page) {
-  if (process.env.V2_E2E_MOCK !== "true") return;
-  await page.route("http://localhost:4000/**", async (route) => {
+  await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === "OPTIONS")
@@ -77,6 +76,55 @@ export async function installMockApi(page: Page) {
               title: "Example",
               h1Count: 1,
               linkCount: 4,
+              overview: {
+                verdict: "Страница доступна, но ей нужны базовые правки.",
+                mainRisk: "Проверьте главный заголовок",
+                quickWin: "Добавьте один главный H1",
+              },
+              scores: [
+                {
+                  id: "first-screen",
+                  label: "Первый экран",
+                  value: 70,
+                  description: "",
+                },
+                {
+                  id: "structure",
+                  label: "Структура",
+                  value: 80,
+                  description: "",
+                },
+                {
+                  id: "mobile",
+                  label: "Мобильная версия",
+                  value: 90,
+                  description: "",
+                },
+                {
+                  id: "technical",
+                  label: "Техническая основа",
+                  value: 80,
+                  description: "",
+                },
+              ],
+              topIssues: [
+                {
+                  priority: "P1",
+                  title: "Проверьте главный заголовок",
+                  problem: "На странице должен быть один понятный H1.",
+                  evidence: "H1 не найден.",
+                  recommendation: "Сформулируйте один главный заголовок.",
+                },
+              ],
+              quickWins: [{ title: "Добавьте один главный H1" }],
+              hero: {
+                h1: "Получите консультацию",
+                subtitle: "Помогите посетителю понять вашу пользу.",
+                cta: "Добавьте понятную кнопку действия",
+              },
+              structure: ["Первый экран", "Доказательства"],
+              oneDayPlan: [{ step: 1, title: "Добавьте один главный H1" }],
+              evidence: { limitations: "Анализирует HTML публичной страницы." },
               checks: {
                 https: true,
                 hasTitle: true,
@@ -124,6 +172,21 @@ export async function installMockApi(page: Page) {
           displayName: "Anna Meta",
           status: "CONNECTED",
           accounts,
+        },
+        {
+          id: "66666666-6666-4666-8666-666666666666",
+          provider: "GOOGLE_ADS",
+          displayName: "Historical Google",
+          status: "DISCONNECTED",
+          accounts: [
+            {
+              id: "77777777-7777-4777-8777-777777777777",
+              externalAccountId: "123456",
+              displayName: "Исторический кабинет",
+              enabled: true,
+              status: "ENABLED",
+            },
+          ],
         },
       ]);
     if (path.includes("/provider-accounts/") && request.method() === "PATCH") {

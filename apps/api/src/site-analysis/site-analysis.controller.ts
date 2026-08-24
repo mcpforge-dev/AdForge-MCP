@@ -29,7 +29,7 @@ export class SiteAnalysisController {
     @CurrentPrincipal() principal: HumanPrincipal,
     @Body() input: SiteAnalysisDto,
   ) {
-    return this.analysis.analyze(input.url, {
+    return this.analysis.analyze(input, {
       workspaceId,
       userId: principal.userId,
     });

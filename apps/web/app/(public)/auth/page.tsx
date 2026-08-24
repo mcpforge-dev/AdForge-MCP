@@ -40,6 +40,7 @@ export default function AuthPage() {
     setBusy(true);
     setMessage("");
     setError("");
+    let navigating = false;
     const form = new FormData(event.currentTarget);
     const body =
       mode === "forgot"
@@ -79,6 +80,7 @@ export default function AuthPage() {
           "Если такой аккаунт есть, мы отправили письмо со ссылкой для сброса пароля.",
         );
       } else {
+        navigating = true;
         window.location.assign("/dashboard");
       }
     } catch (requestError) {
@@ -88,7 +90,7 @@ export default function AuthPage() {
           : "Не удалось выполнить запрос. Попробуйте ещё раз.",
       );
     } finally {
-      setBusy(false);
+      if (!navigating) setBusy(false);
     }
   }
 

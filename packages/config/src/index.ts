@@ -239,7 +239,7 @@ function withV1ProviderAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
     value.AD_MCP_GOOGLE_LOGIN_CLIENT_SECRET,
   );
   value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI ??= callback(
-    value.AD_MCP_GOOGLE_LOGIN_REDIRECT_PATH,
+    value.AD_MCP_GOOGLE_LOGIN_REDIRECT_PATH ?? "/auth/google/callback",
   );
   value.PROVIDER_GOOGLE_LOGIN_SCOPES ??= nonEmpty(
     value.AD_MCP_GOOGLE_LOGIN_SCOPES,

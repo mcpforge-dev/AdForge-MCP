@@ -43,6 +43,22 @@ type Profile = { name: string; email: string };
 type Section =
   "overview" | "connections" | "mcp" | "reports" | "analysis" | "profile";
 type Client = "codex" | "claude" | "chatgpt";
+type AnalysisMode = "quick" | "full";
+type AnalysisBrief = {
+  siteType: string;
+  goal: string;
+  audience: string;
+  region: string;
+  competitor: string;
+  concern: string;
+};
+type AnalysisItem = {
+  priority?: string;
+  title?: string;
+  problem?: string;
+  evidence?: string;
+  recommendation?: string;
+};
 type SiteAnalysis = {
   id: string;
   url: string;
@@ -51,7 +67,24 @@ type SiteAnalysis = {
     title?: string | null;
     description?: string | null;
     h1Count?: number;
+    h2Count?: number;
     linkCount?: number;
+    imageCount?: number;
+    formCount?: number;
+    scores?: Array<{
+      id: string;
+      label: string;
+      value: number;
+      description: string;
+    }>;
+    overview?: { verdict?: string; mainRisk?: string; quickWin?: string };
+    topIssues?: AnalysisItem[];
+    quickWins?: Array<{ title?: string }>;
+    hero?: { h1?: string; subtitle?: string; cta?: string };
+    structure?: string[];
+    oneDayPlan?: Array<{ step?: number; title?: string }>;
+    questions?: string[];
+    evidence?: { limitations?: string };
     checks?: {
       https?: boolean;
       hasTitle?: boolean;
@@ -153,6 +186,19 @@ export default function DashboardPage() {
   const [createdToken, setCreatedToken] = useState("");
   const [reportDays, setReportDays] = useState(7);
   const [analysisUrl, setAnalysisUrl] = useState("");
+  const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("quick");
+  const [analysisBrief, setAnalysisBrief] = useState<AnalysisBrief>({
+    siteType: "",
+    goal: "",
+    audience: "",
+    region: "",
+    competitor: "",
+    concern: "",
+  });
+  const [analysisTab, setAnalysisTab] = useState<
+    "priorities" | "hero" | "plan" | "details"
+  >("priorities");
+  const [analysisStage, setAnalysisStage] = useState(0);
   const [analysisHistory, setAnalysisHistory] = useState<SiteAnalysis[]>([]);
   const [analysisResult, setAnalysisResult] = useState<SiteAnalysis | null>(
     null,
@@ -167,14 +213,16 @@ export default function DashboardPage() {
   const enabledAccounts = useMemo(
     () =>
       connections.flatMap((connection) =>
-        connection.accounts
-          .filter((account) => account.enabled)
-          .map((account) => ({ account, connection })),
+        ["CONNECTED", "DEGRADED", "REAUTH_REQUIRED"].includes(connection.status)
+          ? connection.accounts
+              .filter((account) => account.enabled)
+              .map((account) => ({ account, connection }))
+          : [],
       ),
     [connections],
   );
   const connectedCount = connections.filter((connection) =>
-    ["CONNECTED", "DEGRADED"].includes(connection.status),
+    ["CONNECTED", "DEGRADED", "REAUTH_REQUIRED"].includes(connection.status),
   ).length;
 
   function notify(text: string) {
@@ -317,6 +365,13 @@ export default function DashboardPage() {
   }, [active, section]);
 
   useEffect(() => {
+    if (!highlightedProvider) return;
+    document
+      .getElementById(`provider-${highlightedProvider}`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" });
+  }, [connections, highlightedProvider]);
+
+  useEffect(() => {
     if (!confirm) return;
     const close = (event: KeyboardEvent) => {
       if (event.key === "Escape") setConfirm(null);
@@ -384,6 +439,14 @@ export default function DashboardPage() {
       fail("Не удалось отключить платформу.");
       return;
     }
+    setOpenAccountsId((current) =>
+      current === connection.id ? null : current,
+    );
+    setDrafts((current) => {
+      const next = { ...current };
+      delete next[connection.id];
+      return next;
+    });
     await loadConnections(active);
     notify(`${providerCopy(connection.provider).name} отключён.`);
   }
@@ -563,9 +626,12 @@ export default function DashboardPage() {
     event.preventDefault();
     if (!active || !analysisUrl.trim()) return;
     setAnalysisBusy(true);
+    setAnalysisStage(0);
     setError("");
     setMessage("");
+    let progressTimer: number | undefined;
     try {
+      progressTimer = window.setTimeout(() => setAnalysisStage(1), 650);
       const response = await fetch(
         `${API}/api/v1/workspaces/${active.id}/site-analysis`,
         {
@@ -575,7 +641,11 @@ export default function DashboardPage() {
             "content-type": "application/json",
             "x-csrf-token": await csrf(),
           },
-          body: JSON.stringify({ url: analysisUrl.trim() }),
+          body: JSON.stringify({
+            url: analysisUrl.trim(),
+            mode: analysisMode,
+            ...analysisBrief,
+          }),
         },
       );
       const data = (await response.json()) as { error?: { message?: string } };
@@ -591,7 +661,9 @@ export default function DashboardPage() {
           : "Не удалось проверить сайт.",
       );
     } finally {
+      if (progressTimer) window.clearTimeout(progressTimer);
       setAnalysisBusy(false);
+      setAnalysisStage(0);
     }
   }
 
@@ -705,6 +777,7 @@ export default function DashboardPage() {
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
     { id: "analysis", label: "Анализ сайта" },
+    { label: "SEO", disabled: true },
     { label: "Тарифы", disabled: true },
   ];
   const allProviderIds = [
@@ -869,8 +942,7 @@ export default function DashboardPage() {
                 <p className="eyebrow">Рекламные платформы</p>
                 <h1 id="connections-title">Подключения</h1>
                 <p className="section-head__sub">
-                  Подключите платформу и выберите кабинеты, доступные в
-                  AI-клиенте.
+                  Подключите платформу и выберите кабинеты для AI-клиента.
                 </p>
               </div>
             </div>
@@ -879,9 +951,14 @@ export default function DashboardPage() {
                 const definition = providers.find(
                   (item) => item.id === providerId,
                 );
-                const connection = connections.find(
+                const storedConnection = connections.find(
                   (item) => item.provider === providerId,
                 );
+                const connection =
+                  storedConnection &&
+                  !["DISCONNECTED", "REVOKED"].includes(storedConnection.status)
+                    ? storedConnection
+                    : undefined;
                 const copyText = providerCopy(providerId);
                 const status = connectionStatus(connection?.status ?? "");
                 const selected = new Set(
@@ -895,6 +972,7 @@ export default function DashboardPage() {
                     className={`connection-card ${
                       highlightedProvider === providerId ? "is-highlighted" : ""
                     }`}
+                    id={`provider-${providerId}`}
                     key={providerId}
                   >
                     <div className="connection-card__head">
@@ -919,17 +997,15 @@ export default function DashboardPage() {
                             ? `${connection.accounts.length} кабинетов · ${selected.size} выбрано`
                             : "Кабинеты ещё не найдены"}
                         </p>
+                        {connection.status !== "CONNECTED" && (
+                          <p className="connection-note">
+                            Подключите платформу заново, чтобы восстановить
+                            доступ к кабинетам.
+                          </p>
+                        )}
                         <div className="connection-actions">
                           <button
-                            className="secondary-button btn--small"
-                            type="button"
-                            disabled={busy}
-                            onClick={() => void discover(connection)}
-                          >
-                            Обновить кабинеты
-                          </button>
-                          <button
-                            className="secondary-button btn--small"
+                            className="primary-button btn--small"
                             type="button"
                             aria-expanded={accountsOpen}
                             aria-controls={`accounts-${connection.id}`}
@@ -944,28 +1020,38 @@ export default function DashboardPage() {
                               : "Посмотреть кабинеты"}
                           </button>
                           <button
-                            className="ghost-button btn--small"
+                            className="secondary-button btn--small"
                             type="button"
-                            onClick={() => void startProvider(providerId)}
+                            disabled={busy}
+                            onClick={() => void discover(connection)}
                           >
-                            Подключить заново
+                            Обновить
                           </button>
-                          <button
-                            className="danger-link"
-                            type="button"
-                            onClick={() =>
-                              setConfirm({
-                                title: `Отключить ${copyText.name}?`,
-                                description:
-                                  "Кабинеты этой платформы перестанут быть доступны в AI-клиенте.",
-                                confirmLabel: "Отключить",
-                                run: () => disconnect(connection),
-                              })
-                            }
-                          >
-                            Отключить
-                          </button>
+                          {connection.status !== "CONNECTED" && (
+                            <button
+                              className="ghost-button btn--small"
+                              type="button"
+                              onClick={() => void startProvider(providerId)}
+                            >
+                              Подключить заново
+                            </button>
+                          )}
                         </div>
+                        <button
+                          className="danger-link connection-disconnect"
+                          type="button"
+                          onClick={() =>
+                            setConfirm({
+                              title: `Отключить ${copyText.name}?`,
+                              description:
+                                "Кабинеты этой платформы перестанут быть доступны в AI-клиенте. Чтобы вернуть доступ, потребуется подключить её снова.",
+                              confirmLabel: "Отключить",
+                              run: () => disconnect(connection),
+                            })
+                          }
+                        >
+                          Отключить
+                        </button>
                         {accountsOpen && (
                           <div
                             className="account-selector"
@@ -1308,7 +1394,14 @@ export default function DashboardPage() {
               </div>
             </div>
             <div className="report-layout">
-              <section className="panel report-panel">
+              <section className="panel report-panel report-builder-card">
+                <p className="report-builder-card__eyebrow">
+                  HOLYMEDIA MCP · ОТЧЁТ
+                </p>
+                <h2>Собрать отчёт</h2>
+                <p className="report-builder-card__note">
+                  В отчёт попадут только данные выбранного кабинета и периода.
+                </p>
                 <form className="report-form" onSubmit={downloadReport}>
                   <label>
                     Рекламный кабинет
@@ -1336,6 +1429,7 @@ export default function DashboardPage() {
                       <option value="7">Последние 7 дней</option>
                       <option value="14">Последние 14 дней</option>
                       <option value="30">Последние 30 дней</option>
+                      <option value="90">Последние 90 дней</option>
                     </select>
                   </label>
                   <label>
@@ -1369,20 +1463,24 @@ export default function DashboardPage() {
               </section>
               <aside className="report-preview-card" aria-label="Отчёт">
                 <div className="report-preview-card__topline">
-                  <span>HOLYMEDIA MCP</span>
-                  <span>ОТЧЁТ</span>
+                  <span>MONTHLY ADS REPORT</span>
+                  <span>01</span>
                 </div>
                 <div className="report-preview-card__body">
-                  <span>Рекламная эффективность</span>
-                  <strong>{reportDays} дней</strong>
+                  <span>HOLYMEDIA MCP</span>
+                  <strong>
+                    Отчёт по
+                    <br />
+                    рекламным кампаниям
+                  </strong>
                   <em>
                     {enabledAccounts.length
-                      ? `${enabledAccounts.length} выбранных кабинетов`
-                      : "Выберите кабинет для отчёта"}
+                      ? `${reportDays} дней · ${enabledAccounts.length} выбранных кабинетов`
+                      : "Выберите кабинет и период"}
                   </em>
                 </div>
                 <p className="report-preview-card__footer">
-                  Расходы, показы, клики, конверсии и сравнение периода.
+                  Обложка · KPI · сравнение · кампании · выводы
                 </p>
               </aside>
             </div>
@@ -1396,8 +1494,8 @@ export default function DashboardPage() {
                 <p className="eyebrow">Инструменты</p>
                 <h1 id="analysis-title">Анализ сайта</h1>
                 <p className="section-head__sub">
-                  Быстро проверьте основные технические и SEO-признаки публичной
-                  страницы.
+                  Разберите публичную страницу и получите список понятных
+                  улучшений для первого экрана, структуры и следующего шага.
                 </p>
               </div>
             </div>
@@ -1414,14 +1512,139 @@ export default function DashboardPage() {
                       placeholder="https://example.com"
                     />
                   </label>
+                  <fieldset className="analysis-mode full-field">
+                    <legend>Глубина проверки</legend>
+                    <button
+                      className={analysisMode === "quick" ? "is-active" : ""}
+                      type="button"
+                      aria-pressed={analysisMode === "quick"}
+                      onClick={() => setAnalysisMode("quick")}
+                    >
+                      Быстрая
+                    </button>
+                    <button
+                      className={analysisMode === "full" ? "is-active" : ""}
+                      type="button"
+                      aria-pressed={analysisMode === "full"}
+                      onClick={() => setAnalysisMode("full")}
+                    >
+                      Полная
+                    </button>
+                  </fieldset>
+                  <details className="analysis-brief full-field">
+                    <summary>Уточнить задачу</summary>
+                    <div className="analysis-brief__fields">
+                      <label>
+                        Тип сайта
+                        <select
+                          value={analysisBrief.siteType}
+                          onChange={(event) =>
+                            setAnalysisBrief((current) => ({
+                              ...current,
+                              siteType: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Определить по странице</option>
+                          <option value="landing">Лендинг</option>
+                          <option value="corporate">Сайт компании</option>
+                          <option value="ecommerce">Интернет-магазин</option>
+                          <option value="services">Услуги</option>
+                        </select>
+                      </label>
+                      <label>
+                        Цель
+                        <select
+                          value={analysisBrief.goal}
+                          onChange={(event) =>
+                            setAnalysisBrief((current) => ({
+                              ...current,
+                              goal: event.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Определить по странице</option>
+                          <option value="Заявки">Заявки</option>
+                          <option value="Продажи">Продажи</option>
+                          <option value="Звонки">Звонки</option>
+                          <option value="Записи">Записи</option>
+                        </select>
+                      </label>
+                      <label>
+                        Аудитория
+                        <input
+                          value={analysisBrief.audience}
+                          maxLength={400}
+                          onChange={(event) =>
+                            setAnalysisBrief((current) => ({
+                              ...current,
+                              audience: event.target.value,
+                            }))
+                          }
+                          placeholder="Кому вы продаёте"
+                        />
+                      </label>
+                      <label>
+                        Город или страна
+                        <input
+                          value={analysisBrief.region}
+                          maxLength={160}
+                          onChange={(event) =>
+                            setAnalysisBrief((current) => ({
+                              ...current,
+                              region: event.target.value,
+                            }))
+                          }
+                          placeholder="Например, Казахстан"
+                        />
+                      </label>
+                      <label>
+                        Конкурент
+                        <input
+                          value={analysisBrief.competitor}
+                          maxLength={240}
+                          onChange={(event) =>
+                            setAnalysisBrief((current) => ({
+                              ...current,
+                              competitor: event.target.value,
+                            }))
+                          }
+                          placeholder="Необязательно"
+                        />
+                      </label>
+                      <label>
+                        Что беспокоит
+                        <input
+                          value={analysisBrief.concern}
+                          maxLength={400}
+                          onChange={(event) =>
+                            setAnalysisBrief((current) => ({
+                              ...current,
+                              concern: event.target.value,
+                            }))
+                          }
+                          placeholder="Например, мало заявок"
+                        />
+                      </label>
+                    </div>
+                  </details>
                   <button
                     className="primary-button"
                     type="submit"
                     disabled={analysisBusy}
                   >
-                    {analysisBusy ? "Проверяем…" : "Запустить анализ"}
+                    {analysisBusy ? "Проверяем…" : "Проанализировать сайт"}
                   </button>
                 </form>
+                {analysisBusy && (
+                  <ol className="analysis-progress" aria-live="polite">
+                    <li className="is-active">Открываем публичную страницу</li>
+                    <li className={analysisStage > 0 ? "is-active" : ""}>
+                      Изучаем структуру и контент
+                    </li>
+                    <li>Собираем рекомендации</li>
+                  </ol>
+                )}
                 {analysisResult && (
                   <div className="analysis-result" aria-live="polite">
                     <div className="analysis-result__head">
@@ -1431,52 +1654,150 @@ export default function DashboardPage() {
                       </div>
                       <span className="status-badge ok">Готово</span>
                     </div>
-                    <div className="analysis-metrics">
-                      <div>
-                        <strong>{analysisResult.result.h1Count ?? 0}</strong>
-                        <span>H1 на странице</span>
-                      </div>
-                      <div>
-                        <strong>{analysisResult.result.linkCount ?? 0}</strong>
-                        <span>ссылок</span>
-                      </div>
-                      <div>
-                        <strong>{analysisResult.result.status ?? "—"}</strong>
-                        <span>HTTP-статус</span>
-                      </div>
+                    <p className="analysis-verdict">
+                      {analysisResult.result.overview?.verdict}
+                    </p>
+                    <div className="analysis-scores">
+                      {(analysisResult.result.scores ?? []).map((score) => (
+                        <div key={score.id}>
+                          <strong>{score.value}</strong>
+                          <span>{score.label}</span>
+                        </div>
+                      ))}
                     </div>
-                    <dl className="analysis-checks">
-                      <div>
-                        <dt>HTTPS</dt>
-                        <dd>
-                          {analysisResult.result.checks?.https ? "Да" : "Нет"}
-                        </dd>
+                    <div
+                      className="analysis-tabs"
+                      role="tablist"
+                      aria-label="Разделы анализа"
+                    >
+                      {(
+                        [
+                          ["priorities", "Приоритеты"],
+                          ["hero", "Первый экран"],
+                          ["plan", "План"],
+                          ["details", "Детали"],
+                        ] as const
+                      ).map(([id, label]) => (
+                        <button
+                          className={analysisTab === id ? "is-active" : ""}
+                          type="button"
+                          role="tab"
+                          aria-selected={analysisTab === id}
+                          key={id}
+                          onClick={() => setAnalysisTab(id)}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {analysisTab === "priorities" && (
+                      <div className="analysis-priorities">
+                        {(analysisResult.result.topIssues ?? []).map(
+                          (item, index) => (
+                            <article key={`${item.title}-${index}`}>
+                              <span>{item.priority}</span>
+                              <h3>{item.title}</h3>
+                              <p>{item.problem}</p>
+                              <small>{item.evidence}</small>
+                              <strong>{item.recommendation}</strong>
+                            </article>
+                          ),
+                        )}
+                        <div className="analysis-quick-wins">
+                          <h3>Быстрые улучшения</h3>
+                          <ul>
+                            {(analysisResult.result.quickWins ?? []).map(
+                              (item, index) => (
+                                <li key={`${item.title}-${index}`}>
+                                  {item.title}
+                                </li>
+                              ),
+                            )}
+                          </ul>
+                        </div>
                       </div>
-                      <div>
-                        <dt>Заголовок страницы</dt>
-                        <dd>
-                          {analysisResult.result.checks?.hasTitle
-                            ? "Есть"
-                            : "Нет"}
-                        </dd>
+                    )}
+                    {analysisTab === "hero" && (
+                      <div className="analysis-copy-card">
+                        <span>Главный заголовок</span>
+                        <h3>{analysisResult.result.hero?.h1}</h3>
+                        <p>{analysisResult.result.hero?.subtitle}</p>
+                        <strong>{analysisResult.result.hero?.cta}</strong>
                       </div>
-                      <div>
-                        <dt>Описание</dt>
-                        <dd>
-                          {analysisResult.result.checks?.hasDescription
-                            ? "Есть"
-                            : "Нет"}
-                        </dd>
+                    )}
+                    {analysisTab === "plan" && (
+                      <div className="analysis-plan">
+                        <h3>План на один рабочий день</h3>
+                        <ol>
+                          {(analysisResult.result.oneDayPlan ?? []).map(
+                            (item, index) => (
+                              <li key={`${item.title}-${index}`}>
+                                {item.title}
+                              </li>
+                            ),
+                          )}
+                        </ol>
+                        <h3>Рекомендуемая структура</h3>
+                        <ol>
+                          {(analysisResult.result.structure ?? []).map(
+                            (item) => (
+                              <li key={item}>{item}</li>
+                            ),
+                          )}
+                        </ol>
+                        {(analysisResult.result.questions ?? []).length > 0 && (
+                          <>
+                            <h3>Что уточнить</h3>
+                            <ul>
+                              {analysisResult.result.questions?.map((item) => (
+                                <li key={item}>{item}</li>
+                              ))}
+                            </ul>
+                          </>
+                        )}
                       </div>
-                      <div>
-                        <dt>Один H1</dt>
-                        <dd>
-                          {analysisResult.result.checks?.hasSingleH1
-                            ? "Да"
-                            : "Проверьте"}
-                        </dd>
-                      </div>
-                    </dl>
+                    )}
+                    {analysisTab === "details" && (
+                      <>
+                        <dl className="analysis-checks">
+                          <div>
+                            <dt>HTTPS</dt>
+                            <dd>
+                              {analysisResult.result.checks?.https
+                                ? "Да"
+                                : "Нет"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Заголовок страницы</dt>
+                            <dd>
+                              {analysisResult.result.checks?.hasTitle
+                                ? "Есть"
+                                : "Нет"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Описание</dt>
+                            <dd>
+                              {analysisResult.result.checks?.hasDescription
+                                ? "Есть"
+                                : "Нет"}
+                            </dd>
+                          </div>
+                          <div>
+                            <dt>Один H1</dt>
+                            <dd>
+                              {analysisResult.result.checks?.hasSingleH1
+                                ? "Да"
+                                : "Проверьте"}
+                            </dd>
+                          </div>
+                        </dl>
+                        <p className="analysis-limitations">
+                          {analysisResult.result.evidence?.limitations}
+                        </p>
+                      </>
+                    )}
                     <button
                       className="secondary-button"
                       type="button"

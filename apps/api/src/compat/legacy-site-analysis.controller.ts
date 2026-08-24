@@ -33,10 +33,13 @@ export class LegacySiteAnalysisController {
     const workspace = (await this.workspaces.listForUser(principal))[0];
     if (!workspace)
       throw new BadRequestException("Workspace is not available.");
-    return this.analysis.analyze(url, {
-      workspaceId: workspace.id,
-      userId: principal.userId,
-    });
+    return this.analysis.analyze(
+      { url },
+      {
+        workspaceId: workspace.id,
+        userId: principal.userId,
+      },
+    );
   }
 
   @Get("history")
