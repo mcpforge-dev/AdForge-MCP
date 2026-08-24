@@ -409,6 +409,42 @@ export class AuthService {
     return this.publicUser(user);
   }
 
+  public async currentAvatar(
+    principal: HumanPrincipal,
+  ): Promise<{ dataUrl: string | null }> {
+    const user = await this.database.client.user.findUnique({
+      where: { id: principal.userId },
+      select: { avatarData: true, avatarMimeType: true },
+    });
+    if (!user) throw new UnauthorizedException("Authentication required.");
+    if (!user.avatarData || !user.avatarMimeType) return { dataUrl: null };
+    return {
+      dataUrl: `data:${user.avatarMimeType};base64,${Buffer.from(user.avatarData).toString("base64")}`,
+    };
+  }
+
+  public async updateAvatar(
+    principal: HumanPrincipal,
+    input: { data: Buffer; mimeType: string },
+    request: RequestWithAuth,
+  ): Promise<{ dataUrl: string }> {
+    await this.database.client.user.update({
+      where: { id: principal.userId },
+      data: {
+        avatarData: Uint8Array.from(input.data),
+        avatarMimeType: input.mimeType,
+      },
+    });
+    await this.record({
+      eventType: "profile_avatar_updated",
+      request,
+      actorUserId: principal.userId,
+    });
+    return {
+      dataUrl: `data:${input.mimeType};base64,${input.data.toString("base64")}`,
+    };
+  }
+
   public async logout(
     principal: HumanPrincipal,
     request: RequestWithAuth,

@@ -20,7 +20,7 @@ type RequestWithId = { requestId?: string };
 async function bootstrap(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger("holymedia-mcp-v2-api", config.logLevel);
-  const adapter = new FastifyAdapter({ bodyLimit: 1_048_576, logger: false });
+  const adapter = new FastifyAdapter({ bodyLimit: 3_145_728, logger: false });
   const app = await NestFactory.create<NestFastifyApplication>(
     AppModule,
     adapter,

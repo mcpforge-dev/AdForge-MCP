@@ -1,64 +1,60 @@
-# V1 UI/UX restoration on V2
+# Восстановление UI/UX V1 поверх HolyMedia MCP V2
 
-## Source of truth
+## Основание
 
-The visual and interaction reference is the last production V1 frontend at
-commit `c700fb7`, especially `src/ad_mcp/web/static/index.html`,
-`src/ad_mcp/web/static/app.css` and `src/ad_mcp/web/static/app.js`.
-V2 keeps its Next.js runtime, V2 API routes, CSRF/session security, workspace
-authorization, provider contracts and database unchanged.
+Source of truth для пользовательского поведения:
 
-## Parity matrix
+- требования владельца из документа «Правки по сайту mcp — скорректировано»;
+- исторический V1 commit `c700fb7` (`src/ad_mcp/web/static/*`);
+- findings Stage 1 в `STAGE_1_FULL_UX_UI_FUNCTIONAL_AUDIT_RU.md`.
 
-| Area              | V1 behavior/design                                                            | V2 before restoration                                   | Restored on V2                                                                  |
-| ----------------- | ----------------------------------------------------------------------------- | ------------------------------------------------------- | ------------------------------------------------------------------------------- |
-| Landing           | Product-first dark landing, three steps, AI example and safety copy           | Minimal two-column marketing page                       | V1-like landing hierarchy, copy, CTA and responsive sections                    |
-| Header            | Brand, login/register actions and compact navigation                          | Basic public header                                     | Same compact brand/navigation treatment                                         |
-| Auth              | Focused dark card, tabs, Google entry, email login, registration and reset    | Functional card with mojibake copy and weaker hierarchy | V1-like card, clean Russian copy, tabs, Google/email/reset flow                 |
-| Dashboard         | Tabbed workspace shell with overview, connections, MCP, reports and profile   | Long technical page with every panel visible            | Tabbed shell and progressive disclosure                                         |
-| Workspace         | Workspace selector, members, roles and invite flow                            | Same API behavior but visually exposed as admin form    | V1-like workspace section using V2 RBAC endpoints                               |
-| Connections       | Provider cards, OAuth action, account discovery and selection                 | Functional provider list in one long page               | Provider tab, status badges, account selector, read smoke and reconnect actions |
-| Account selection | Checkbox selection, readable names/statuses, explicit save-by-toggle behavior | Same endpoint but weak scanning layout                  | Dense account rows with workspace-scoped selection and clear states             |
-| MCP onboarding    | URL, token creation, account scope and AI-client guidance                     | Technical token form                                    | Three-step onboarding and one-time secret presentation                          |
-| Service tokens    | Create, copy once, rotate, revoke and show status                             | Functional but buried in page                           | Dedicated AI-client section with same V2 security behavior                      |
-| Reports           | Account/period selection, generate/download and client-oriented preview       | DOCX action embedded beside provider accounts           | Dedicated reports section with account picker and preview                       |
-| Profile           | User-facing name/email and password actions                                   | No clear user-facing profile surface                    | Profile and password forms over `/api/profile` and V2 auth endpoint             |
-| Billing           | Not present in V1                                                             | V2-only foundation exposed as a technical panel         | Kept as a separate V1-style workspace tab without changing billing APIs         |
-| Analytics         | Not present as a client feature in V1                                         | V2-only admin foundation                                | Kept out of the main onboarding path and available to OWNER/ADMIN               |
-| Mobile            | Stacked cards, readable actions and no horizontal page overflow               | Basic responsive stacking                               | V1-like stacked navigation, forms, cards and hit areas                          |
+Backend V2, PostgreSQL, Redis, Worker, MCP, OAuth applications, callback URL, provider credentials, connections и реальные account IDs не откатывались.
 
-## Deliberately not restored
+## Что восстановлено
 
-The V1 storage, authentication implementation, provider calls, plaintext token
-handling and legacy backend routes were not returned. The old V1 render is
-kept only as an internal code fallback while the default V2 render uses the
-V2 contracts. Provider credentials, connections, account IDs, service-token
-digests and entitlements are not modified by this change.
+- единая V1-подобная публичная страница и CTA без технической терминологии;
+- вход и регистрация как основные auth-сценарии, восстановление пароля по отдельной ссылке;
+- прямой `/auth?mode=signup`;
+- клиентская навигация без Workspace, RBAC и внутренних analytics-разделов;
+- email-профиль в header и footer с юридическими ссылками во всех разделах;
+- понятный dashboard: подключения, выбранные кабинеты, AI-клиент и отчёты;
+- provider connection flow с OAuth, reconnect, discovery, статусом и подтверждением отключения;
+- выбор кабинетов с «Выбрать все», «Снять все», отдельным сохранением и feedback;
+- Google Search Console отображается как «В разработке» и не предлагает OAuth;
+- V1 client-first MCP onboarding для Codex, Claude и ChatGPT;
+- безопасное создание, однократный показ, обновление и отзыв ключей;
+- отчёты с рабочими периодами 7/14/30 дней;
+- профиль: имя, email, фото до 2 МБ, число подключённых платформ и смена пароля;
+- полные страницы Privacy и Terms из финального V1;
+- desktop/mobile layouts и доступные modal/form/navigation states.
 
-## Verification
+## Что осталось V2-only
 
-- Historical source: V1 commit `c700fb7`; the V2 presentation layer was
-  restored without reverting the V2 backend, auth, provider or storage
-  architecture. The implementation commit is `020bccb5`.
-- The final CI chain for the deployed code is green: foundation, PostgreSQL /
-  Redis and Compose smoke, Playwright desktop/mobile E2E, and the immutable
-  production image workflow. The final deployed code commit is
-  `1900d901fbb56f888c295e263df2dee812af6644`.
-- Production image deployed: `ghcr.io/mcpforge-dev/holymedia-mcp-v2:sha-1900d901fbb56f888c295e263df2dee812af6644`.
-- Post-deploy public smoke passed on desktop and mobile for the public landing
-  and auth shell. Production `/health` and `/ready` return `200`; `/mcp`
-  without authentication returns `401`. Authenticated dashboard flows passed
-  in the isolated Playwright CI environment, with no production test data
-  created.
-- Production V2 containers (API, Web, Worker, PostgreSQL and Redis) are
-  healthy. Nginx, DNS, OAuth applications and callback URLs were not changed.
-- Read-only integrity check after deployment: 11 users, 11 workspaces, 11
-  memberships, 10 connections, 191 provider accounts, 12 service tokens and
-  11 entitlements; orphan accounts, cross-tenant mismatches and duplicate
-  bindings are all `0`.
-- The current production database and the pre-deploy UI backup both contain 8
-  provider credential rows. The previously quoted count of 9 was a stale
-  baseline discrepancy; the UI deployment did not change credentials or
-  provider data.
-- No provider writes, reconnects, account-ID changes or migration actions were
-  performed during the UI restoration.
+- server-side sessions, CSRF, Argon2id и transitional PBKDF2 login;
+- PostgreSQL data model и tenant isolation;
+- AES-256-GCM credential vault;
+- service-token digests, scopes и account restrictions;
+- MCP preview/confirmation/commit/audit boundary;
+- billing/entitlements foundation (тарифы пока показаны как недоступный будущий раздел);
+- analytics/admin foundations остаются backend/internal и не засоряют клиентскую навигацию.
+
+## Старые ошибки, которые не возвращались
+
+- plaintext/local storage credentials;
+- действия без подтверждения;
+- повторный показ полного service token;
+- мгновенный account toggle без сохранения и обратной связи;
+- OAuth callback, отклоняющий легитимный Google `scope` query;
+- зависимость static assets от общего Nginx request burst limit;
+- технические статусы, IDs, scopes и role/workspace terminology в клиентском UI.
+
+## Проверка
+
+- local format/lint/typecheck/build: PASS;
+- API unit: 65 PASS, integration suite выполняется в CI с PostgreSQL/Redis;
+- standalone Playwright desktop/mobile: PASS;
+- axe desktop/mobile, public/private customer surfaces: 0 violations;
+- screenshots: landing, registration, dashboard, connections, MCP, reports, profile и mobile connections;
+- provider operations в browser tests ограничены синтетическими CI fixtures; production provider writes не выполняются.
+
+Финальные CI, production image, deploy и provider/account integrity evidence дополняются после release pipeline.

@@ -11,9 +11,11 @@ import {
   Post,
   Query,
   Req,
+  Res,
   UseGuards,
 } from "@nestjs/common";
 import type { ProviderId } from "@holymedia/contracts";
+import type { FastifyReply } from "fastify";
 import {
   CurrentPrincipal,
   RequirePermissions,
@@ -21,11 +23,7 @@ import {
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
-import {
-  AccountSelectionDto,
-  OAuthCallbackDto,
-  ProviderDateRangeDto,
-} from "./provider.dto.js";
+import { AccountSelectionDto, ProviderDateRangeDto } from "./provider.dto.js";
 import { ProviderService } from "./provider.service.js";
 import { isProviderId } from "./provider.types.js";
 
@@ -66,18 +64,38 @@ export class ProviderController {
 
   @Get("oauth/:provider/callback")
   @UseGuards(AuthenticationGuard)
-  public callback(
+  public async callback(
     @Param("provider") provider: string,
-    @Query() input: OAuthCallbackDto,
+    @Query("state") state: string,
+    @Query("code") code: string,
     @CurrentPrincipal() principal: HumanPrincipal,
     @Req() request: RequestWithAuth,
+    @Res() reply: FastifyReply,
   ) {
-    return this.providers.completeOAuth(
-      this.provider(provider),
-      input,
-      principal,
-      request,
-    );
+    if (
+      typeof state !== "string" ||
+      state.length < 32 ||
+      state.length > 256 ||
+      typeof code !== "string" ||
+      code.length < 1 ||
+      code.length > 512
+    )
+      throw new BadRequestException("OAuth callback is incomplete.");
+    try {
+      await this.providers.completeOAuth(
+        this.provider(provider),
+        { state, code },
+        principal,
+        request,
+      );
+      return reply.redirect(
+        `/dashboard?section=connections&oauth=success&provider=${encodeURIComponent(provider)}`,
+      );
+    } catch {
+      return reply.redirect(
+        `/dashboard?section=connections&oauth=error&provider=${encodeURIComponent(provider)}`,
+      );
+    }
   }
 
   @Get("workspaces/:id/connections/:connectionId")

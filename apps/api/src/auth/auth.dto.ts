@@ -77,6 +77,12 @@ export class UpdateProfileDto {
   public name!: string;
 }
 
+export class UpdateAvatarDto {
+  @IsString()
+  @MaxLength(2_900_000)
+  public dataUrl!: string;
+}
+
 export class CreateWorkspaceDto {
   @IsString()
   @MinLength(2)

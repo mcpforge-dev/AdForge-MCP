@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { SiteFooter } from "../components/site-footer";
 
 const baseUrl =
   process.env.NEXT_PUBLIC_PUBLIC_BASE_URL ?? "https://mcp.holymedia.kz";
@@ -45,15 +46,15 @@ export default function PublicHomePage() {
           </Link>
         </nav>
       </header>
+
       <div className="landing-main">
         <section className="hero">
           <div className="hero__copy">
             <p className="eyebrow">Рекламная аналитика и MCP</p>
             <h1>Вся ваша реклама — в одном AI-чате</h1>
             <p>
-              HolyMedia MCP подключает Meta, Google, TikTok и Яндекс Директ к
-              Claude, ChatGPT или Codex. Спрашивайте о кампаниях, расходах и
-              статусах обычными словами.
+              Подключите Meta, Google Ads, TikTok и Яндекс Директ. Спрашивайте о
+              кампаниях, расходах и результатах в Claude, ChatGPT или Codex.
             </p>
             <div className="hero__actions">
               <Link className="btn btn--primary" href="/auth?mode=signup">
@@ -66,7 +67,7 @@ export default function PublicHomePage() {
           </div>
           <div className="hero-chat" aria-label="Пример ответа AI">
             <div className="hero-chat__title">
-              <span>Ваш AI-клиент</span>
+              <span>Пример ответа</span>
               <span>Claude · ChatGPT · Codex</span>
             </div>
             <div className="hero-chat__q">
@@ -89,24 +90,23 @@ export default function PublicHomePage() {
                 <b>86 300 ₸</b>
               </span>
               <span className="hero-chat__src">
-                Данные из подключённых кабинетов · только просмотр
+                Демонстрационные данные · только просмотр
               </span>
             </div>
           </div>
         </section>
+
         <section id="steps" className="how" aria-labelledby="steps-title">
           <h2 id="steps-title">Три шага до первого ответа</h2>
           <p className="how__intro">
-            Настройка занимает один вечер и не требует разработчика.
+            Подключение проходит через официальный вход рекламной платформы.
           </p>
           <ol className="how-steps">
             <li className="how-step">
               <div className="how-step__num">1</div>
               <div className="how-step__body">
-                <h3>Подключите рекламные кабинеты</h3>
-                <p>
-                  Официальный вход платформы, без передачи паролей HolyMedia.
-                </p>
+                <h3>Подключите платформу</h3>
+                <p>Войдите через Google, Meta, TikTok или Яндекс.</p>
               </div>
             </li>
             <li className="how-arrow" aria-hidden="true">
@@ -115,11 +115,8 @@ export default function PublicHomePage() {
             <li className="how-step">
               <div className="how-step__num">2</div>
               <div className="how-step__body">
-                <h3>Выберите нужные аккаунты</h3>
-                <p>
-                  Отметьте кабинеты, которые можно использовать в вашем
-                  AI-клиенте.
-                </p>
+                <h3>Выберите кабинеты</h3>
+                <p>Отметьте аккаунты, которые будут доступны AI-клиенту.</p>
               </div>
             </li>
             <li className="how-arrow" aria-hidden="true">
@@ -128,127 +125,80 @@ export default function PublicHomePage() {
             <li className="how-step">
               <div className="how-step__num">3</div>
               <div className="how-step__body">
-                <h3>Задавайте вопросы</h3>
+                <h3>Подключите MCP</h3>
                 <p>
-                  Получайте кампании, расходы, статусы и сравнения без таблиц и
-                  выгрузок.
+                  Скопируйте адрес и следуйте инструкции для вашего клиента.
                 </p>
               </div>
             </li>
           </ol>
         </section>
+
         <section className="capabilities" aria-labelledby="capabilities-title">
           <div className="capabilities__copy">
-            <h2 id="capabilities-title">Что AI видит в кабинетах</h2>
-            <p>
-              Только ваши подключённые аккаунты и только в рамках заданных
-              разрешений.
-            </p>
+            <h2 id="capabilities-title">Что можно узнать</h2>
+            <p>AI видит только выбранные вами рекламные кабинеты.</p>
             <ul className="capabilities__list">
-              <li>Кампании и их статусы на всех платформах</li>
-              <li>Расходы и базовые метрики за любой период</li>
-              <li>Проблемы с подключениями и доставкой рекламы</li>
-              <li>SEO-отчёты и аудит сайта в том же кабинете</li>
+              <li>какие кампании активны и где есть проблемы;</li>
+              <li>сколько потрачено за выбранный период;</li>
+              <li>как изменились показы, клики и конверсии;</li>
+              <li>какая кампания потратила больше всего.</li>
             </ul>
           </div>
           <div className="question-list" aria-label="Примеры вопросов">
-            <span>Какие рекламные аккаунты подключены?</span>
+            <span>Какие рекламные кабинеты подключены?</span>
             <span>Какие кампании сейчас активны?</span>
             <span>Покажи расходы за последние 7 дней</span>
-            <span>Где есть проблемы со статусами?</span>
+            <span>Сравни текущий период с предыдущим</span>
           </div>
         </section>
-        <section className="growth" aria-labelledby="growth-title">
-          <div>
-            <h2 id="growth-title">Больше, чем реклама</h2>
-            <p className="growth__lead">
-              SEO и качество сайта считаются вместе с рекламой — в одном
-              кабинете.
-            </p>
-          </div>
-          <div className="growth__rows">
-            <div className="growth-row">
-              <div className="growth-row__icon">01</div>
-              <div className="growth-row__body">
-                <h3>SEO-отчёты из Search Console</h3>
-                <p>Понятный отчёт по запросам, страницам, CTR и позициям.</p>
-              </div>
-            </div>
-            <div className="growth-row">
-              <div className="growth-row__icon">02</div>
-              <div className="growth-row__body">
-                <h3>AI-аудит сайта</h3>
-                <p>
-                  Первый экран, тексты, доверие, конверсия и план приоритетных
-                  правок.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+
         <section className="control" aria-labelledby="control-title">
           <div className="control__panel">
             <div className="control__lead">
-              <span className="control__eyebrow">Безопасность и контроль</span>
-              <h2 id="control-title">
-                Ни одно изменение не уходит без вашего «да»
-              </h2>
+              <span className="control__eyebrow">Безопасность</span>
+              <h2 id="control-title">Изменения — только после подтверждения</h2>
               <p>
-                AI читает кабинеты, готовит рекомендации и показывает их вам.
-                Изменения проходят через preview и подтверждение.
-              </p>
-            </div>
-            <div className="control__demo">
-              <span className="control__demo-eyebrow">Пример ответа AI</span>
-              <p className="control__demo-text">
-                За последние 7 дней стоимость обращения выросла на 18%. Основной
-                рост — в кампании «Поиск · Google Ads».
-              </p>
-              <p className="control__demo-caption">
-                Это разбор фактических данных. Кампании и настройки не меняются
-                без подтверждения.
+                По умолчанию HolyMedia MCP только читает данные. Любое доступное
+                изменение сначала показывает предварительный результат и ждёт
+                вашего подтверждения.
               </p>
             </div>
             <ul className="control__points">
               <li>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <div>
-                  <strong>Только просмотр</strong>
-                  <span>AI видит данные, но не тратит бюджет сам.</span>
+                  <strong>Только выбранные кабинеты</strong>
+                  <span>Доступ ограничен вашим аккаунтом.</span>
                 </div>
               </li>
               <li>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <div>
-                  <strong>Личный ключ доступа</strong>
-                  <span>Свои аккаунты и ограниченные разрешения.</span>
+                  <strong>Без передачи паролей</strong>
+                  <span>Подключение через официальный OAuth.</span>
                 </div>
               </li>
               <li>
-                <span>✓</span>
+                <span aria-hidden="true">✓</span>
                 <div>
-                  <strong>Без паролей</strong>
-                  <span>Официальный вход рекламных платформ.</span>
+                  <strong>Контроль действий</strong>
+                  <span>Без подтверждения ничего не меняется.</span>
                 </div>
               </li>
             </ul>
           </div>
         </section>
+
         <section className="cta-band">
-          <h2>Подключите первый кабинет сегодня</h2>
-          <p>Регистрация и настройка занимают один вечер.</p>
+          <h2>Подключите первый кабинет</h2>
+          <p>Создайте аккаунт и выберите рекламную платформу.</p>
           <Link className="btn btn--primary" href="/auth?mode=signup">
             Создать аккаунт
           </Link>
         </section>
       </div>
-      <footer className="footer footer--landing">
-        <span>HolyMedia MCP — продукт агентства HolyMedia.</span>
-        <span className="footer__links">
-          <Link href="/privacy">Политика конфиденциальности</Link>
-          <Link href="/terms">Условия использования</Link>
-        </span>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

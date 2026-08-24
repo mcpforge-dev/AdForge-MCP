@@ -1,42 +1,63 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 export default function ResetPasswordPage() {
+  const [token, setToken] = useState("");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    setToken(new URLSearchParams(window.location.search).get("token") ?? "");
+  }, []);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    if (busy) return;
+    setBusy(true);
     setMessage("");
     setError("");
     const form = new FormData(event.currentTarget);
-    const csrfResponse = await fetch(`${API}/api/v1/auth/csrf`, {
-      credentials: "include",
-    });
-    const csrfData = (await csrfResponse.json()) as { csrfToken: string };
-    const response = await fetch(`${API}/api/v1/auth/reset-password`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        "x-csrf-token": csrfData.csrfToken,
-      },
-      body: JSON.stringify({
-        token: form.get("token"),
-        password: form.get("password"),
-      }),
-    });
-    if (!response.ok) {
-      const data = (await response.json()) as { error?: { message?: string } };
-      setError(data.error?.message ?? "Ссылка недействительна или устарела.");
-      return;
+    try {
+      const csrfResponse = await fetch(`${API}/api/v1/auth/csrf`, {
+        credentials: "include",
+      });
+      const csrfData = (await csrfResponse.json()) as { csrfToken: string };
+      const response = await fetch(`${API}/api/v1/auth/reset-password`, {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": csrfData.csrfToken,
+        },
+        body: JSON.stringify({
+          token: token || form.get("token"),
+          password: form.get("password"),
+        }),
+      });
+      if (!response.ok) {
+        const data = (await response.json()) as {
+          error?: { message?: string };
+        };
+        throw new Error(
+          data.error?.message ?? "Ссылка недействительна или устарела.",
+        );
+      }
+      setMessage("Пароль изменён. Теперь можно войти.");
+    } catch (requestError) {
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : "Не удалось изменить пароль.",
+      );
+    } finally {
+      setBusy(false);
     }
-    setMessage("Пароль изменён. Теперь можно войти в кабинет.");
   }
 
   return (
@@ -46,17 +67,19 @@ export default function ResetPasswordPage() {
           ← Назад ко входу
         </Link>
         <h1>Новый пароль</h1>
-        <p className="muted">Введите код из письма и задайте новый пароль.</p>
+        <p className="muted">Придумайте новый пароль для аккаунта.</p>
         <form onSubmit={submit}>
-          <label>
-            Код из письма
-            <input
-              name="token"
-              required
-              minLength={32}
-              autoComplete="one-time-code"
-            />
-          </label>
+          {!token && (
+            <label>
+              Код из письма
+              <input
+                name="token"
+                required
+                minLength={32}
+                autoComplete="one-time-code"
+              />
+            </label>
+          )}
           <label>
             Новый пароль
             <input
@@ -68,14 +91,14 @@ export default function ResetPasswordPage() {
               placeholder="Минимум 12 символов"
             />
           </label>
-          <button className="primary-button" type="submit">
-            Сохранить пароль
+          <button className="primary-button" type="submit" disabled={busy}>
+            {busy ? "Сохраняем…" : "Сохранить пароль"}
           </button>
         </form>
         {message && (
-          <p className="success" role="status">
-            {message}
-          </p>
+          <div className="success" role="status">
+            {message} <Link href="/auth">Войти</Link>
+          </div>
         )}
         {error && (
           <p className="error" role="alert">

@@ -77,6 +77,8 @@ model User {
   passwordHash      String               @map("password_hash") @db.VarChar(255)
   status            String               @default("active") @db.VarChar(32)
   emailVerifiedAt   DateTime?            @map("email_verified_at")
+  avatarData        Bytes?               @map("avatar_data")
+  avatarMimeType    String?              @map("avatar_mime_type") @db.VarChar(32)
   createdAt         DateTime             @default(now()) @map("created_at")
   updatedAt         DateTime             @updatedAt @map("updated_at")
   memberships       WorkspaceMembership[]

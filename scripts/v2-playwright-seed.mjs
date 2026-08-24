@@ -13,15 +13,24 @@ const legacyHash = `pbkdf2_sha256$240000$${salt.toString("base64")}$${digest.toS
 
 try {
   const existing = await database.client.user.findUnique({ where: { email } });
+  let userId;
+  let workspaceId;
   if (existing) {
+    const membership = await database.client.workspaceMembership.findFirst({
+      where: { userId: existing.id },
+      orderBy: { createdAt: "asc" },
+    });
+    if (!membership) throw new Error("Browser fixture has no workspace.");
+    userId = existing.id;
+    workspaceId = membership.workspaceId;
     await database.client.user.update({
       where: { id: existing.id },
       data: { passwordHash: legacyHash, status: "active" },
     });
     console.log(JSON.stringify({ seeded: true, mode: "reset-existing" }));
   } else {
-    const userId = randomUUID();
-    const workspaceId = randomUUID();
+    userId = randomUUID();
+    workspaceId = randomUUID();
     await database.client.$transaction([
       database.client.user.create({
         data: {
@@ -44,6 +53,51 @@ try {
       }),
     ]);
     console.log(JSON.stringify({ seeded: true, mode: "created" }));
+  }
+
+  const connection = await database.client.providerConnection.upsert({
+    where: {
+      workspaceId_provider: { workspaceId, provider: "META_ADS" },
+    },
+    create: {
+      workspaceId,
+      provider: "META_ADS",
+      status: "CONNECTED",
+      displayName: "Playwright Meta",
+      externalSubjectId: "playwright-meta-user",
+      createdBy: userId,
+      connectedAt: new Date(),
+      lastSuccessAt: new Date(),
+    },
+    update: {
+      status: "CONNECTED",
+      displayName: "Playwright Meta",
+      lastSuccessAt: new Date(),
+    },
+  });
+  for (const [externalAccountId, displayName, enabled] of [
+    ["act_playwright_primary", "Основной рекламный кабинет", true],
+    ["act_playwright_secondary", "Тестовый рекламный кабинет", false],
+  ]) {
+    await database.client.providerAccount.upsert({
+      where: {
+        workspaceId_provider_externalAccountId: {
+          workspaceId,
+          provider: "META_ADS",
+          externalAccountId,
+        },
+      },
+      create: {
+        workspaceId,
+        connectionId: connection.id,
+        provider: "META_ADS",
+        externalAccountId,
+        displayName,
+        enabled,
+        status: "ENABLED",
+      },
+      update: { connectionId: connection.id, displayName, status: "ENABLED" },
+    });
   }
 } finally {
   await database.client.$disconnect();

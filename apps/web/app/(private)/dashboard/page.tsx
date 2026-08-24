@@ -1,16 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import type { FormEvent } from "react";
+import { useEffect, useMemo, useState } from "react";
+import type { ChangeEvent, FormEvent } from "react";
+import { SiteFooter } from "../../components/site-footer";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
+const MCP_URL = "https://mcp.holymedia.kz/mcp";
 
 type Workspace = { id: string; name: string; slug: string; role: string };
-type Member = {
-  userId: string;
-  role: string;
-  user: { name: string; email: string; emailVerifiedAt: string | null };
-};
 type Provider = {
   id: string;
   displayName: string;
@@ -29,28 +26,7 @@ type Connection = {
   provider: string;
   displayName: string | null;
   status: string;
-  requestedScopes: string[];
-  grantedScopes: string[];
-  missingScopes: string[];
   accounts: ProviderAccount[];
-};
-type ManualRequest = {
-  id: string;
-  workspace_id: string;
-  provider: string;
-  company_name: string;
-  meta_ad_account_id: string;
-  status: string;
-  specialist_note: string;
-  contact_preference?: string;
-  created_at: string;
-};
-type PendingMetaAccount = {
-  id: string;
-  external_account_id: string;
-  name: string;
-  status: string | null;
-  enabled: boolean;
 };
 type ServiceToken = {
   id: string;
@@ -63,239 +39,123 @@ type ServiceToken = {
   revokedAt: string | null;
   lastUsedAt: string | null;
 };
-type Plan = {
-  id: string;
-  key: string;
-  name: string;
-  description: string | null;
-  features: Record<string, unknown>;
-  prices: Array<{ currency: string; amount: string; interval: string }>;
-};
-type Subscription = {
-  status: string;
-  currentPeriodEnd: string;
-  plan: { key: string; name: string };
-} | null;
-type UsageRecord = { metricKey: string; quantity: string; periodEnd: string };
-type Entitlement = { featureKey: string; value: unknown; source: string };
-type AnalyticsSummary = {
-  period: { days: number; since: string };
-  total_events: number;
-  active_users: number;
-  events: Array<{ name: string; count: number }>;
-};
-type SeoReport = {
-  status?: string;
-  message?: string;
-  date_range?: { start_date: string; end_date: string; days: number };
-  metrics?: {
-    clicks: number;
-    impressions: number;
-    ctr: number;
-    position: number;
-  };
-  previous_metrics?: SeoReport["metrics"];
-  properties?: Array<{
-    site_url: string;
-    name: string;
-    property_type?: string;
-  }>;
-  top_queries?: Array<{
-    keys?: string[];
-    clicks?: number;
-    impressions?: number;
-    ctr?: number;
-  }>;
-  top_pages?: Array<{
-    keys?: string[];
-    clicks?: number;
-    impressions?: number;
-    ctr?: number;
-  }>;
+type Profile = { name: string; email: string };
+type Section = "overview" | "connections" | "mcp" | "reports" | "profile";
+type Client = "codex" | "claude" | "chatgpt";
+type ConfirmAction = {
+  title: string;
+  description: string;
+  confirmLabel: string;
+  run: () => Promise<void>;
 };
 
-type DashboardSection =
-  | "overview"
-  | "connections"
-  | "mcp"
-  | "reports"
-  | "workspace"
-  | "billing"
-  | "analytics"
-  | "profile";
+const PROVIDER_COPY: Record<
+  string,
+  { name: string; description: string; short: string }
+> = {
+  GOOGLE_ADS: {
+    name: "Google Ads",
+    short: "G",
+    description: "Кампании, расходы, клики и конверсии.",
+  },
+  META_ADS: {
+    name: "Meta Ads",
+    short: "M",
+    description: "Facebook, Instagram, кампании и результаты.",
+  },
+  YANDEX_DIRECT: {
+    name: "Яндекс Директ",
+    short: "Я",
+    description: "Клиенты и рекламные кабинеты Директа.",
+  },
+  TIKTOK_ADS: {
+    name: "TikTok Ads",
+    short: "T",
+    description: "Доступные рекламные аккаунты TikTok.",
+  },
+  GOOGLE_SEARCH_CONSOLE: {
+    name: "Google Search Console",
+    short: "S",
+    description: "Данные поиска и страницы сайта.",
+  },
+};
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
     credentials: "include",
   });
-  const data = (await response.json()) as { csrfToken: string };
-  return data.csrfToken;
+  if (!response.ok) throw new Error("Не удалось подтвердить сессию.");
+  return ((await response.json()) as { csrfToken: string }).csrfToken;
 }
 
-async function recordProductEvent(
-  workspaceId: string,
-  eventName:
-    | "provider.connect_clicked"
-    | "provider.account_selected"
-    | "mcp.setup_viewed"
-    | "report.downloaded",
-): Promise<void> {
-  try {
-    await fetch(`${API}/api/v1/workspaces/${workspaceId}/analytics/events`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        "x-csrf-token": await csrf(),
-      },
-      body: JSON.stringify({ event_name: eventName }),
-    });
-  } catch {
-    // Analytics must never interrupt the requested product action.
-  }
-}
-
-function lastSevenDays(): { startDate: string; endDate: string } {
+function dateRange(days: number) {
   const end = new Date(Date.now() - 86_400_000);
-  const start = new Date(end.getTime() - 6 * 86_400_000);
+  const start = new Date(end.getTime() - (days - 1) * 86_400_000);
   return {
     startDate: start.toISOString().slice(0, 10),
     endDate: end.toISOString().slice(0, 10),
   };
 }
 
+function providerCopy(provider: string) {
+  return (
+    PROVIDER_COPY[provider] ?? {
+      name: provider,
+      short: provider.charAt(0),
+      description: "Рекламная платформа.",
+    }
+  );
+}
+
+function connectionStatus(status: string) {
+  if (status === "CONNECTED") return { label: "Подключено", tone: "ok" };
+  if (status === "DEGRADED") return { label: "Нужно проверить", tone: "warn" };
+  if (status === "REAUTH_REQUIRED")
+    return { label: "Нужно войти снова", tone: "warn" };
+  return { label: "Не подключено", tone: "info" };
+}
+
 export default function DashboardPage() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [active, setActive] = useState<Workspace | null>(null);
-  const [members, setMembers] = useState<Member[]>([]);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
-  const [manualRequests, setManualRequests] = useState<ManualRequest[]>([]);
-  const [adminManualRequests, setAdminManualRequests] = useState<
-    ManualRequest[]
-  >([]);
-  const [pendingMetaAccounts, setPendingMetaAccounts] = useState<
-    Record<string, PendingMetaAccount[]>
-  >({});
-  const [supportAccess, setSupportAccess] = useState(false);
-  const [readResult, setReadResult] = useState<unknown>(null);
-  const [siteResult, setSiteResult] = useState<unknown>(null);
-  const [siteUrl, setSiteUrl] = useState("");
-  const [serviceTokens, setServiceTokens] = useState<ServiceToken[]>([]);
-  const [createdServiceToken, setCreatedServiceToken] = useState("");
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [subscription, setSubscription] = useState<Subscription>(null);
-  const [usage, setUsage] = useState<UsageRecord[]>([]);
-  const [entitlements, setEntitlements] = useState<Entitlement[]>([]);
-  const [analyticsSummary, setAnalyticsSummary] =
-    useState<AnalyticsSummary | null>(null);
-  const [seoSiteUrl, setSeoSiteUrl] = useState("__all");
-  const [seoDays, setSeoDays] = useState("28");
-  const [seoResult, setSeoResult] = useState<SeoReport | null>(null);
-  const [section, setSection] = useState<DashboardSection>("overview");
-  const [legacyView] = useState(false);
-  const [profile, setProfile] = useState<{
-    name: string;
-    email: string;
-  } | null>(null);
+  const [tokens, setTokens] = useState<ServiceToken[]>([]);
+  const [profile, setProfile] = useState<Profile | null>(null);
   const [profileName, setProfileName] = useState("");
-  const [profileMessage, setProfileMessage] = useState("");
+  const [avatar, setAvatar] = useState<string | null>(null);
+  const [section, setSection] = useState<Section>("overview");
+  const [client, setClient] = useState<Client>("codex");
+  const [drafts, setDrafts] = useState<Record<string, string[]>>({});
+  const [savingAccounts, setSavingAccounts] = useState<string | null>(null);
+  const [createdToken, setCreatedToken] = useState("");
+  const [reportDays, setReportDays] = useState(7);
+  const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
 
-  const canManageMembers = Boolean(
-    active && ["OWNER", "ADMIN"].includes(active.role),
+  const canManage = Boolean(active && ["OWNER", "ADMIN"].includes(active.role));
+  const enabledAccounts = useMemo(
+    () =>
+      connections.flatMap((connection) =>
+        connection.accounts
+          .filter((account) => account.enabled)
+          .map((account) => ({ account, connection })),
+      ),
+    [connections],
   );
+  const connectedCount = connections.filter((connection) =>
+    ["CONNECTED", "DEGRADED"].includes(connection.status),
+  ).length;
 
-  async function loadManualRequests() {
-    const [response, adminResponse] = await Promise.all([
-      fetch(`${API}/api/connection-requests`, {
-        credentials: "include",
-      }),
-      active && ["OWNER", "ADMIN"].includes(active.role)
-        ? fetch(`${API}/api/admin/connection-requests`, {
-            credentials: "include",
-          })
-        : Promise.resolve(null),
-    ]);
-    if (response.ok) {
-      const data = (await response.json()) as { requests: ManualRequest[] };
-      setManualRequests(data.requests);
-    }
-    if (adminResponse?.ok) {
-      const data = (await adminResponse.json()) as {
-        requests: ManualRequest[];
-        support_access?: boolean;
-      };
-      setAdminManualRequests(data.requests);
-      setSupportAccess(Boolean(data.support_access));
-    } else {
-      setAdminManualRequests([]);
-      setSupportAccess(false);
-    }
+  function notify(text: string) {
+    setError("");
+    setMessage(text);
   }
 
-  async function startManualMeta(requestId: string) {
-    const response = await fetch(
-      `${API}/api/admin/connection-requests/meta/authorize-url`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({ request_id: requestId }),
-      },
-    );
-    if (!response.ok) {
-      setError("Не удалось начать подключение Meta по заявке.");
-      return;
-    }
-    const data = (await response.json()) as { authorization_url: string };
-    window.location.assign(data.authorization_url);
-  }
-
-  async function loadPendingMeta(requestId: string) {
-    const response = await fetch(
-      `${API}/api/admin/connection-requests/meta/pending?request_id=${encodeURIComponent(requestId)}`,
-      { credentials: "include" },
-    );
-    if (!response.ok) {
-      setError("Не удалось получить найденные кабинеты Meta.");
-      return;
-    }
-    const data = (await response.json()) as {
-      pending: PendingMetaAccount[];
-    };
-    setPendingMetaAccounts((current) => ({
-      ...current,
-      [requestId]: data.pending,
-    }));
-  }
-
-  async function selectManualMeta(requestId: string, accountId: string) {
-    const response = await fetch(
-      `${API}/api/admin/connection-requests/meta/select`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({ request_id: requestId, pending_id: accountId }),
-      },
-    );
-    if (!response.ok) {
-      setError("Не удалось добавить кабинет Meta в workspace клиента.");
-      return;
-    }
-    setPendingMetaAccounts((current) => {
-      const next = { ...current };
-      delete next[requestId];
-      return next;
-    });
-    await loadManualRequests();
+  function fail(text: string) {
+    setMessage("");
+    setError(text);
   }
 
   async function loadWorkspaces() {
@@ -308,7 +168,6 @@ export default function DashboardPage() {
       return;
     }
     const data = (await response.json()) as Workspace[];
-    setWorkspaces(data);
     setActive((current) =>
       current && data.some((item) => item.id === current.id)
         ? current
@@ -317,24 +176,25 @@ export default function DashboardPage() {
   }
 
   async function loadProfile() {
-    const response = await fetch(`${API}/api/v1/me`, {
-      credentials: "include",
-      cache: "no-store",
-    });
-    if (!response.ok) return;
-    const data = (await response.json()) as {
-      user: { name: string; email: string };
-    };
-    setProfile(data.user);
-    setProfileName(data.user.name);
-  }
-
-  async function loadMembers(workspace: Workspace) {
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${workspace.id}/members`,
-      { credentials: "include" },
-    );
-    if (response.ok) setMembers((await response.json()) as Member[]);
+    const [profileResponse, avatarResponse] = await Promise.all([
+      fetch(`${API}/api/profile`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+      fetch(`${API}/api/profile/avatar`, {
+        credentials: "include",
+        cache: "no-store",
+      }),
+    ]);
+    if (profileResponse.ok) {
+      const data = (await profileResponse.json()) as { profile: Profile };
+      setProfile(data.profile);
+      setProfileName(data.profile.name);
+    }
+    if (avatarResponse.ok) {
+      const data = (await avatarResponse.json()) as { dataUrl: string | null };
+      setAvatar(data.dataUrl);
+    }
   }
 
   async function loadConnections(workspace: Workspace) {
@@ -342,268 +202,296 @@ export default function DashboardPage() {
       fetch(`${API}/api/v1/providers`, { credentials: "include" }),
       fetch(`${API}/api/v1/workspaces/${workspace.id}/connections`, {
         credentials: "include",
+        cache: "no-store",
       }),
     ]);
     if (providerResponse.ok)
       setProviders((await providerResponse.json()) as Provider[]);
     if (connectionResponse.ok) {
-      const nextConnections = (await connectionResponse.json()) as Connection[];
-      setConnections(nextConnections);
-      const searchConsole = nextConnections.find(
-        (connection) => connection.provider === "GOOGLE_SEARCH_CONSOLE",
+      const data = (await connectionResponse.json()) as Connection[];
+      setConnections(data);
+      setDrafts(
+        Object.fromEntries(
+          data.map((connection) => [
+            connection.id,
+            connection.accounts
+              .filter((account) => account.enabled)
+              .map((account) => account.id),
+          ]),
+        ),
       );
-      if (
-        searchConsole &&
-        !searchConsole.accounts.some(
-          (account) => account.externalAccountId === seoSiteUrl,
-        )
-      )
-        setSeoSiteUrl("__all");
     }
   }
 
-  async function loadServiceTokens(workspace: Workspace) {
+  async function loadTokens(workspace: Workspace) {
     if (!["OWNER", "ADMIN"].includes(workspace.role)) {
-      setServiceTokens([]);
+      setTokens([]);
       return;
     }
     const response = await fetch(
       `${API}/api/v1/workspaces/${workspace.id}/service-tokens`,
-      { credentials: "include" },
+      { credentials: "include", cache: "no-store" },
     );
-    if (response.ok)
-      setServiceTokens((await response.json()) as ServiceToken[]);
-  }
-
-  async function loadBilling(workspace: Workspace) {
-    if (!["OWNER", "ADMIN"].includes(workspace.role)) {
-      setPlans([]);
-      setSubscription(null);
-      setUsage([]);
-      setEntitlements([]);
-      return;
-    }
-    const [
-      plansResponse,
-      subscriptionResponse,
-      usageResponse,
-      entitlementResponse,
-    ] = await Promise.all([
-      fetch(`${API}/api/v1/plans`, { credentials: "include" }),
-      fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/subscription`, {
-        credentials: "include",
-      }),
-      fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/usage`, {
-        credentials: "include",
-      }),
-      fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/entitlements`, {
-        credentials: "include",
-      }),
-    ]);
-    if (plansResponse.ok) setPlans((await plansResponse.json()) as Plan[]);
-    if (subscriptionResponse.ok)
-      setSubscription((await subscriptionResponse.json()) as Subscription);
-    if (usageResponse.ok)
-      setUsage((await usageResponse.json()) as UsageRecord[]);
-    if (entitlementResponse.ok)
-      setEntitlements((await entitlementResponse.json()) as Entitlement[]);
-  }
-
-  async function loadAnalytics(workspace: Workspace) {
-    if (!["OWNER", "ADMIN"].includes(workspace.role)) {
-      setAnalyticsSummary(null);
-      return;
-    }
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${workspace.id}/analytics/summary?days=30`,
-      { credentials: "include" },
-    );
-    if (response.ok)
-      setAnalyticsSummary((await response.json()) as AnalyticsSummary);
-    else setAnalyticsSummary(null);
-  }
-
-  async function loadSeoReport() {
-    if (!active) return;
-    const query = new URLSearchParams({
-      site_url: seoSiteUrl,
-      days: seoDays,
-    });
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/seo/search-console?${query.toString()}`,
-      { credentials: "include" },
-    );
-    if (response.ok) setSeoResult((await response.json()) as SeoReport);
-    else setError("Не удалось загрузить SEO-отчёт Search Console.");
+    if (response.ok) setTokens((await response.json()) as ServiceToken[]);
   }
 
   useEffect(() => {
     void loadWorkspaces();
     void loadProfile();
+    const query = new URLSearchParams(window.location.search);
+    const requestedSection = query.get("section");
+    if (
+      requestedSection === "connections" ||
+      requestedSection === "mcp" ||
+      requestedSection === "reports" ||
+      requestedSection === "profile"
+    )
+      setSection(requestedSection);
+    if (query.get("oauth") === "success")
+      notify("Платформа подключена. Выберите кабинеты для работы.");
+    if (query.get("oauth") === "error")
+      fail(
+        "Подключение не завершено. Попробуйте ещё раз или обратитесь в поддержку.",
+      );
+    if (query.has("oauth")) window.history.replaceState({}, "", "/dashboard");
   }, []);
+
   useEffect(() => {
     if (!active) return;
-    void loadMembers(active);
     void loadConnections(active);
-    void loadServiceTokens(active);
-    void loadBilling(active);
-    void loadAnalytics(active);
-    if (["OWNER", "ADMIN"].includes(active.role))
-      void recordProductEvent(active.id, "mcp.setup_viewed");
-    void loadManualRequests();
+    void loadTokens(active);
   }, [active]);
 
-  async function changeMemberRole(userId: string, role: string) {
-    if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/members/${userId}`,
-      {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({ role }),
-      },
-    );
-    if (response.ok) await loadMembers(active);
-    else setError("Не удалось изменить роль участника.");
-  }
-
-  async function removeMember(userId: string) {
-    if (!active || !window.confirm("Удалить участника из workspace?")) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/members/${userId}`,
-      {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "x-csrf-token": await csrf() },
-      },
-    );
-    if (response.ok) await loadMembers(active);
-    else setError("Не удалось удалить участника.");
-  }
+  useEffect(() => {
+    if (!confirm) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setConfirm(null);
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [confirm]);
 
   async function startProvider(provider: string) {
+    if (!active || provider === "GOOGLE_SEARCH_CONSOLE") return;
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/connections/${provider}/oauth/start`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "x-csrf-token": await csrf() },
+        },
+      );
+      if (!response.ok) throw new Error();
+      const data = (await response.json()) as { authorizationUrl: string };
+      window.location.assign(data.authorizationUrl);
+    } catch {
+      fail(
+        "Не удалось открыть вход в рекламную платформу. Попробуйте ещё раз.",
+      );
+      setBusy(false);
+    }
+  }
+
+  async function discover(connection: Connection) {
     if (!active) return;
-    await recordProductEvent(active.id, "provider.connect_clicked");
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/discover`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: { "x-csrf-token": await csrf() },
+        },
+      );
+      if (!response.ok) throw new Error();
+      await loadConnections(active);
+      notify("Список кабинетов обновлён.");
+    } catch {
+      fail("Не удалось обновить список кабинетов.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function disconnect(connection: Connection) {
+    if (!active) return;
     const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/connections/${provider}/oauth/start`,
+      `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}`,
       {
-        method: "POST",
+        method: "DELETE",
         credentials: "include",
         headers: { "x-csrf-token": await csrf() },
       },
     );
     if (!response.ok) {
-      setError("Не удалось начать подключение провайдера.");
+      fail("Не удалось отключить платформу.");
       return;
     }
-    const data = (await response.json()) as { authorizationUrl: string };
-    window.location.assign(data.authorizationUrl);
+    await loadConnections(active);
+    notify(`${providerCopy(connection.provider).name} отключён.`);
   }
 
-  async function disconnect(connectionId: string) {
-    if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/connections/${connectionId}`,
-      {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "x-csrf-token": await csrf() },
-      },
-    );
-    if (response.ok) await loadConnections(active);
-    else setError("Не удалось отключить провайдера.");
-  }
-
-  async function discover(connectionId: string) {
-    if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/connections/${connectionId}/accounts/discover`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: { "x-csrf-token": await csrf() },
-      },
-    );
-    if (response.ok) await loadConnections(active);
-    else setError("Не удалось обновить список рекламных кабинетов.");
-  }
-
-  async function toggleAccount(accountId: string, enabled: boolean) {
-    if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/provider-accounts/${accountId}`,
-      {
-        method: "PATCH",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({ enabled }),
-      },
-    );
-    if (response.ok) {
-      if (enabled)
-        await recordProductEvent(active.id, "provider.account_selected");
-      await loadConnections(active);
-    } else setError("Не удалось изменить доступ к рекламному кабинету.");
-  }
-
-  async function readSmoke(connection: Connection, account: ProviderAccount) {
-    if (!active) return;
-    const dates = lastSevenDays();
-    const query = new URLSearchParams(dates).toString();
-    const [health, metrics, campaigns] = await Promise.all([
-      fetch(
-        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/health`,
-        { credentials: "include" },
-      ),
-      fetch(
-        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/metrics?${query}`,
-        { credentials: "include" },
-      ),
-      fetch(
-        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts/${account.id}/campaigns?${query}&limit=10`,
-        { credentials: "include" },
-      ),
-    ]);
-    if (!health.ok || !metrics.ok || !campaigns.ok) {
-      setError("Не удалось выполнить read-проверку рекламного кабинета.");
-      return;
-    }
-    setReadResult({
-      account: account.displayName,
-      period: dates,
-      health: await health.json(),
-      metrics: await metrics.json(),
-      campaigns: await campaigns.json(),
+  function toggleDraft(connectionId: string, accountId: string) {
+    setDrafts((current) => {
+      const selected = new Set(current[connectionId] ?? []);
+      if (selected.has(accountId)) selected.delete(accountId);
+      else selected.add(accountId);
+      return { ...current, [connectionId]: [...selected] };
     });
   }
 
-  async function downloadReport(account: ProviderAccount) {
+  async function saveAccounts(connection: Connection) {
     if (!active) return;
-    const query = new URLSearchParams({
-      accountId: account.id,
-      ...lastSevenDays(),
-    }).toString();
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/reports/performance.docx?${query}`,
-      { credentials: "include" },
+    const selected = new Set(drafts[connection.id] ?? []);
+    const changes = connection.accounts.filter(
+      (account) => account.enabled !== selected.has(account.id),
     );
-    if (!response.ok) {
-      setError("Не удалось собрать DOCX-отчёт.");
+    if (!changes.length) {
+      notify("Выбор уже сохранён.");
       return;
     }
-    const link = document.createElement("a");
-    link.href = URL.createObjectURL(await response.blob());
-    link.download = "holymedia-performance-report.docx";
-    link.click();
-    URL.revokeObjectURL(link.href);
-    await recordProductEvent(active.id, "report.downloaded");
+    setSavingAccounts(connection.id);
+    try {
+      const csrfToken = await csrf();
+      const responses = await Promise.all(
+        changes.map((account) =>
+          fetch(
+            `${API}/api/v1/workspaces/${active.id}/provider-accounts/${account.id}`,
+            {
+              method: "PATCH",
+              credentials: "include",
+              headers: {
+                "content-type": "application/json",
+                "x-csrf-token": csrfToken,
+              },
+              body: JSON.stringify({ enabled: selected.has(account.id) }),
+            },
+          ),
+        ),
+      );
+      if (responses.some((response) => !response.ok)) throw new Error();
+      await loadConnections(active);
+      notify("Выбранные кабинеты сохранены.");
+    } catch {
+      await loadConnections(active);
+      fail("Не удалось сохранить выбор. Изменения отменены.");
+    } finally {
+      setSavingAccounts(null);
+    }
+  }
+
+  async function createToken(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active) return;
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
+    const accountIds = form.getAll("account_ids");
+    if (!accountIds.length) {
+      fail("Выберите хотя бы один кабинет для ключа.");
+      return;
+    }
+    setBusy(true);
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/service-tokens`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": await csrf(),
+          },
+          body: JSON.stringify({
+            name: form.get("name"),
+            scopes: form.get("write")
+              ? ["adforge:mcp:read", "adforge:mcp:write"]
+              : ["adforge:mcp:read"],
+            accountIds,
+            expiresInDays: Number(form.get("expires_in_days") || 90),
+          }),
+        },
+      );
+      if (!response.ok) throw new Error();
+      const data = (await response.json()) as ServiceToken & { token: string };
+      setCreatedToken(data.token);
+      formElement.reset();
+      await loadTokens(active);
+      notify("Ключ создан. Сохраните его сейчас.");
+    } catch {
+      fail("Не удалось создать ключ.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revokeToken(token: ServiceToken) {
+    if (!active) return;
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "x-csrf-token": await csrf() },
+      },
+    );
+    if (!response.ok) return fail("Не удалось отозвать ключ.");
+    await loadTokens(active);
+    notify("Ключ отозван.");
+  }
+
+  async function rotateToken(token: ServiceToken) {
+    if (!active) return;
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}/rotate`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: "{}",
+      },
+    );
+    if (!response.ok) return fail("Не удалось обновить ключ.");
+    const data = (await response.json()) as ServiceToken & { token: string };
+    setCreatedToken(data.token);
+    await loadTokens(active);
+    notify("Новый ключ готов. Сохраните его сейчас.");
+  }
+
+  async function downloadReport(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!active) return;
+    const form = new FormData(event.currentTarget);
+    const accountId = String(form.get("account_id") ?? "");
+    if (!accountId) return;
+    setBusy(true);
+    try {
+      const query = new URLSearchParams({
+        accountId,
+        ...dateRange(reportDays),
+      });
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/reports/performance.docx?${query}`,
+        { credentials: "include" },
+      );
+      if (!response.ok) throw new Error();
+      const url = URL.createObjectURL(await response.blob());
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "holymedia-performance-report.docx";
+      link.click();
+      URL.revokeObjectURL(url);
+      notify("Отчёт готов.");
+    } catch {
+      fail("Не удалось собрать отчёт. Попробуйте ещё раз.");
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function saveProfile(event: FormEvent<HTMLFormElement>) {
@@ -617,21 +505,43 @@ export default function DashboardPage() {
       },
       body: JSON.stringify({ name: profileName }),
     });
-    if (!response.ok) {
-      setError("Не удалось сохранить профиль.");
-      return;
-    }
-    const data = (await response.json()) as {
-      profile: { name: string; email: string };
-    };
+    if (!response.ok) return fail("Не удалось сохранить имя.");
+    const data = (await response.json()) as { profile: Profile };
     setProfile(data.profile);
-    setProfileName(data.profile.name);
-    setProfileMessage("Профиль сохранён.");
+    notify("Профиль сохранён.");
+  }
+
+  async function uploadAvatar(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!["image/jpeg", "image/png", "image/webp"].includes(file.type))
+      return fail("Выберите изображение JPG, PNG или WebP.");
+    if (file.size > 2_097_152)
+      return fail("Размер изображения не должен превышать 2 МБ.");
+    const dataUrl = await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(String(reader.result));
+      reader.onerror = () => reject(new Error());
+      reader.readAsDataURL(file);
+    });
+    const response = await fetch(`${API}/api/profile/avatar`, {
+      method: "POST",
+      credentials: "include",
+      headers: {
+        "content-type": "application/json",
+        "x-csrf-token": await csrf(),
+      },
+      body: JSON.stringify({ dataUrl }),
+    });
+    if (!response.ok) return fail("Не удалось обновить фото.");
+    setAvatar(((await response.json()) as { dataUrl: string }).dataUrl);
+    notify("Фото профиля обновлено.");
   }
 
   async function changePassword(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const response = await fetch(`${API}/api/v1/auth/password/change`, {
       method: "POST",
       credentials: "include",
@@ -644,190 +554,15 @@ export default function DashboardPage() {
         newPassword: form.get("new_password"),
       }),
     });
-    if (!response.ok) {
-      const data = (await response.json().catch(() => null)) as {
-        error?: { message?: string };
-      } | null;
-      setError(data?.error?.message ?? "Не удалось изменить пароль.");
-      return;
-    }
-    event.currentTarget.reset();
-    setProfileMessage("Пароль изменён. Сессия продолжена безопасно.");
-  }
-
-  async function analyzeSite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!active || !siteUrl.trim()) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/site-analysis`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({ url: siteUrl.trim() }),
-      },
-    );
-    if (!response.ok) {
-      setError("Не удалось проанализировать сайт.");
-      return;
-    }
-    setSiteResult(await response.json());
-  }
-
-  async function createWorkspace(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const response = await fetch(`${API}/api/v1/workspaces`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        "x-csrf-token": await csrf(),
-      },
-      body: JSON.stringify({ name: form.get("name") }),
-    });
-    if (!response.ok) {
-      setError("Не удалось создать workspace.");
-      return;
-    }
+    if (!response.ok)
+      return fail("Не удалось изменить пароль. Проверьте текущий пароль.");
     formElement.reset();
-    await loadWorkspaces();
+    notify("Пароль изменён.");
   }
 
-  async function invite(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!active) return;
-    const form = new FormData(event.currentTarget);
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/invitations`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({
-          email: form.get("email"),
-          role: form.get("role"),
-        }),
-      },
-    );
-    if (!response.ok) {
-      setError("Не удалось создать приглашение.");
-      return;
-    }
-    event.currentTarget.reset();
-    setError("");
-    await loadMembers(active);
-  }
-
-  async function requestManualMeta(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!active) return;
-    const form = new FormData(event.currentTarget);
-    const response = await fetch(`${API}/api/connection-requests/meta`, {
-      method: "POST",
-      credentials: "include",
-      headers: {
-        "content-type": "application/json",
-        "x-csrf-token": await csrf(),
-      },
-      body: JSON.stringify({
-        workspace_id: active.id,
-        company_name: form.get("company_name"),
-        ad_account_id: form.get("ad_account_id"),
-        business_id: form.get("business_id") || undefined,
-        page_id: form.get("page_id") || undefined,
-        instagram_username: form.get("instagram_username") || undefined,
-        contact_preference: form.get("contact_preference"),
-        client_note: form.get("client_note") || undefined,
-      }),
-    });
-    if (!response.ok) {
-      setError("Не удалось отправить заявку на ручное подключение Meta.");
-      return;
-    }
-    event.currentTarget.reset();
-    setError("");
-    await loadManualRequests();
-  }
-
-  async function createServiceToken(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    if (!active) return;
-    const form = new FormData(event.currentTarget);
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/service-tokens`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({
-          name: form.get("name"),
-          scopes: form.get("write")
-            ? ["adforge:mcp:read", "adforge:mcp:write"]
-            : ["adforge:mcp:read"],
-          accountIds: form.getAll("account_ids"),
-          expiresInDays: Number(form.get("expires_in_days") || 90),
-        }),
-      },
-    );
-    if (!response.ok) {
-      setError("Не удалось создать служебный MCP-токен.");
-      return;
-    }
-    const token = (await response.json()) as ServiceToken & { token: string };
-    setCreatedServiceToken(token.token);
-    event.currentTarget.reset();
-    await loadServiceTokens(active);
-  }
-
-  async function revokeServiceToken(tokenId: string) {
-    if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/service-tokens/${tokenId}`,
-      {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "x-csrf-token": await csrf() },
-      },
-    );
-    if (!response.ok) {
-      setError("Не удалось отозвать служебный MCP-токен.");
-      return;
-    }
-    await loadServiceTokens(active);
-  }
-
-  async function rotateServiceToken(tokenId: string) {
-    if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/service-tokens/${tokenId}/rotate`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
-        },
-        body: JSON.stringify({}),
-      },
-    );
-    if (!response.ok) {
-      setError("Не удалось ротировать служебный MCP-токен.");
-      return;
-    }
-    const token = (await response.json()) as ServiceToken & { token: string };
-    setCreatedServiceToken(token.token);
-    await loadServiceTokens(active);
+  async function copy(text: string, success: string) {
+    await navigator.clipboard.writeText(text);
+    notify(success);
   }
 
   async function logout() {
@@ -839,736 +574,20 @@ export default function DashboardPage() {
     window.location.assign("/auth");
   }
 
-  if (legacyView) {
-    return (
-      <main className="dashboard-shell">
-        <header className="dashboard-header">
-          <div>
-            <p className="eyebrow">HolyMedia MCP v2</p>
-            <h1>Рабочее пространство</h1>
-          </div>
-          <button className="ghost-button" onClick={() => void logout()}>
-            Выйти
-          </button>
-        </header>
-
-        <section className="dashboard-grid">
-          <div className="panel">
-            <label>
-              Активный workspace
-              <select
-                value={active?.id ?? ""}
-                onChange={(event) =>
-                  setActive(
-                    workspaces.find((item) => item.id === event.target.value) ??
-                      null,
-                  )
-                }
-              >
-                {workspaces.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name} · {item.role}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <form onSubmit={createWorkspace} className="inline-form">
-              <input
-                name="name"
-                required
-                minLength={2}
-                placeholder="Новый workspace"
-              />
-              <button className="primary-button" type="submit">
-                Создать
-              </button>
-            </form>
-          </div>
-          <div className="panel">
-            <h2>Участники</h2>
-            {members.map((member) => (
-              <div className="member-row" key={member.userId}>
-                <span>
-                  <strong>{member.user.name}</strong>
-                  <small>{member.user.email}</small>
-                </span>
-                {canManageMembers && member.role !== "OWNER" ? (
-                  <select
-                    value={member.role}
-                    onChange={(event) =>
-                      void changeMemberRole(member.userId, event.target.value)
-                    }
-                    aria-label={`Роль участника ${member.user.name}`}
-                  >
-                    <option value="VIEWER">Наблюдатель</option>
-                    <option value="MEMBER">Участник</option>
-                    <option value="ADMIN">Администратор</option>
-                  </select>
-                ) : (
-                  <em>{member.role}</em>
-                )}
-                {canManageMembers && member.role !== "OWNER" && (
-                  <button
-                    className="ghost-button"
-                    type="button"
-                    onClick={() => void removeMember(member.userId)}
-                  >
-                    Удалить
-                  </button>
-                )}
-              </div>
-            ))}
-            {active && (
-              <form onSubmit={invite} className="invite-form">
-                <input
-                  name="email"
-                  type="email"
-                  required
-                  placeholder="Email участника"
-                />
-                <select name="role" defaultValue="MEMBER">
-                  <option value="MEMBER">Участник</option>
-                  <option value="VIEWER">Наблюдатель</option>
-                  <option value="ADMIN">Администратор</option>
-                </select>
-                <button className="primary-button" type="submit">
-                  Пригласить
-                </button>
-              </form>
-            )}
-          </div>
-        </section>
-
-        <section className="panel connections-panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Providers</p>
-              <h2>Подключения рекламных платформ</h2>
-            </div>
-            <span className="muted">
-              Доступы хранятся отдельно для каждого workspace
-            </span>
-          </div>
-          <div className="provider-list">
-            {providers.map((provider) => {
-              const connection = connections.find(
-                (item) => item.provider === provider.id,
-              );
-              return (
-                <div className="provider-row" key={provider.id}>
-                  <div>
-                    <strong>{provider.displayName}</strong>
-                    <small>
-                      {connection
-                        ? `${connection.status} · аккаунтов: ${connection.accounts.length}`
-                        : provider.status}
-                    </small>
-                  </div>
-                  <div className="provider-actions">
-                    <button
-                      className="primary-button"
-                      type="button"
-                      disabled={!provider.oauth}
-                      onClick={() => void startProvider(provider.id)}
-                    >
-                      {connection ? "Переподключить" : "Подключить"}
-                    </button>
-                    {connection && (
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => void disconnect(connection.id)}
-                      >
-                        Отключить
-                      </button>
-                    )}
-                  </div>
-                  {connection && (
-                    <div className="provider-details">
-                      <small>
-                        Разрешения: {connection.grantedScopes.length}/
-                        {connection.requestedScopes.length}
-                        {connection.missingScopes.length
-                          ? ` · не хватает: ${connection.missingScopes.join(", ")}`
-                          : ""}
-                      </small>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => void discover(connection.id)}
-                      >
-                        Обновить кабинеты
-                      </button>
-                      {connection.accounts.map((account) => (
-                        <div className="account-row" key={account.id}>
-                          <input
-                            type="checkbox"
-                            checked={account.enabled}
-                            onChange={(event) =>
-                              void toggleAccount(
-                                account.id,
-                                event.target.checked,
-                              )
-                            }
-                          />
-                          <span>{account.displayName}</span>
-                          <small>
-                            {account.externalAccountId} ·{" "}
-                            {account.status ?? "неизвестно"}
-                          </small>
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            disabled={!account.enabled}
-                            onClick={() => void readSmoke(connection, account)}
-                          >
-                            Проверить чтение
-                          </button>
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            disabled={!account.enabled}
-                            onClick={() => void downloadReport(account)}
-                          >
-                            DOCX-отчёт
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-
-        {active &&
-          connections.some(
-            (connection) => connection.provider === "GOOGLE_SEARCH_CONSOLE",
-          ) && (
-            <section className="panel connections-panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">SEO</p>
-                  <h2>Google Search Console</h2>
-                </div>
-                <span className="muted">
-                  Реальные данные Search Console за завершённый период.
-                </span>
-              </div>
-              <div className="inline-form">
-                <select
-                  value={seoSiteUrl}
-                  onChange={(event) => setSeoSiteUrl(event.target.value)}
-                  aria-label="SEO property"
-                >
-                  <option value="__all">Все подключённые properties</option>
-                  {connections
-                    .find(
-                      (connection) =>
-                        connection.provider === "GOOGLE_SEARCH_CONSOLE",
-                    )
-                    ?.accounts.map((account) => (
-                      <option
-                        key={account.id}
-                        value={account.externalAccountId}
-                      >
-                        {account.displayName}
-                      </option>
-                    ))}
-                </select>
-                <select
-                  value={seoDays}
-                  onChange={(event) => setSeoDays(event.target.value)}
-                  aria-label="Период SEO отчёта"
-                >
-                  <option value="28">28 дней</option>
-                  <option value="56">56 дней</option>
-                  <option value="90">90 дней</option>
-                </select>
-                <button
-                  className="primary-button"
-                  type="button"
-                  onClick={() => void loadSeoReport()}
-                >
-                  Загрузить SEO-отчёт
-                </button>
-              </div>
-              {seoResult?.message && (
-                <p className="muted" role="status">
-                  {seoResult.message}
-                </p>
-              )}
-              {seoResult?.metrics && (
-                <div className="billing-grid">
-                  <div className="billing-summary">
-                    <small>Клики</small>
-                    <strong>
-                      {seoResult.metrics.clicks.toLocaleString("ru-RU")}
-                    </strong>
-                    <span>Переходы из поиска</span>
-                  </div>
-                  <div className="billing-summary">
-                    <small>Показы</small>
-                    <strong>
-                      {seoResult.metrics.impressions.toLocaleString("ru-RU")}
-                    </strong>
-                    <span>Показы в выдаче</span>
-                  </div>
-                  <div className="billing-summary">
-                    <small>CTR / позиция</small>
-                    <strong>{(seoResult.metrics.ctr * 100).toFixed(2)}%</strong>
-                    <span>
-                      Средняя позиция {seoResult.metrics.position.toFixed(1)}
-                    </span>
-                  </div>
-                </div>
-              )}
-              {seoResult?.top_queries?.length ? (
-                <div className="plan-list">
-                  <strong>Топ запросов</strong>
-                  {seoResult.top_queries.slice(0, 8).map((row, index) => (
-                    <div
-                      className="plan-row"
-                      key={`${row.keys?.[0] ?? "query"}-${index}`}
-                    >
-                      <span>
-                        <strong>{row.keys?.[0] ?? "Без названия"}</strong>
-                        <small>
-                          {row.clicks ?? 0} кликов · {row.impressions ?? 0}{" "}
-                          показов
-                        </small>
-                      </span>
-                      <em>{((row.ctr ?? 0) * 100).toFixed(2)}%</em>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </section>
-          )}
-
-        {active && ["OWNER", "ADMIN"].includes(active.role) && (
-          <section className="panel connections-panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">MCP</p>
-                <h2>Доступ для AI-клиента и Гермеса</h2>
-              </div>
-              <span className="muted">
-                Токен показывается один раз. Ограничьте его только нужными
-                кабинетами.
-              </span>
-            </div>
-            <form onSubmit={createServiceToken} className="token-form">
-              <label>
-                Название
-                <input
-                  name="name"
-                  required
-                  minLength={2}
-                  placeholder="Например, Гермес"
-                />
-              </label>
-              <label>
-                Срок действия
-                <select name="expires_in_days" defaultValue="90">
-                  <option value="30">30 дней</option>
-                  <option value="90">90 дней</option>
-                  <option value="365">1 год</option>
-                </select>
-              </label>
-              <fieldset className="account-picker">
-                <legend>Разрешённые рекламные кабинеты</legend>
-                {connections.flatMap((connection) =>
-                  connection.accounts
-                    .filter((account) => account.enabled)
-                    .map((account) => (
-                      <label key={account.id} className="check-row">
-                        <input
-                          type="checkbox"
-                          name="account_ids"
-                          value={account.id}
-                        />
-                        <span>{account.displayName}</span>
-                        <small>{connection.provider}</small>
-                      </label>
-                    )),
-                )}
-                {!connections.some((connection) =>
-                  connection.accounts.some((account) => account.enabled),
-                ) && (
-                  <small className="muted">
-                    Сначала подключите рекламный кабинет.
-                  </small>
-                )}
-              </fieldset>
-              <label className="check-row">
-                <input type="checkbox" name="write" />
-                <span>Разрешить подтверждаемые write-запросы</span>
-                <small>
-                  Фактические изменения всё ещё блокируются preview-only policy.
-                </small>
-              </label>
-              <button className="primary-button" type="submit">
-                Создать токен
-              </button>
-            </form>
-            {createdServiceToken && (
-              <div className="one-time-secret" role="status">
-                <strong>Сохраните токен сейчас</strong>
-                <textarea readOnly value={createdServiceToken} rows={3} />
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => setCreatedServiceToken("")}
-                >
-                  Скрыть
-                </button>
-              </div>
-            )}
-            <div className="provider-details">
-              {serviceTokens.map((token) => (
-                <div className="member-row" key={token.id}>
-                  <span>
-                    <strong>{token.name}</strong>
-                    <small>
-                      {token.tokenPrefix}… · {token.scopes.join(", ")} ·
-                      кабинетов: {token.accountIds.length || "все workspace"}
-                    </small>
-                  </span>
-                  {token.revokedAt ? (
-                    <em>Отозван</em>
-                  ) : (
-                    <div className="provider-actions">
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => void rotateServiceToken(token.id)}
-                      >
-                        Ротировать
-                      </button>
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => void revokeServiceToken(token.id)}
-                      >
-                        Отозвать
-                      </button>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {active && ["OWNER", "ADMIN"].includes(active.role) && (
-          <section className="panel connections-panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Billing</p>
-                <h2>Тариф и использование</h2>
-              </div>
-              <span className="muted">
-                Платёжный провайдер подключается отдельным adapter и пока не
-                выбран.
-              </span>
-            </div>
-            <div className="billing-grid">
-              <div className="billing-summary">
-                <small>Текущий тариф</small>
-                <strong>
-                  {subscription?.plan.name ?? "Тариф ещё не назначен"}
-                </strong>
-                <span>{subscription?.status ?? "Без активной подписки"}</span>
-              </div>
-              <div className="billing-summary">
-                <small>MCP-запросы за период</small>
-                <strong>
-                  {usage.find((item) => item.metricKey === "mcp.requests")
-                    ?.quantity ?? "0"}
-                </strong>
-                <span>Учитываются только успешные вызовы инструментов</span>
-              </div>
-              <div className="billing-summary">
-                <small>Индивидуальные права</small>
-                <strong>{entitlements.length}</strong>
-                <span>
-                  {entitlements.map((item) => item.featureKey).join(", ") ||
-                    "Нет"}
-                </span>
-              </div>
-            </div>
-            <div className="plan-list">
-              {plans.map((plan) => (
-                <div className="plan-row" key={plan.id}>
-                  <span>
-                    <strong>{plan.name}</strong>
-                    <small>{plan.description}</small>
-                  </span>
-                  <em>{plan.key}</em>
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
-
-        {active && ["OWNER", "ADMIN"].includes(active.role) && (
-          <section className="panel connections-panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Analytics</p>
-                <h2>Продуктовая аналитика workspace</h2>
-              </div>
-              <span className="muted">
-                Только агрегированные события без токенов, credentials и
-                рекламных идентификаторов.
-              </span>
-            </div>
-            <div className="billing-grid">
-              <div className="billing-summary">
-                <small>События за 30 дней</small>
-                <strong>{analyticsSummary?.total_events ?? "—"}</strong>
-                <span>Запуски функций и рабочие действия</span>
-              </div>
-              <div className="billing-summary">
-                <small>Активные пользователи</small>
-                <strong>{analyticsSummary?.active_users ?? "—"}</strong>
-                <span>Уникальные пользователи workspace</span>
-              </div>
-              <div className="billing-summary">
-                <small>Период</small>
-                <strong>{analyticsSummary ? "30 дней" : "Нет данных"}</strong>
-                <span>
-                  {analyticsSummary
-                    ? `С ${new Date(analyticsSummary.period.since).toLocaleDateString("ru-RU")}`
-                    : "Сводка будет доступна после первого события"}
-                </span>
-              </div>
-            </div>
-            {analyticsSummary?.events.length ? (
-              <div className="plan-list">
-                {analyticsSummary.events.map((event) => (
-                  <div className="plan-row" key={event.name}>
-                    <span>
-                      <strong>{event.name}</strong>
-                      <small>Событие workspace</small>
-                    </span>
-                    <em>{event.count}</em>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="muted">Событий за выбранный период пока нет.</p>
-            )}
-          </section>
-        )}
-
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Meta onboarding</p>
-              <h2>Подключение Meta с помощью специалиста</h2>
-            </div>
-            <span className="muted">
-              Не передавайте пароли, токены и секреты. Специалист поможет пройти
-              официальную авторизацию Meta.
-            </span>
-          </div>
-          <form onSubmit={requestManualMeta} className="invite-form">
-            <input
-              name="company_name"
-              required
-              placeholder="Название компании"
-            />
-            <input
-              name="ad_account_id"
-              required
-              placeholder="ID рекламного кабинета, например 123456789"
-            />
-            <input
-              name="business_id"
-              placeholder="Business ID (необязательно)"
-            />
-            <input name="page_id" placeholder="Page ID (необязательно)" />
-            <input
-              name="instagram_username"
-              placeholder="Instagram @username (необязательно)"
-            />
-            <select name="contact_preference" defaultValue="email">
-              <option value="email">Связаться по email</option>
-              <option value="telegram">Связаться в Telegram</option>
-              <option value="whatsapp">Связаться в WhatsApp</option>
-            </select>
-            <textarea
-              name="client_note"
-              maxLength={2000}
-              placeholder="Комментарий для специалиста, без паролей и токенов"
-            />
-            <button className="primary-button" type="submit">
-              Оставить заявку
-            </button>
-          </form>
-          {manualRequests.length > 0 && (
-            <div className="provider-details">
-              <strong>Ваши заявки</strong>
-              {manualRequests
-                .filter((item) => item.workspace_id === active?.id)
-                .map((item) => (
-                  <div className="member-row" key={item.id}>
-                    <span>
-                      <strong>{item.company_name}</strong>
-                      <small>
-                        Meta · {item.meta_ad_account_id} ·{" "}
-                        {item.created_at.slice(0, 10)}
-                      </small>
-                    </span>
-                    <em>{item.status}</em>
-                  </div>
-                ))}
-            </div>
-          )}
-          {adminManualRequests.filter(
-            (item) => supportAccess || item.workspace_id === active?.id,
-          ).length > 0 && (
-            <div className="provider-details">
-              <strong>
-                {supportAccess ? "Очередь поддержки" : "Заявки workspace"}
-              </strong>
-              {adminManualRequests
-                .filter(
-                  (item) => supportAccess || item.workspace_id === active?.id,
-                )
-                .map((item) => (
-                  <div className="provider-details" key={item.id}>
-                    <div className="member-row">
-                      <span>
-                        <strong>{item.company_name}</strong>
-                        <small>
-                          {item.meta_ad_account_id} · {item.status}
-                        </small>
-                      </span>
-                      <div className="provider-actions">
-                        <button
-                          className="primary-button"
-                          type="button"
-                          disabled={item.status.toUpperCase() === "COMPLETED"}
-                          onClick={() => void startManualMeta(item.id)}
-                        >
-                          Войти в Meta и подключить
-                        </button>
-                        {item.status.toUpperCase() !== "COMPLETED" && (
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => void loadPendingMeta(item.id)}
-                          >
-                            Загрузить найденные кабинеты
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                    {pendingMetaAccounts[item.id]?.map((account) => (
-                      <div className="account-row" key={account.id}>
-                        <span>
-                          <strong>{account.name}</strong>
-                          <small>
-                            {account.external_account_id} ·{" "}
-                            {account.status ?? "неизвестно"}
-                          </small>
-                        </span>
-                        <button
-                          className="primary-button"
-                          type="button"
-                          disabled={account.enabled}
-                          onClick={() =>
-                            void selectManualMeta(item.id, account.id)
-                          }
-                        >
-                          {account.enabled
-                            ? "Уже добавлен"
-                            : "Добавить кабинет"}
-                        </button>
-                      </div>
-                    ))}
-                    {pendingMetaAccounts[item.id]?.length === 0 && (
-                      <small className="muted">
-                        Кабинеты не найдены. Проверьте доступ пользователя в
-                        Meta.
-                      </small>
-                    )}
-                  </div>
-                ))}
-            </div>
-          )}
-        </section>
-
-        <section className="panel">
-          <div className="section-heading">
-            <div>
-              <p className="eyebrow">Site analysis</p>
-              <h2>Анализ сайта</h2>
-            </div>
-            <span className="muted">
-              Проверяется только публичный HTTP(S)-адрес
-            </span>
-          </div>
-          <form onSubmit={analyzeSite} className="inline-form">
-            <input
-              value={siteUrl}
-              onChange={(event) => setSiteUrl(event.target.value)}
-              type="url"
-              required
-              placeholder="https://example.com"
-            />
-            <button className="primary-button" type="submit">
-              Проверить
-            </button>
-          </form>
-          {siteResult !== null && (
-            <pre>{JSON.stringify(siteResult, null, 2)}</pre>
-          )}
-        </section>
-
-        {readResult !== null && (
-          <section className="panel">
-            <div className="section-heading">
-              <div>
-                <p className="eyebrow">Read-only smoke</p>
-                <h2>Последний ответ провайдера</h2>
-              </div>
-            </div>
-            <pre>{JSON.stringify(readResult, null, 2)}</pre>
-          </section>
-        )}
-        {error && <p className="error">{error}</p>}
-      </main>
-    );
-  }
-
-  const tabs: Array<{ id: DashboardSection; label: string }> = [
+  const nav: Array<{ id?: Section; label: string; disabled?: boolean }> = [
     { id: "overview", label: "Обзор" },
     { id: "connections", label: "Подключения" },
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
-    { id: "workspace", label: "Workspace" },
-    ...(active && ["OWNER", "ADMIN"].includes(active.role)
-      ? [
-          { id: "billing" as const, label: "Тариф и использование" },
-          { id: "analytics" as const, label: "Аналитика" },
-        ]
-      : []),
-    { id: "profile", label: "Профиль" },
+    { label: "Тарифы", disabled: true },
   ];
-  const enabledAccounts = connections.flatMap((connection) =>
-    connection.accounts
-      .filter((account) => account.enabled)
-      .map((account) => ({ account, provider: connection.provider })),
-  );
-  const connectedCount = connections.filter((connection) =>
-    ["CONNECTED", "DEGRADED"].includes(connection.status),
-  ).length;
-  const initial = profile?.name?.trim().charAt(0).toUpperCase() ?? "H";
+  const allProviderIds = [
+    "GOOGLE_ADS",
+    "META_ADS",
+    "YANDEX_DIRECT",
+    "TIKTOK_ADS",
+    "GOOGLE_SEARCH_CONSOLE",
+  ];
 
   return (
     <main className="dashboard-shell">
@@ -1577,32 +596,27 @@ export default function DashboardPage() {
           <a
             className="brand-link"
             href="/dashboard"
-            aria-label="HolyMedia MCP"
+            aria-label="HolyMedia MCP — обзор"
           >
             <span className="logo-dot" aria-hidden="true" />
             <span>HolyMedia MCP</span>
           </a>
           <div className="dashboard-actions">
-            <div className="workspace-switcher">
-              <label htmlFor="active-workspace">Workspace</label>
-              <select
-                id="active-workspace"
-                value={active?.id ?? ""}
-                onChange={(event) => {
-                  setActive(
-                    workspaces.find((item) => item.id === event.target.value) ??
-                      null,
-                  );
-                  setSection("overview");
-                }}
-              >
-                {workspaces.map((item) => (
-                  <option key={item.id} value={item.id}>
-                    {item.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <button
+              className="profile-link"
+              type="button"
+              aria-label={`Открыть профиль${profile?.email ? `: ${profile.email}` : ""}`}
+              onClick={() => setSection("profile")}
+            >
+              {avatar ? (
+                <img src={avatar} alt="" />
+              ) : (
+                <span aria-hidden="true">
+                  {profile?.name?.charAt(0).toUpperCase() || "H"}
+                </span>
+              )}
+              <strong>{profile?.email ?? "Профиль"}</strong>
+            </button>
             <button
               className="ghost-button"
               type="button"
@@ -1612,34 +626,54 @@ export default function DashboardPage() {
             </button>
           </div>
         </div>
-        <div className="dashboard-header-copy">
-          <p className="eyebrow">Рабочее пространство</p>
-          <h1>{active?.name ?? "HolyMedia MCP"}</h1>
-        </div>
-        <nav className="tabs-bar" aria-label="Разделы кабинета">
-          {tabs.map((tab) => (
+        <nav className="tabs-bar" aria-label="Основные разделы">
+          {nav.map((item) => (
             <button
-              key={tab.id}
-              className={section === tab.id ? "nav-tab is-active" : "nav-tab"}
+              key={item.label}
+              className={item.id === section ? "nav-tab is-active" : "nav-tab"}
               type="button"
-              onClick={() => setSection(tab.id)}
+              disabled={item.disabled}
+              title={item.disabled ? "Скоро" : undefined}
+              onClick={() => item.id && setSection(item.id)}
             >
-              {tab.label}
+              {item.label}
+              {item.disabled && <small>Скоро</small>}
             </button>
           ))}
         </nav>
       </header>
 
       <div className="dashboard-main">
+        {(message || error) && (
+          <div
+            className={
+              error ? "notice notice--error" : "notice notice--success"
+            }
+            role={error ? "alert" : "status"}
+          >
+            <span>{error || message}</span>
+            <button
+              type="button"
+              aria-label="Закрыть сообщение"
+              onClick={() => {
+                setError("");
+                setMessage("");
+              }}
+            >
+              ×
+            </button>
+          </div>
+        )}
+
         {section === "overview" && (
           <section className="section" aria-labelledby="overview-title">
             <div className="overview-hero">
               <div className="overview-lead">
-                <p className="eyebrow">HolyMedia MCP</p>
-                <h2 id="overview-title">Вся ваша реклама — в одном AI-чате</h2>
+                <p className="eyebrow">Личный кабинет</p>
+                <h1 id="overview-title">Реклама в вашем AI-чате</h1>
                 <p>
-                  Подключите рекламные кабинеты, выберите нужные аккаунты и
-                  получите понятный адрес для Claude, ChatGPT или Codex.
+                  Подключите рекламные платформы, выберите кабинеты и задавайте
+                  вопросы о кампаниях обычными словами.
                 </p>
                 <div className="overview-actions">
                   <button
@@ -1647,105 +681,59 @@ export default function DashboardPage() {
                     type="button"
                     onClick={() => setSection("connections")}
                   >
-                    Подключить кабинет
+                    Подключить платформу
                   </button>
                   <button
                     className="secondary-button"
                     type="button"
                     onClick={() => setSection("mcp")}
                   >
-                    Настроить AI-клиент
+                    Подключить AI-клиент
                   </button>
                 </div>
               </div>
-              <div className="overview-stats" aria-label="Статус workspace">
+              <div className="overview-stats">
                 <div className="stat-card">
-                  <span>Подключения</span>
+                  <span>Платформы</span>
                   <strong>{connectedCount}</strong>
-                  <small>рабочих платформ</small>
+                  <small>подключено</small>
                 </div>
                 <div className="stat-card">
                   <span>Кабинеты</span>
                   <strong>{enabledAccounts.length}</strong>
-                  <small>выбрано для AI</small>
+                  <small>выбрано</small>
                 </div>
                 <div className="stat-card">
-                  <span>Роль</span>
-                  <strong>{active?.role ?? "—"}</strong>
-                  <small>в текущем workspace</small>
+                  <span>AI-клиент</span>
+                  <strong>
+                    {tokens.some((token) => !token.revokedAt) ? "Готов" : "—"}
+                  </strong>
+                  <small>ключ доступа</small>
                 </div>
                 <div className="stat-card">
-                  <span>Доступ MCP</span>
-                  <strong>{serviceTokens.length ? "Есть" : "—"}</strong>
-                  <small>личный ключ подключения</small>
+                  <span>Отчёты</span>
+                  <strong>DOCX</strong>
+                  <small>за выбранный период</small>
                 </div>
               </div>
             </div>
-            <div className="onboarding-steps" aria-label="Первые шаги">
-              <article className="onboarding-step">
-                <span className="onboarding-step__num">01</span>
+            <ol className="onboarding-steps" aria-label="Как начать">
+              <li className="onboarding-step">
+                <span className="onboarding-step__num">1</span>
                 <strong>Подключите платформу</strong>
-                <p>
-                  Официальный вход провайдера, без передачи пароля HolyMedia.
-                </p>
-              </article>
-              <article className="onboarding-step">
-                <span className="onboarding-step__num">02</span>
+                <p>Войдите через официальный OAuth.</p>
+              </li>
+              <li className="onboarding-step">
+                <span className="onboarding-step__num">2</span>
                 <strong>Выберите кабинеты</strong>
-                <p>Отметьте аккаунты, которые можно показывать AI-клиенту.</p>
-              </article>
-              <article className="onboarding-step">
-                <span className="onboarding-step__num">03</span>
-                <strong>Подключите MCP</strong>
-                <p>
-                  Скопируйте URL и одноразовый ключ в Claude, ChatGPT или Codex.
-                </p>
-              </article>
-            </div>
-            <div className="panel">
-              <div className="section-heading">
-                <div>
-                  <p className="eyebrow">Состояние платформ</p>
-                  <h2>Ваши подключения</h2>
-                </div>
-                <button
-                  className="ghost-button"
-                  type="button"
-                  onClick={() => setSection("connections")}
-                >
-                  Открыть все подключения →
-                </button>
-              </div>
-              <div className="provider-list">
-                {connections.length === 0 ? (
-                  <p className="muted">
-                    Пока нет подключённых платформ. Начните с Meta, Google,
-                    TikTok или Яндекс Директ.
-                  </p>
-                ) : (
-                  connections.map((connection) => (
-                    <div className="provider-row" key={connection.id}>
-                      <div>
-                        <strong>
-                          {connection.displayName ?? connection.provider}
-                        </strong>
-                        <small>
-                          {connection.accounts.length} кабинетов ·{" "}
-                          {connection.status}
-                        </small>
-                      </div>
-                      <span
-                        className={`status-badge ${connection.status === "CONNECTED" ? "ok" : "warn"}`}
-                      >
-                        {connection.status === "CONNECTED"
-                          ? "Подключено"
-                          : connection.status}
-                      </span>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
+                <p>Отметьте аккаунты, с которыми хотите работать.</p>
+              </li>
+              <li className="onboarding-step">
+                <span className="onboarding-step__num">3</span>
+                <strong>Добавьте AI-клиент</strong>
+                <p>Скопируйте MCP URL и следуйте инструкции.</p>
+              </li>
+            </ol>
           </section>
         )}
 
@@ -1753,649 +741,522 @@ export default function DashboardPage() {
           <section className="section" aria-labelledby="connections-title">
             <div className="section-head">
               <div>
-                <p className="eyebrow">Providers</p>
-                <h2 id="connections-title">Подключения рекламных платформ</h2>
+                <p className="eyebrow">Рекламные платформы</p>
+                <h1 id="connections-title">Подключения</h1>
                 <p className="section-head__sub">
-                  Подключите платформу, обновите список кабинетов и выберите
-                  доступные аккаунты.
+                  Подключите платформу и выберите кабинеты, доступные в
+                  AI-клиенте.
                 </p>
               </div>
-              <span className="badge badge--info">
-                Только ваши workspace-данные
-              </span>
             </div>
-            <section className="panel connections-panel">
-              <div className="provider-list">
-                {providers.map((provider) => {
-                  const connection = connections.find(
-                    (item) => item.provider === provider.id,
-                  );
-                  return (
-                    <div className="provider-row" key={provider.id}>
+            <div className="connection-list">
+              {allProviderIds.map((providerId) => {
+                const definition = providers.find(
+                  (item) => item.id === providerId,
+                );
+                const connection = connections.find(
+                  (item) => item.provider === providerId,
+                );
+                const copyText = providerCopy(providerId);
+                const comingSoon = providerId === "GOOGLE_SEARCH_CONSOLE";
+                const status = connectionStatus(connection?.status ?? "");
+                const selected = new Set(
+                  connection ? (drafts[connection.id] ?? []) : [],
+                );
+                return (
+                  <article className="connection-card" key={providerId}>
+                    <div className="connection-card__head">
+                      <span
+                        className={`provider-mark provider-mark--${providerId.toLowerCase()}`}
+                        aria-hidden="true"
+                      >
+                        {copyText.short}
+                      </span>
                       <div>
-                        <strong>{provider.displayName}</strong>
-                        <small>
-                          {connection
-                            ? `${connection.accounts.length} кабинетов · ${connection.status}`
-                            : provider.status}
-                        </small>
+                        <h2>{copyText.name}</h2>
+                        <p>{copyText.description}</p>
                       </div>
-                      <div className="provider-actions">
-                        <button
-                          className="primary-button"
-                          type="button"
-                          disabled={!provider.oauth}
-                          onClick={() => void startProvider(provider.id)}
-                        >
-                          {connection ? "Переподключить" : "Подключить"}
-                        </button>
-                        {connection && (
+                      {comingSoon ? (
+                        <span className="status-badge info">В разработке</span>
+                      ) : (
+                        <span className={`status-badge ${status.tone}`}>
+                          {status.label}
+                        </span>
+                      )}
+                    </div>
+                    {comingSoon ? (
+                      <p className="connection-note">
+                        Подключение появится позже.
+                      </p>
+                    ) : connection ? (
+                      <>
+                        <div className="connection-actions">
                           <button
-                            className="ghost-button"
+                            className="secondary-button btn--small"
                             type="button"
-                            onClick={() => void disconnect(connection.id)}
-                          >
-                            Отключить
-                          </button>
-                        )}
-                      </div>
-                      {connection && (
-                        <div className="provider-details">
-                          <small>
-                            Разрешения: {connection.grantedScopes.length}/
-                            {connection.requestedScopes.length}
-                            {connection.missingScopes.length
-                              ? ` · не хватает: ${connection.missingScopes.join(", ")}`
-                              : ""}
-                          </small>
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => void discover(connection.id)}
+                            disabled={busy}
+                            onClick={() => void discover(connection)}
                           >
                             Обновить кабинеты
                           </button>
-                          {connection.accounts.map((account) => (
-                            <div className="account-row" key={account.id}>
-                              <input
-                                type="checkbox"
-                                checked={account.enabled}
-                                onChange={(event) =>
-                                  void toggleAccount(
-                                    account.id,
-                                    event.target.checked,
-                                  )
-                                }
-                                aria-label={`Выбрать ${account.displayName}`}
-                              />
-                              <span>
-                                <strong>{account.displayName}</strong>
-                              </span>
-                              <small>
-                                {account.externalAccountId} ·{" "}
-                                {account.status ?? "статус неизвестен"}
-                              </small>
+                          <button
+                            className="ghost-button btn--small"
+                            type="button"
+                            onClick={() => void startProvider(providerId)}
+                          >
+                            Подключить заново
+                          </button>
+                          <button
+                            className="danger-link"
+                            type="button"
+                            onClick={() =>
+                              setConfirm({
+                                title: `Отключить ${copyText.name}?`,
+                                description:
+                                  "Кабинеты этой платформы перестанут быть доступны в AI-клиенте.",
+                                confirmLabel: "Отключить",
+                                run: () => disconnect(connection),
+                              })
+                            }
+                          >
+                            Отключить
+                          </button>
+                        </div>
+                        <div className="account-selector">
+                          <div className="account-selector__head">
+                            <div>
+                              <h3>Выберите кабинеты</h3>
+                              <p>
+                                {selected.size} из {connection.accounts.length}
+                              </p>
+                            </div>
+                            {connection.accounts.length > 0 && (
+                              <div className="bulk-actions">
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDrafts((current) => ({
+                                      ...current,
+                                      [connection.id]: connection.accounts.map(
+                                        (account) => account.id,
+                                      ),
+                                    }))
+                                  }
+                                >
+                                  Выбрать все
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() =>
+                                    setDrafts((current) => ({
+                                      ...current,
+                                      [connection.id]: [],
+                                    }))
+                                  }
+                                >
+                                  Снять все
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                          {connection.accounts.length ? (
+                            <div className="account-list">
+                              {connection.accounts.map((account) => (
+                                <label className="account-row" key={account.id}>
+                                  <input
+                                    type="checkbox"
+                                    checked={selected.has(account.id)}
+                                    onChange={() =>
+                                      toggleDraft(connection.id, account.id)
+                                    }
+                                  />
+                                  <span>
+                                    <strong>{account.displayName}</strong>
+                                    <small>
+                                      {account.status === "ENABLED" ||
+                                      !account.status
+                                        ? "Доступен"
+                                        : "Проверьте статус в платформе"}
+                                    </small>
+                                  </span>
+                                </label>
+                              ))}
+                            </div>
+                          ) : (
+                            <div className="empty-state">
+                              <p>Кабинеты пока не найдены.</p>
                               <button
-                                className="ghost-button"
+                                className="secondary-button"
                                 type="button"
-                                disabled={!account.enabled}
-                                onClick={() =>
-                                  void readSmoke(connection, account)
-                                }
+                                onClick={() => void discover(connection)}
                               >
-                                Проверить чтение
-                              </button>
-                              <button
-                                className="ghost-button"
-                                type="button"
-                                disabled={!account.enabled}
-                                onClick={() => void downloadReport(account)}
-                              >
-                                DOCX-отчёт
+                                Найти кабинеты
                               </button>
                             </div>
-                          ))}
+                          )}
+                          {connection.accounts.length > 0 && (
+                            <div className="account-selector__save">
+                              <button
+                                className="primary-button"
+                                type="button"
+                                disabled={savingAccounts === connection.id}
+                                onClick={() => void saveAccounts(connection)}
+                              >
+                                {savingAccounts === connection.id
+                                  ? "Сохраняем…"
+                                  : "Сохранить выбор"}
+                              </button>
+                            </div>
+                          )}
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-            {active && canManageMembers && (
-              <section className="panel">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">Meta onboarding</p>
-                    <h2>Заявка на помощь специалиста</h2>
-                  </div>
-                  <span className="muted">
-                    Дополнительный сценарий, обычный OAuth остаётся доступен.
-                  </span>
-                </div>
-                <form
-                  onSubmit={requestManualMeta}
-                  className="site-analysis-form"
-                >
-                  <label>
-                    Компания
-                    <input
-                      name="company_name"
-                      required
-                      placeholder="Название компании"
-                    />
-                  </label>
-                  <label>
-                    Рекламный кабинет
-                    <input
-                      name="ad_account_id"
-                      required
-                      placeholder="ID кабинета"
-                    />
-                  </label>
-                  <label>
-                    Business ID
-                    <input name="business_id" placeholder="Необязательно" />
-                  </label>
-                  <label>
-                    Page ID
-                    <input name="page_id" placeholder="Необязательно" />
-                  </label>
-                  <label>
-                    Instagram
-                    <input name="instagram_username" placeholder="@username" />
-                  </label>
-                  <label>
-                    Как связаться
-                    <select name="contact_preference" defaultValue="telegram">
-                      <option value="telegram">Telegram</option>
-                      <option value="email">Email</option>
-                    </select>
-                  </label>
-                  <label className="full-field">
-                    Комментарий
-                    <textarea
-                      name="client_note"
-                      rows={3}
-                      placeholder="Что нужно проверить специалисту?"
-                    />
-                  </label>
-                  <button className="primary-button" type="submit">
-                    Отправить заявку
-                  </button>
-                </form>
-                {manualRequests
-                  .filter((item) => item.workspace_id === active.id)
-                  .map((item) => (
-                    <div className="member-row" key={item.id}>
-                      <span>
-                        <strong>{item.company_name}</strong>
-                        <small>
-                          {item.meta_ad_account_id} · {item.status}
-                        </small>
-                      </span>
-                      <em>{item.contact_preference}</em>
-                    </div>
-                  ))}
-              </section>
-            )}
-            {readResult !== null && (
-              <section className="panel">
-                <div className="section-heading">
-                  <div>
-                    <p className="eyebrow">Read-only</p>
-                    <h2>Последний ответ провайдера</h2>
-                  </div>
-                </div>
-                <pre>{JSON.stringify(readResult, null, 2)}</pre>
-              </section>
-            )}
+                      </>
+                    ) : (
+                      <div className="connection-empty">
+                        <p>Платформа ещё не подключена.</p>
+                        <button
+                          className="primary-button"
+                          type="button"
+                          disabled={busy || definition?.status === "DISABLED"}
+                          onClick={() => void startProvider(providerId)}
+                        >
+                          Подключить {copyText.name}
+                        </button>
+                      </div>
+                    )}
+                  </article>
+                );
+              })}
+            </div>
+            <details className="support-details">
+              <summary>Нужна помощь с подключением Meta?</summary>
+              <p>
+                Напишите на{" "}
+                <a href="mailto:mcp@holymedia.kz">mcp@holymedia.kz</a>.
+                Специалист поможет, не получая лишнего доступа к вашему
+                аккаунту.
+              </p>
+            </details>
           </section>
         )}
 
-        {section === "mcp" &&
-          active &&
-          ["OWNER", "ADMIN"].includes(active.role) && (
-            <section className="section" aria-labelledby="mcp-title">
-              <div className="section-head">
-                <div>
-                  <p className="eyebrow">AI-клиент</p>
-                  <h2 id="mcp-title">Подключите HolyMedia MCP</h2>
-                  <p className="section-head__sub">
-                    URL и ключ доступа нужны для Claude, ChatGPT, Codex и
-                    Hermes. Ключ показывается только один раз.
-                  </p>
-                </div>
+        {section === "mcp" && (
+          <section className="section" aria-labelledby="mcp-title">
+            <div className="section-head">
+              <div>
+                <p className="eyebrow">AI-клиент</p>
+                <h1 id="mcp-title">Подключите HolyMedia MCP</h1>
+                <p className="section-head__sub">
+                  Скопируйте адрес, создайте личный ключ и выберите инструкцию.
+                </p>
               </div>
-              <section className="panel mcp-card">
-                <div className="mcp-url-row">
-                  <code className="mcp-url">https://mcp.holymedia.kz/mcp</code>
-                  <button
-                    className="secondary-button"
-                    type="button"
-                    onClick={() =>
-                      void navigator.clipboard?.writeText(
-                        "https://mcp.holymedia.kz/mcp",
-                      )
-                    }
-                  >
-                    Скопировать URL
-                  </button>
-                </div>
-                <ol className="mcp-steps">
-                  <li>
-                    <div>
-                      <strong>Выберите кабинеты</strong>
-                      <br />
-                      Сначала отметьте доступные аккаунты в разделе
-                      «Подключения».
-                    </div>
-                  </li>
-                  <li>
-                    <div>
-                      <strong>Создайте service token</strong>
-                      <br />
-                      Ограничьте ключ конкретными аккаунтами и сроком действия.
-                    </div>
-                  </li>
-                  <li>
-                    <div>
-                      <strong>Добавьте сервер в AI-клиент</strong>
-                      <br />
-                      Используйте URL выше и сохраните одноразовый ключ в
-                      менеджере секретов.
-                    </div>
-                  </li>
-                </ol>
-                <form onSubmit={createServiceToken} className="token-form">
-                  <label>
-                    Название ключа
-                    <input
-                      name="name"
-                      required
-                      minLength={2}
-                      placeholder="Например, Claude рабочий"
-                    />
-                  </label>
-                  <label>
-                    Срок действия
-                    <select name="expires_in_days" defaultValue="90">
-                      <option value="30">30 дней</option>
-                      <option value="90">90 дней</option>
-                      <option value="365">1 год</option>
-                    </select>
-                  </label>
-                  <fieldset className="account-picker">
-                    <legend>Разрешённые кабинеты</legend>
-                    {enabledAccounts.length ? (
-                      enabledAccounts.map(({ account, provider }) => (
-                        <label key={account.id} className="check-row">
-                          <input
-                            type="checkbox"
-                            name="account_ids"
-                            value={account.id}
-                          />
-                          <span>{account.displayName}</span>
-                          <small>{provider}</small>
-                        </label>
-                      ))
-                    ) : (
-                      <small>Сначала выберите рекламный кабинет.</small>
-                    )}
-                  </fieldset>
-                  <label className="check-row">
-                    <input type="checkbox" name="write" />
-                    <span>Разрешить подтверждённые write-запросы</span>
-                    <small>
-                      Изменения всё равно проходят через policy и confirmation.
-                    </small>
-                  </label>
-                  <button className="primary-button" type="submit">
-                    Создать ключ
-                  </button>
-                </form>
-                {createdServiceToken && (
-                  <div className="one-time-secret" role="status">
-                    <strong>Сохраните ключ сейчас</strong>
-                    <textarea readOnly value={createdServiceToken} rows={3} />
+            </div>
+            <section className="mcp-setup">
+              <div className="mcp-step">
+                <span>1</span>
+                <div>
+                  <h2>Скопируйте MCP URL</h2>
+                  <div className="copy-row">
+                    <code>{MCP_URL}</code>
                     <button
-                      className="ghost-button"
+                      className="secondary-button btn--small"
                       type="button"
-                      onClick={() => setCreatedServiceToken("")}
+                      onClick={() => void copy(MCP_URL, "MCP URL скопирован.")}
                     >
-                      Скрыть ключ
+                      Скопировать
                     </button>
                   </div>
-                )}
-                <div className="provider-details">
-                  {serviceTokens.map((token) => (
-                    <div className="member-row" key={token.id}>
-                      <span>
-                        <strong>{token.name}</strong>
-                        <small>
-                          {token.tokenPrefix}… · {token.scopes.join(", ")} ·
-                          кабинетов:{" "}
-                          {token.accountIds.length || "весь workspace"}
-                        </small>
-                      </span>
-                      {token.revokedAt ? (
-                        <em>Отозван</em>
-                      ) : (
-                        <div className="provider-actions">
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => void rotateServiceToken(token.id)}
-                          >
-                            Ротировать
-                          </button>
-                          <button
-                            className="ghost-button"
-                            type="button"
-                            onClick={() => void revokeServiceToken(token.id)}
-                          >
-                            Отозвать
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
                 </div>
-              </section>
+              </div>
+              <div className="mcp-step">
+                <span>2</span>
+                <div className="mcp-step__body">
+                  <h2>Создайте ключ доступа</h2>
+                  {canManage ? (
+                    <form className="token-form" onSubmit={createToken}>
+                      <div className="form-row">
+                        <label>
+                          Название
+                          <input
+                            name="name"
+                            required
+                            minLength={2}
+                            placeholder="Например, Codex"
+                          />
+                        </label>
+                        <label>
+                          Срок действия
+                          <select name="expires_in_days" defaultValue="90">
+                            <option value="30">30 дней</option>
+                            <option value="90">90 дней</option>
+                            <option value="365">1 год</option>
+                          </select>
+                        </label>
+                      </div>
+                      <fieldset className="account-picker">
+                        <legend>Кабинеты</legend>
+                        {enabledAccounts.length ? (
+                          enabledAccounts.map(({ account, connection }) => (
+                            <label className="check-row" key={account.id}>
+                              <input
+                                type="checkbox"
+                                name="account_ids"
+                                value={account.id}
+                              />
+                              <span>{account.displayName}</span>
+                              <small>
+                                {providerCopy(connection.provider).name}
+                              </small>
+                            </label>
+                          ))
+                        ) : (
+                          <p className="empty-inline">
+                            Сначала выберите кабинеты в разделе «Подключения».
+                          </p>
+                        )}
+                      </fieldset>
+                      <details className="advanced-settings">
+                        <summary>Дополнительные настройки</summary>
+                        <label className="check-row">
+                          <input type="checkbox" name="write" />
+                          <span>Разрешить подтверждённые изменения</span>
+                          <small>
+                            Любое изменение потребует предварительного просмотра
+                            и подтверждения.
+                          </small>
+                        </label>
+                      </details>
+                      <button
+                        className="primary-button"
+                        type="submit"
+                        disabled={busy || !enabledAccounts.length}
+                      >
+                        Создать ключ
+                      </button>
+                    </form>
+                  ) : (
+                    <div className="empty-state">
+                      <p>
+                        Создать ключ может владелец аккаунта. Попросите его
+                        выдать вам доступ.
+                      </p>
+                    </div>
+                  )}
+                  {createdToken && (
+                    <div className="one-time-secret" role="status">
+                      <strong>Сохраните ключ сейчас</strong>
+                      <p>
+                        После закрытия страницы полный ключ больше не
+                        показывается.
+                      </p>
+                      <div className="copy-row">
+                        <code>{createdToken}</code>
+                        <button
+                          className="secondary-button btn--small"
+                          type="button"
+                          onClick={() =>
+                            void copy(createdToken, "Ключ скопирован.")
+                          }
+                        >
+                          Скопировать
+                        </button>
+                      </div>
+                      <button
+                        className="ghost-button btn--small"
+                        type="button"
+                        onClick={() => setCreatedToken("")}
+                      >
+                        Скрыть
+                      </button>
+                    </div>
+                  )}
+                  {canManage && tokens.length > 0 && (
+                    <div className="token-list">
+                      <h3>Ваши ключи</h3>
+                      {tokens.map((token) => (
+                        <div className="token-row" key={token.id}>
+                          <span>
+                            <strong>{token.name}</strong>
+                            <small>
+                              {token.revokedAt
+                                ? "Отозван"
+                                : token.expiresAt
+                                  ? `Действует до ${new Date(token.expiresAt).toLocaleDateString("ru-RU")}`
+                                  : "Без срока"}
+                            </small>
+                          </span>
+                          {!token.revokedAt && (
+                            <div>
+                              <button
+                                className="ghost-button btn--small"
+                                type="button"
+                                onClick={() =>
+                                  setConfirm({
+                                    title: `Обновить ключ «${token.name}»?`,
+                                    description:
+                                      "Старое значение сразу перестанет работать.",
+                                    confirmLabel: "Обновить",
+                                    run: () => rotateToken(token),
+                                  })
+                                }
+                              >
+                                Обновить
+                              </button>
+                              <button
+                                className="danger-link"
+                                type="button"
+                                onClick={() =>
+                                  setConfirm({
+                                    title: `Отозвать ключ «${token.name}»?`,
+                                    description:
+                                      "AI-клиент с этим ключом потеряет доступ.",
+                                    confirmLabel: "Отозвать",
+                                    run: () => revokeToken(token),
+                                  })
+                                }
+                              >
+                                Отозвать
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="mcp-step">
+                <span>3</span>
+                <div className="mcp-step__body">
+                  <h2>Выберите AI-клиент</h2>
+                  <div
+                    className="client-tabs"
+                    role="tablist"
+                    aria-label="AI-клиенты"
+                  >
+                    {(["codex", "claude", "chatgpt"] as Client[]).map(
+                      (item) => (
+                        <button
+                          key={item}
+                          type="button"
+                          role="tab"
+                          aria-selected={client === item}
+                          className={client === item ? "is-active" : ""}
+                          onClick={() => setClient(item)}
+                        >
+                          {item === "codex"
+                            ? "Codex"
+                            : item === "claude"
+                              ? "Claude"
+                              : "ChatGPT"}
+                        </button>
+                      ),
+                    )}
+                  </div>
+                  <ClientInstructions client={client} />
+                </div>
+              </div>
             </section>
-          )}
+          </section>
+        )}
 
         {section === "reports" && (
           <section className="section" aria-labelledby="reports-title">
             <div className="section-head">
               <div>
-                <p className="eyebrow">HolyMedia MCP · Reports</p>
-                <h2 id="reports-title">Отчёты по рекламным кабинетам</h2>
+                <p className="eyebrow">Отчёты</p>
+                <h1 id="reports-title">Отчёт по рекламному кабинету</h1>
                 <p className="section-head__sub">
-                  Выберите кабинет и скачайте понятный отчёт за последние 7
-                  завершённых дней.
+                  Выберите кабинет и период. Мы подготовим DOCX с основными
+                  показателями и сравнением.
                 </p>
               </div>
             </div>
-            <div className="report-layout">
-              <section className="panel">
-                <form
-                  className="report-form"
-                  onSubmit={(event) => {
-                    event.preventDefault();
-                    const account = enabledAccounts.find(
-                      ({ account }) =>
-                        account.id ===
-                        new FormData(event.currentTarget).get("account_id"),
-                    )?.account;
-                    if (account) void downloadReport(account);
-                  }}
-                >
-                  <label>
-                    Рекламный кабинет
-                    <select name="account_id" required defaultValue="">
-                      {" "}
-                      <option value="" disabled>
-                        Выберите кабинет
+            <section className="panel report-panel">
+              <form className="report-form" onSubmit={downloadReport}>
+                <label>
+                  Рекламный кабинет
+                  <select name="account_id" required defaultValue="">
+                    <option value="" disabled>
+                      Выберите кабинет
+                    </option>
+                    {enabledAccounts.map(({ account, connection }) => (
+                      <option key={account.id} value={account.id}>
+                        {account.displayName} ·{" "}
+                        {providerCopy(connection.provider).name}
                       </option>
-                      {enabledAccounts.map(({ account, provider }) => (
-                        <option key={account.id} value={account.id}>
-                          {account.displayName} · {provider}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Период
-                    <select defaultValue="7">
-                      <option value="7">Последние 7 дней</option>
-                      <option value="14">Последние 14 дней</option>
-                      <option value="30">Последние 30 дней</option>
-                    </select>
-                  </label>
-                  <button className="primary-button" type="submit">
-                    Скачать DOCX
-                  </button>
-                </form>
-                <p className="muted" style={{ marginTop: 18 }}>
-                  Отчёт формируется на сервере V2 и сохраняет текущие правила
-                  workspace и billing entitlement.
-                </p>
-              </section>
-              <div className="report-preview-card">
-                <div className="report-preview-card__topline">
-                  <span>MONTHLY ADS REPORT</span>
-                  <span>01</span>
-                </div>
-                <div className="report-preview-card__body">
-                  <span>HOLYMEDIA MCP</span>
-                  <strong>Кампании, KPI, выводы</strong>
-                  <em>Понятный документ для клиента</em>
-                </div>
-                <div className="report-preview-card__footer">
-                  Spend · CPM · conversion value · сравнение периодов
-                </div>
-              </div>
-            </div>
-          </section>
-        )}
-
-        {section === "workspace" && active && (
-          <section className="section" aria-labelledby="workspace-title">
-            <div className="section-head">
-              <div>
-                <p className="eyebrow">Workspace</p>
-                <h2 id="workspace-title">Команда и рабочие пространства</h2>
-                <p className="section-head__sub">
-                  Участники видят только разрешённые workspace и рекламные
-                  аккаунты.
-                </p>
-              </div>
-            </div>
-            <div className="dashboard-grid">
-              <section className="panel">
-                <h3>Создать workspace</h3>
-                <form onSubmit={createWorkspace} className="inline-form">
-                  <input
-                    name="name"
-                    required
-                    minLength={2}
-                    placeholder="Название workspace"
-                  />
-                  <button className="primary-button" type="submit">
-                    Создать
-                  </button>
-                </form>
-                <div className="provider-details">
-                  {workspaces.map((workspace) => (
-                    <div className="member-row" key={workspace.id}>
-                      <span>
-                        <strong>{workspace.name}</strong>
-                        <small>{workspace.slug}</small>
-                      </span>
-                      <em>{workspace.role}</em>
-                    </div>
-                  ))}
-                </div>
-              </section>
-              <section className="panel">
-                <h3>Участники</h3>
-                {members.map((member) => (
-                  <div className="member-row" key={member.userId}>
-                    <span>
-                      <strong>{member.user.name}</strong>
-                      <small>{member.user.email}</small>
-                    </span>
-                    {canManageMembers && member.role !== "OWNER" ? (
-                      <select
-                        value={member.role}
-                        onChange={(event) =>
-                          void changeMemberRole(
-                            member.userId,
-                            event.target.value,
-                          )
-                        }
-                        aria-label={`Роль участника ${member.user.name}`}
-                      >
-                        <option value="VIEWER">Наблюдатель</option>
-                        <option value="MEMBER">Участник</option>
-                        <option value="ADMIN">Администратор</option>
-                      </select>
-                    ) : (
-                      <em>{member.role}</em>
-                    )}
-                    {canManageMembers && member.role !== "OWNER" && (
-                      <button
-                        className="ghost-button"
-                        type="button"
-                        onClick={() => void removeMember(member.userId)}
-                      >
-                        Удалить
-                      </button>
-                    )}
-                  </div>
-                ))}
-                <form onSubmit={invite} className="invite-form">
-                  <input
-                    name="email"
-                    type="email"
-                    required
-                    placeholder="Email участника"
-                  />
-                  <select name="role" defaultValue="MEMBER">
-                    <option value="MEMBER">Участник</option>
-                    <option value="VIEWER">Наблюдатель</option>
-                    <option value="ADMIN">Администратор</option>
+                    ))}
                   </select>
-                  <button className="primary-button" type="submit">
-                    Пригласить
+                </label>
+                <label>
+                  Период
+                  <select
+                    name="period"
+                    value={reportDays}
+                    onChange={(event) =>
+                      setReportDays(Number(event.target.value))
+                    }
+                  >
+                    <option value="7">Последние 7 дней</option>
+                    <option value="14">Последние 14 дней</option>
+                    <option value="30">Последние 30 дней</option>
+                  </select>
+                </label>
+                <button
+                  className="primary-button"
+                  type="submit"
+                  disabled={busy || !enabledAccounts.length}
+                >
+                  {busy ? "Готовим…" : "Скачать DOCX"}
+                </button>
+              </form>
+              {!enabledAccounts.length && (
+                <div className="empty-state">
+                  <p>
+                    Чтобы создать отчёт, сначала выберите рекламный кабинет.
+                  </p>
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={() => setSection("connections")}
+                  >
+                    Перейти к подключениям
                   </button>
-                </form>
-              </section>
-            </div>
+                </div>
+              )}
+            </section>
           </section>
         )}
-
-        {section === "billing" &&
-          active &&
-          ["OWNER", "ADMIN"].includes(active.role) && (
-            <section className="section">
-              <div className="section-head">
-                <div>
-                  <p className="eyebrow">Billing</p>
-                  <h2>Тариф и использование</h2>
-                  <p className="section-head__sub">
-                    Текущие рабочие пространства продолжают работать на legacy
-                    entitlement.
-                  </p>
-                </div>
-              </div>
-              <section className="panel">
-                <div className="billing-grid">
-                  <div className="billing-summary">
-                    <small>Текущий план</small>
-                    <strong>
-                      {subscription?.plan.name ?? "Legacy internal"}
-                    </strong>
-                    <span>{subscription?.status ?? "Активен"}</span>
-                  </div>
-                  <div className="billing-summary">
-                    <small>Период до</small>
-                    <strong>
-                      {subscription
-                        ? new Date(
-                            subscription.currentPeriodEnd,
-                          ).toLocaleDateString("ru-RU")
-                        : "Без оплаты"}
-                    </strong>
-                    <span>payment gateway подключается отдельно</span>
-                  </div>
-                  <div className="billing-summary">
-                    <small>Entitlements</small>
-                    <strong>{entitlements.length}</strong>
-                    <span>доступных возможностей</span>
-                  </div>
-                </div>
-                <div className="plan-list">
-                  {plans.map((plan) => (
-                    <div className="plan-row" key={plan.id}>
-                      <span>
-                        <strong>{plan.name}</strong>
-                        <small>{plan.description ?? plan.key}</small>
-                      </span>
-                      <em>
-                        {plan.prices[0]
-                          ? `${plan.prices[0].amount} ${plan.prices[0].currency}`
-                          : "Внутренний план"}
-                      </em>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </section>
-          )}
-
-        {section === "analytics" &&
-          active &&
-          ["OWNER", "ADMIN"].includes(active.role) && (
-            <section className="section">
-              <div className="section-head">
-                <div>
-                  <p className="eyebrow">Analytics</p>
-                  <h2>Использование workspace</h2>
-                  <p className="section-head__sub">
-                    Служебная статистика без provider credentials и
-                    чувствительных данных.
-                  </p>
-                </div>
-              </div>
-              <section className="panel">
-                <div className="billing-grid">
-                  <div className="billing-summary">
-                    <small>Событий за 30 дней</small>
-                    <strong>{analyticsSummary?.total_events ?? 0}</strong>
-                    <span>product events</span>
-                  </div>
-                  <div className="billing-summary">
-                    <small>Активные пользователи</small>
-                    <strong>{analyticsSummary?.active_users ?? 0}</strong>
-                    <span>по событиям</span>
-                  </div>
-                  <div className="billing-summary">
-                    <small>Usage records</small>
-                    <strong>{usage.length}</strong>
-                    <span>текущий период</span>
-                  </div>
-                </div>
-                <div className="plan-list">
-                  {analyticsSummary?.events.map((event) => (
-                    <div className="plan-row" key={event.name}>
-                      <span>
-                        <strong>{event.name}</strong>
-                      </span>
-                      <em>{event.count}</em>
-                    </div>
-                  ))}
-                </div>
-              </section>
-            </section>
-          )}
 
         {section === "profile" && (
           <section className="section" aria-labelledby="profile-title">
             <div className="section-head">
               <div>
-                <p className="eyebrow">Profile</p>
-                <h2 id="profile-title">Ваш профиль</h2>
+                <p className="eyebrow">Аккаунт</p>
+                <h1 id="profile-title">Профиль</h1>
                 <p className="section-head__sub">
-                  Имя и пароль управляются безопасными V2 auth endpoints.
+                  Личные данные и безопасность аккаунта.
                 </p>
               </div>
             </div>
             <div className="profile-grid">
               <section className="panel profile-card">
-                <div className="profile-avatar" aria-hidden="true">
-                  {initial}
+                <div className="avatar-editor">
+                  {avatar ? (
+                    <img src={avatar} alt="Фото профиля" />
+                  ) : (
+                    <span aria-hidden="true">
+                      {profile?.name?.charAt(0).toUpperCase() || "H"}
+                    </span>
+                  )}
+                  <label className="secondary-button btn--small">
+                    Изменить фото
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={(event) => void uploadAvatar(event)}
+                    />
+                  </label>
+                  <small>JPG, PNG или WebP, до 2 МБ</small>
                 </div>
                 <form onSubmit={saveProfile}>
                   <label>
@@ -2412,13 +1273,17 @@ export default function DashboardPage() {
                     Email
                     <input value={profile?.email ?? ""} readOnly />
                   </label>
+                  <div className="profile-summary">
+                    <span>Подключено платформ</span>
+                    <strong>{connectedCount}</strong>
+                  </div>
                   <button className="primary-button" type="submit">
-                    Сохранить профиль
+                    Сохранить
                   </button>
                 </form>
               </section>
               <section className="panel profile-card">
-                <h3>Сменить пароль</h3>
+                <h2>Сменить пароль</h2>
                 <form onSubmit={changePassword}>
                   <label>
                     Текущий пароль
@@ -2438,31 +1303,107 @@ export default function DashboardPage() {
                       autoComplete="new-password"
                       required
                     />
+                    <small>Не менее 12 символов</small>
                   </label>
                   <button className="secondary-button" type="submit">
                     Изменить пароль
                   </button>
                 </form>
-                {profileMessage && (
-                  <p className="success" role="status">
-                    {profileMessage}
-                  </p>
-                )}
               </section>
             </div>
           </section>
         )}
-
-        {error && (
-          <p className="error" role="alert">
-            {error}
-          </p>
-        )}
       </div>
-      <footer className="footer footer--landing">
-        <span>HolyMedia MCP · защищённая аналитика рекламных кабинетов</span>
-        <span className="muted">{active?.name ?? "Workspace"}</span>
-      </footer>
+
+      <SiteFooter compact />
+
+      {confirm && (
+        <div
+          className="modal"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) setConfirm(null);
+          }}
+        >
+          <section
+            className="confirm-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-title"
+          >
+            <h2 id="confirm-title">{confirm.title}</h2>
+            <p>{confirm.description}</p>
+            <div className="confirm-actions">
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setConfirm(null)}
+              >
+                Отмена
+              </button>
+              <button
+                className="danger-button"
+                type="button"
+                autoFocus
+                onClick={() => {
+                  const action = confirm.run;
+                  setConfirm(null);
+                  void action();
+                }}
+              >
+                {confirm.confirmLabel}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
     </main>
+  );
+}
+
+function ClientInstructions({ client }: { client: Client }) {
+  if (client === "codex")
+    return (
+      <div className="client-panel" role="tabpanel">
+        <h3>Codex</h3>
+        <ol>
+          <li>Откройте настройки Codex и раздел MCP Servers.</li>
+          <li>
+            Добавьте HTTP-сервер с адресом <code>{MCP_URL}</code>.
+          </li>
+          <li>
+            В заголовке Authorization укажите{" "}
+            <code>Bearer &lt;ваш ключ&gt;</code>.
+          </li>
+          <li>Сохраните и откройте новый чат.</li>
+        </ol>
+      </div>
+    );
+  if (client === "claude")
+    return (
+      <div className="client-panel" role="tabpanel">
+        <h3>Claude</h3>
+        <ol>
+          <li>Откройте Settings → Connectors.</li>
+          <li>Добавьте custom connector «HolyMedia MCP».</li>
+          <li>
+            Укажите адрес <code>{MCP_URL}</code>.
+          </li>
+          <li>Пройдите вход в HolyMedia MCP, когда Claude его откроет.</li>
+        </ol>
+      </div>
+    );
+  return (
+    <div className="client-panel" role="tabpanel">
+      <h3>ChatGPT</h3>
+      <ol>
+        <li>Откройте настройки подключений ChatGPT.</li>
+        <li>
+          Создайте connector с полным адресом <code>{MCP_URL}</code>.
+        </li>
+        <li>Выберите OAuth и автоматическую регистрацию клиента.</li>
+        <li>Войдите в HolyMedia MCP и подтвердите подключение.</li>
+      </ol>
+    </div>
   );
 }

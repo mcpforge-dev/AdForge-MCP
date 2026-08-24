@@ -47,7 +47,7 @@ export default function AcceptInvitationPage() {
           data.error?.message ?? "Не удалось принять приглашение.",
         );
       setMessage(
-        `Приглашение принято. Workspace: ${data.workspace?.name ?? "готово"}.`,
+        `Приглашение принято. Команда: ${data.workspace?.name ?? "доступ открыт"}.`,
       );
       window.setTimeout(() => window.location.assign("/dashboard"), 600);
     } catch (requestError) {
