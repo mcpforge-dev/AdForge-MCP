@@ -43,6 +43,7 @@ type Profile = { name: string; email: string };
 type Section =
   "overview" | "connections" | "mcp" | "reports" | "analysis" | "profile";
 type Client = "codex" | "claude" | "chatgpt";
+type ReportFormat = "docx" | "pptx";
 type AnalysisMode = "quick" | "full";
 type AnalysisBrief = {
   siteType: string;
@@ -220,6 +221,15 @@ export default function DashboardPage() {
           : [],
       ),
     [connections],
+  );
+  const reportableAccounts = useMemo(
+    () =>
+      enabledAccounts.filter(
+        ({ connection }) =>
+          connection.status === "CONNECTED" &&
+          ["META_ADS", "GOOGLE_ADS"].includes(connection.provider),
+      ),
+    [enabledAccounts],
   );
   const connectedCount = connections.filter((connection) =>
     ["CONNECTED", "DEGRADED", "REAUTH_REQUIRED"].includes(connection.status),
@@ -585,6 +595,8 @@ export default function DashboardPage() {
     if (!active) return;
     const form = new FormData(event.currentTarget);
     const accountId = String(form.get("account_id") ?? "");
+    const requestedFormat = String(form.get("format") ?? "docx");
+    const format: ReportFormat = requestedFormat === "pptx" ? "pptx" : "docx";
     if (!accountId) return;
     setBusy(true);
     try {
@@ -593,19 +605,36 @@ export default function DashboardPage() {
         ...dateRange(reportDays),
       });
       const response = await fetch(
-        `${API}/api/v1/workspaces/${active.id}/reports/performance.docx?${query}`,
+        `${API}/api/v1/workspaces/${active.id}/reports/performance.${format}?${query}`,
         { credentials: "include" },
       );
-      if (!response.ok) throw new Error();
+      if (!response.ok) {
+        const messages: Record<number, string> = {
+          400: "Для отчёта выберите кабинет Meta Ads или Google Ads.",
+          401: "Сессия закончилась. Войдите ещё раз.",
+          403: "Для этого кабинета отчёты пока недоступны.",
+          404: "Кабинет больше недоступен. Обновите список подключений.",
+          429: "Слишком много запросов. Подождите немного и повторите попытку.",
+          503: "Платформа временно не ответила. Попробуйте ещё раз или проверьте подключение.",
+        };
+        throw new Error(
+          messages[response.status] ??
+            "Не удалось собрать отчёт. Попробуйте ещё раз.",
+        );
+      }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
       link.href = url;
-      link.download = "holymedia-performance-report.docx";
+      link.download = `holymedia-performance-report.${format}`;
       link.click();
       URL.revokeObjectURL(url);
-      notify("Отчёт готов.");
-    } catch {
-      fail("Не удалось собрать отчёт. Попробуйте ещё раз.");
+      notify(format === "pptx" ? "Презентация готова." : "Отчёт готов.");
+    } catch (cause) {
+      fail(
+        cause instanceof Error
+          ? cause.message
+          : "Не удалось собрать отчёт. Попробуйте ещё раз.",
+      );
     } finally {
       setBusy(false);
     }
@@ -1388,8 +1417,8 @@ export default function DashboardPage() {
                 <p className="eyebrow">Отчёты</p>
                 <h1 id="reports-title">Отчёт по рекламному кабинету</h1>
                 <p className="section-head__sub">
-                  Выберите кабинет и период. Мы подготовим DOCX с основными
-                  показателями и сравнением.
+                  Выберите кабинет и период. Подготовим Word-документ или
+                  презентацию с показателями, сравнением и кампаниями.
                 </p>
               </div>
             </div>
@@ -1409,7 +1438,7 @@ export default function DashboardPage() {
                       <option value="" disabled>
                         Выберите кабинет
                       </option>
-                      {enabledAccounts.map(({ account, connection }) => (
+                      {reportableAccounts.map(({ account, connection }) => (
                         <option key={account.id} value={account.id}>
                           {account.displayName} ·{" "}
                           {providerCopy(connection.provider).name}
@@ -1435,21 +1464,23 @@ export default function DashboardPage() {
                   <label>
                     Формат
                     <select name="format" defaultValue="docx">
-                      <option value="docx">DOCX</option>
+                      <option value="docx">Word (.docx)</option>
+                      <option value="pptx">PowerPoint (.pptx)</option>
                     </select>
                   </label>
                   <button
                     className="primary-button"
                     type="submit"
-                    disabled={busy || !enabledAccounts.length}
+                    disabled={busy || !reportableAccounts.length}
                   >
                     {busy ? "Готовим…" : "Скачать отчёт"}
                   </button>
                 </form>
-                {!enabledAccounts.length && (
+                {!reportableAccounts.length && (
                   <div className="empty-state">
                     <p>
-                      Чтобы создать отчёт, сначала выберите рекламный кабинет.
+                      Для отчёта нужен выбранный кабинет Meta Ads или Google
+                      Ads.
                     </p>
                     <button
                       className="secondary-button"
@@ -1474,8 +1505,8 @@ export default function DashboardPage() {
                     рекламным кампаниям
                   </strong>
                   <em>
-                    {enabledAccounts.length
-                      ? `${reportDays} дней · ${enabledAccounts.length} выбранных кабинетов`
+                    {reportableAccounts.length
+                      ? `${reportDays} дней · ${reportableAccounts.length} доступных кабинетов`
                       : "Выберите кабинет и период"}
                   </em>
                 </div>

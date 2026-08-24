@@ -66,3 +66,20 @@ Global repository `format:check` всё ещё отражает существу
 ## Deferred items
 
 Telegram Hermes real E2E остаётся `DEFERRED BY PROJECT DECISION`. Payment gateway и расширенный live reporting Yandex/TikTok остаются вне scope. V2 backend/security/data integrity сохранены.
+
+## Исправление отчётов после UI-прохода
+
+- Причина пользовательской ошибки при сборке отчёта: экран предлагал выбранные
+  кабинеты Яндекс Директ и TikTok Ads, для которых V2 поддерживает OAuth и
+  discovery, но не read-метрики. API корректно отвечал `400`, а UI скрывал
+  причину общим сообщением.
+- Форма отчёта теперь показывает только enabled кабинеты Meta Ads и Google Ads
+  с `CONNECTED` connection. Для остальных ответов API выводится понятное
+  безопасное сообщение без provider credentials или внутренних деталей.
+- Report engine получает прежний равный период автоматически, если он не
+  передан явно, и формирует DOCX или PPTX. Презентация содержит обложку, KPI,
+  сравнение, кампании, выводы и источник/ограничения на основе доступных
+  провайдерных данных; секреты в артефакт не попадают.
+- Покрытие: unit/API тесты проверяют DOCX/PPTX, структуру PPTX-архива,
+  equal-period comparison и отказ discovery-only provider. Desktop/mobile
+  Playwright проверяет оба формата и понятное сообщение для `400`.

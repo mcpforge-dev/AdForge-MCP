@@ -1,8 +1,10 @@
+import { BadRequestException } from "@nestjs/common";
+import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { ReportService } from "./report.service.js";
 
 describe("V2 performance reports", () => {
-  it("builds a source-backed report and DOCX without exposing credentials", async () => {
+  it("builds source-backed DOCX and PPTX reports without exposing credentials", async () => {
     const database = {
       client: {
         providerAccount: {
@@ -82,5 +84,99 @@ describe("V2 performance reports", () => {
     });
     expect(document.subarray(0, 2).toString()).toBe("PK");
     expect(document.toString("utf8")).not.toContain("accessToken");
+    const presentation = await service.performancePptx("workspace-a", {
+      accountId: "1234567890",
+      startDate: "2026-01-01",
+      endDate: "2026-01-07",
+    });
+    expect(presentation.subarray(0, 2).toString()).toBe("PK");
+    expect(presentation.toString("utf8")).not.toContain("accessToken");
+    const archive = await JSZip.loadAsync(presentation);
+    const slides = Object.keys(archive.files).filter((path) =>
+      /^ppt\/slides\/slide\d+\.xml$/.test(path),
+    );
+    expect(slides).toHaveLength(6);
+    expect(
+      await archive.file("ppt/presentation.xml")?.async("string"),
+    ).toContain("p:sldIdLst");
+  });
+
+  it("uses an equal previous period when the report form does not send one", async () => {
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-internal",
+            connectionId: "connection-1",
+            provider: "META_ADS",
+            externalAccountId: "act_123",
+            displayName: "Test account",
+            currency: "USD",
+            timezone: "UTC",
+          }),
+        },
+      },
+    } as never;
+    const providers = {
+      readAccountSummary: async () => ({
+        provenance: {
+          provider: "META_ADS",
+          sourceApi: "fixture",
+          realData: true,
+          dataStatus: "live",
+          fetchedAt: new Date().toISOString(),
+        },
+      }),
+      readMetrics: async () => ({
+        spend: null,
+        impressions: 0,
+        clicks: 0,
+        ctr: 0,
+        cpc: null,
+        cpm: null,
+        conversions: 0,
+        conversionValue: null,
+        costPerConversion: null,
+      }),
+      readCampaigns: async () => ({ items: [], nextCursor: undefined }),
+    } as never;
+    const report = await new ReportService(database, providers).performance(
+      "workspace-a",
+      {
+        accountId: "act_123",
+        startDate: "2026-01-08",
+        endDate: "2026-01-14",
+      },
+    );
+    expect(report.comparison?.period).toMatchObject({
+      startDate: "2026-01-01",
+      endDate: "2026-01-07",
+    });
+  });
+
+  it("does not try to generate a performance report for discovery-only providers", async () => {
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-internal",
+            connectionId: "connection-1",
+            provider: "YANDEX_DIRECT",
+            externalAccountId: "client-login",
+            displayName: "Yandex account",
+            currency: null,
+            timezone: null,
+          }),
+        },
+      },
+    } as never;
+    const providers = {} as never;
+    await expect(
+      new ReportService(database, providers).performance("workspace-a", {
+        accountId: "client-login",
+        startDate: "2026-01-01",
+        endDate: "2026-01-07",
+      }),
+    ).rejects.toBeInstanceOf(BadRequestException);
   });
 });

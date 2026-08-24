@@ -174,12 +174,14 @@ test.describe("restored HolyMedia client UX", () => {
 
     await page.getByRole("button", { name: "Отчёты", exact: true }).click();
     let reportUrl = "";
-    await page.route("**/reports/performance.docx?**", async (route) => {
+    await page.route("**/reports/performance.*?**", async (route) => {
       reportUrl = route.request().url();
+      const isPresentation = new URL(reportUrl).pathname.endsWith(".pptx");
       await route.fulfill({
         status: 200,
-        contentType:
-          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        contentType: isPresentation
+          ? "application/vnd.openxmlformats-officedocument.presentationml.presentation"
+          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
         body: "PK-test",
       });
     });
@@ -193,6 +195,12 @@ test.describe("restored HolyMedia client UX", () => {
         new Date(reportParams.get("startDate")!).getTime()) /
         86_400_000,
     ).toBe(13);
+    expect(new URL(reportUrl).pathname).toMatch(/performance\.docx$/);
+    reportUrl = "";
+    await page.locator('select[name="format"]').selectOption("pptx");
+    await page.getByRole("button", { name: "Скачать отчёт" }).click();
+    await expect.poll(() => reportUrl).not.toBe("");
+    expect(new URL(reportUrl).pathname).toMatch(/performance\.pptx$/);
     await page.screenshot({
       path: testInfo.outputPath("reports.png"),
       fullPage: true,
@@ -227,6 +235,22 @@ test.describe("restored HolyMedia client UX", () => {
       fullPage: true,
     });
     expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("reports explain an unsupported account instead of showing a generic error", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await login(page);
+    await page.getByRole("button", { name: "Отчёты", exact: true }).click();
+    await page.route("**/reports/performance.*?**", (route) =>
+      route.fulfill({ status: 400, body: "unsupported account" }),
+    );
+    await page.locator('select[name="account_id"]').selectOption({ index: 1 });
+    await page.getByRole("button", { name: "Скачать отчёт" }).click();
+    await expect(
+      page.getByText("Для отчёта выберите кабинет Meta Ads или Google Ads."),
+    ).toBeVisible();
   });
 
   test("mobile navigation and connections do not overflow", async ({

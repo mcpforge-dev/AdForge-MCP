@@ -52,4 +52,24 @@ export class ReportController {
       )
       .send(report);
   }
+
+  @Get("performance.pptx")
+  public async performancePptx(
+    @Param("id") workspaceId: string,
+    @Query() input: PerformanceReportDto,
+    @Res() reply: FastifyReply,
+  ) {
+    await this.billing.requireFeature(workspaceId, "reports");
+    const report = await this.reports.performancePptx(workspaceId, input);
+    reply
+      .header(
+        "content-type",
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+      )
+      .header(
+        "content-disposition",
+        "attachment; filename=holymedia-performance-report.pptx",
+      )
+      .send(report);
+  }
 }

@@ -30,6 +30,7 @@ import {
   VerticalAlign,
   WidthType,
 } from "docx";
+import JSZip from "jszip";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ProviderService } from "../providers/provider.service.js";
 
@@ -73,6 +74,167 @@ export type PerformanceReport = {
   };
 };
 
+const REPORT_PROVIDERS = new Set(["GOOGLE_ADS", "META_ADS"]);
+const PPT = {
+  purple: "42195C",
+  purpleLight: "F1EAF6",
+  purplePale: "FAF7FC",
+  ink: "28252C",
+  muted: "716A78",
+  white: "FFFFFF",
+};
+const EMU = 914_400;
+
+function escapeXml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+class PptSlide {
+  private id = 2;
+  private readonly shapes: string[] = [];
+
+  public rect(x: number, y: number, w: number, h: number, fill: string): void {
+    this.shape(x, y, w, h, fill, "rect");
+  }
+
+  public ellipse(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    fill: string,
+  ): void {
+    this.shape(x, y, w, h, fill, "ellipse");
+  }
+
+  public text(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    value: string,
+    options: {
+      color?: string;
+      fontSize?: number;
+      bold?: boolean;
+      align?: "l" | "ctr" | "r";
+    } = {},
+  ): void {
+    const id = this.id++;
+    const size = Math.round((options.fontSize ?? 14) * 100);
+    const weight = options.bold ? ' b="1"' : "";
+    const align = options.align ? ` algn="${options.align}"` : "";
+    const color = options.color ?? PPT.ink;
+    const paragraphs = value
+      .split("\n")
+      .map(
+        (line) =>
+          `<a:p><a:pPr${align}/><a:r><a:rPr lang="ru-RU" sz="${size}"${weight}><a:solidFill><a:srgbClr val="${color}"/></a:solidFill><a:latin typeface="Aptos"/><a:ea typeface="Aptos"/></a:rPr><a:t>${escapeXml(line)}</a:t></a:r></a:p>`,
+      )
+      .join("");
+    this.shapes.push(
+      `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Text ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${Math.round(x * EMU)}" y="${Math.round(y * EMU)}"/><a:ext cx="${Math.round(w * EMU)}" cy="${Math.round(h * EMU)}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/><a:ln><a:noFill/></a:ln></p:spPr><p:txBody><a:bodyPr wrap="square"/><a:lstStyle/>${paragraphs}</p:txBody></p:sp>`,
+    );
+  }
+
+  public xml(): string {
+    return `<p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>${this.shapes.join("")}</p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sld>`;
+  }
+
+  private shape(
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    fill: string,
+    geometry: "rect" | "ellipse",
+  ): void {
+    const id = this.id++;
+    this.shapes.push(
+      `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Shape ${id}"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr><a:xfrm><a:off x="${Math.round(x * EMU)}" y="${Math.round(y * EMU)}"/><a:ext cx="${Math.round(w * EMU)}" cy="${Math.round(h * EMU)}"/></a:xfrm><a:prstGeom prst="${geometry}"><a:avLst/></a:prstGeom><a:solidFill><a:srgbClr val="${fill}"/></a:solidFill><a:ln><a:noFill/></a:ln></p:spPr></p:sp>`,
+    );
+  }
+}
+
+async function pptxBuffer(
+  title: string,
+  build: (add: (slide: PptSlide) => void) => void,
+): Promise<Buffer> {
+  const slides: string[] = [];
+  build((slide) => slides.push(slide.xml()));
+  const zip = new JSZip();
+  const overrides = slides
+    .map(
+      (_, index) =>
+        `<Override PartName="/ppt/slides/slide${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slide+xml"/>`,
+    )
+    .join("");
+  const relationships = slides
+    .map(
+      (_, index) =>
+        `<Relationship Id="rId${index + 2}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slide" Target="slides/slide${index + 1}.xml"/>`,
+    )
+    .join("");
+  const ids = slides
+    .map((_, index) => `<p:sldId id="${256 + index}" r:id="rId${index + 2}"/>`)
+    .join("");
+  zip.file(
+    "[Content_Types].xml",
+    `<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/><Override PartName="/ppt/presentation.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml"/><Override PartName="/ppt/slideMasters/slideMaster1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideMaster+xml"/><Override PartName="/ppt/slideLayouts/slideLayout1.xml" ContentType="application/vnd.openxmlformats-officedocument.presentationml.slideLayout+xml"/><Override PartName="/ppt/theme/theme1.xml" ContentType="application/vnd.openxmlformats-officedocument.theme+xml"/>${overrides}</Types>`,
+  );
+  zip.file(
+    "_rels/.rels",
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="ppt/presentation.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/></Relationships>',
+  );
+  zip.file(
+    "docProps/core.xml",
+    `<?xml version="1.0" encoding="UTF-8"?><cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/"><dc:title>${escapeXml(title)}</dc:title><dc:creator>HolyMedia MCP</dc:creator></cp:coreProperties>`,
+  );
+  zip.file(
+    "ppt/presentation.xml",
+    `<?xml version="1.0" encoding="UTF-8"?><p:presentation xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:sldMasterIdLst><p:sldMasterId id="2147483648" r:id="rId1"/></p:sldMasterIdLst><p:sldIdLst>${ids}</p:sldIdLst><p:sldSz cx="12192000" cy="6858000" type="wide"/><p:notesSz cx="6858000" cy="9144000"/></p:presentation>`,
+  );
+  zip.file(
+    "ppt/_rels/presentation.xml.rels",
+    `<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="slideMasters/slideMaster1.xml"/>${relationships}</Relationships>`,
+  );
+  zip.file(
+    "ppt/theme/theme1.xml",
+    '<?xml version="1.0" encoding="UTF-8"?><a:theme xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" name="HolyMedia"><a:themeElements><a:clrScheme name="HolyMedia"><a:dk1><a:srgbClr val="28252C"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1><a:dk2><a:srgbClr val="42195C"/></a:dk2><a:lt2><a:srgbClr val="F1EAF6"/></a:lt2><a:accent1><a:srgbClr val="42195C"/></a:accent1><a:accent2><a:srgbClr val="7B4A96"/></a:accent2><a:accent3><a:srgbClr val="198754"/></a:accent3><a:accent4><a:srgbClr val="A66A00"/></a:accent4><a:hlink><a:srgbClr val="42195C"/></a:hlink><a:folHlink><a:srgbClr val="7B4A96"/></a:folHlink></a:clrScheme><a:fontScheme name="HolyMedia"><a:majorFont><a:latin typeface="Aptos Display"/></a:majorFont><a:minorFont><a:latin typeface="Aptos"/></a:minorFont></a:fontScheme><a:fmtScheme name="HolyMedia"><a:fillStyleLst/><a:lnStyleLst/><a:effectStyleLst/><a:bgFillStyleLst/></a:fmtScheme></a:themeElements></a:theme>',
+  );
+  zip.file(
+    "ppt/slideMasters/slideMaster1.xml",
+    '<p:sldMaster xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><p:cSld name="HolyMedia"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMap bg1="lt1" tx1="dk1" bg2="lt2" tx2="dk2" accent1="accent1" accent2="accent2" accent3="accent3" accent4="accent4" hlink="hlink" folHlink="folHlink"/><p:sldLayoutIdLst><p:sldLayoutId id="2147483649" r:id="rId2"/></p:sldLayoutIdLst><p:txStyles><p:titleStyle/><p:bodyStyle/><p:otherStyle/></p:txStyles></p:sldMaster>',
+  );
+  zip.file(
+    "ppt/slideMasters/_rels/slideMaster1.xml.rels",
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/theme" Target="../theme/theme1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>',
+  );
+  zip.file(
+    "ppt/slideLayouts/slideLayout1.xml",
+    '<p:sldLayout xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main" type="blank" preserve="1"><p:cSld name="Blank"><p:spTree><p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/></p:spTree></p:cSld><p:clrMapOvr><a:masterClrMapping/></p:clrMapOvr></p:sldLayout>',
+  );
+  zip.file(
+    "ppt/slideLayouts/_rels/slideLayout1.xml.rels",
+    '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideMaster" Target="../slideMasters/slideMaster1.xml"/></Relationships>',
+  );
+  slides.forEach((slide, index) => {
+    zip.file(`ppt/slides/slide${index + 1}.xml`, slide);
+    zip.file(
+      `ppt/slides/_rels/slide${index + 1}.xml.rels`,
+      '<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/slideLayout" Target="../slideLayouts/slideLayout1.xml"/></Relationships>',
+    );
+  });
+  return Buffer.from(
+    await zip.generateAsync({ type: "nodebuffer", compression: "DEFLATE" }),
+  );
+}
+
 @Injectable()
 export class ReportService {
   public constructor(
@@ -94,6 +256,11 @@ export class ReportService {
       include: { connection: true },
     });
     if (!account) throw new NotFoundException("Provider account not found.");
+    if (!REPORT_PROVIDERS.has(String(account.provider))) {
+      throw new BadRequestException(
+        "Performance reports are currently available for Meta Ads and Google Ads accounts.",
+      );
+    }
     const period: ProviderDateRange = {
       startDate: input.startDate.slice(0, 10),
       endDate: input.endDate.slice(0, 10),
@@ -111,7 +278,7 @@ export class ReportService {
             endDate: input.previousEndDate.slice(0, 10),
             ...(account.timezone ? { timezone: account.timezone } : {}),
           }
-        : undefined;
+        : this.previousPeriod(period);
     const [summary, metrics, campaigns, previousMetrics] = await Promise.all([
       this.providers.readAccountSummary(
         workspaceId,
@@ -412,6 +579,326 @@ export class ReportService {
       ],
     });
     return Packer.toBuffer(document);
+  }
+
+  public async performancePptx(
+    workspaceId: string,
+    input: PerformanceReportInput,
+  ): Promise<Buffer> {
+    const report = await this.performance(workspaceId, input);
+    const metrics = report.metrics;
+    const comparison = report.comparison;
+    const currentPeriod = `${report.period.startDate} - ${report.period.endDate}`;
+    const providerLabel =
+      report.account.provider === "META_ADS" ? "Meta Ads" : "Google Ads";
+    const campaignRows = [...report.campaigns]
+      .sort(
+        (left, right) =>
+          Number(right.metrics?.spend?.amount ?? 0) -
+          Number(left.metrics?.spend?.amount ?? 0),
+      )
+      .slice(0, 7)
+      .map((campaign) => [
+        this.clip(campaign.name || campaign.id, 38),
+        campaign.status ?? "Нет данных",
+        this.formatMoney(campaign.metrics?.spend ?? null),
+        this.formatMetric(campaign.metrics?.clicks ?? null),
+        this.formatMetric(campaign.metrics?.conversions ?? null),
+      ]);
+    const addSlideTitle = (
+      slide: PptSlide,
+      title: string,
+      subtitle?: string,
+    ) => {
+      slide.text(0.72, 0.45, 11.8, 0.45, title, {
+        color: PPT.ink,
+        fontSize: 24,
+        bold: true,
+      });
+      if (subtitle) {
+        slide.text(0.72, 0.96, 11.8, 0.28, subtitle, {
+          color: PPT.muted,
+          fontSize: 10,
+        });
+      }
+    };
+    const addTable = (
+      slide: PptSlide,
+      x: number,
+      y: number,
+      widths: number[],
+      headers: string[],
+      rows: string[][],
+    ) => {
+      const rowHeight = 0.36;
+      let cursor = x;
+      headers.forEach((header, index) => {
+        slide.rect(cursor, y, widths[index] ?? 1, rowHeight, PPT.purple);
+        slide.text(
+          cursor + 0.08,
+          y + 0.07,
+          (widths[index] ?? 1) - 0.16,
+          0.2,
+          header,
+          {
+            color: PPT.white,
+            fontSize: 8,
+            bold: true,
+          },
+        );
+        cursor += widths[index] ?? 1;
+      });
+      rows.forEach((row, rowIndex) => {
+        cursor = x;
+        const fill = rowIndex % 2 === 0 ? PPT.white : PPT.purplePale;
+        row.forEach((value, cellIndex) => {
+          const width = widths[cellIndex] ?? 1;
+          slide.rect(
+            cursor,
+            y + rowHeight * (rowIndex + 1),
+            width,
+            rowHeight,
+            fill,
+          );
+          slide.text(
+            cursor + 0.08,
+            y + rowHeight * (rowIndex + 1) + 0.07,
+            width - 0.16,
+            0.2,
+            value,
+            {
+              color: PPT.ink,
+              fontSize: 8,
+            },
+          );
+          cursor += width;
+        });
+      });
+    };
+
+    return pptxBuffer(
+      `Отчёт по рекламному кабинету: ${report.account.name}`,
+      (add) => {
+        const cover = new PptSlide();
+        cover.rect(0, 0, 13.333, 7.5, PPT.purple);
+        cover.ellipse(9.6, -1.15, 4.2, 4.2, "6E3889");
+        cover.ellipse(10.75, 4.7, 2.1, 2.1, "5A2873");
+        cover.text(0.82, 1.35, 8.9, 0.45, "HOLYMEDIA MCP", {
+          color: PPT.white,
+          fontSize: 16,
+          bold: true,
+        });
+        cover.text(0.82, 2.15, 9.1, 1.15, "Отчёт по рекламному кабинету", {
+          color: PPT.white,
+          fontSize: 31,
+          bold: true,
+        });
+        cover.text(0.82, 3.55, 8.5, 0.38, report.account.name, {
+          color: "EADCF2",
+          fontSize: 17,
+          bold: true,
+        });
+        cover.text(
+          0.82,
+          4.04,
+          8.5,
+          0.3,
+          `${providerLabel}  |  ${currentPeriod}`,
+          {
+            color: "EADCF2",
+            fontSize: 11,
+          },
+        );
+        cover.text(
+          0.82,
+          6.55,
+          8.5,
+          0.25,
+          "Данные подключённого рекламного кабинета",
+          {
+            color: "EADCF2",
+            fontSize: 9,
+          },
+        );
+        add(cover);
+
+        const kpis = new PptSlide();
+        addSlideTitle(
+          kpis,
+          "Результаты за период",
+          `${report.account.name}  |  ${currentPeriod}`,
+        );
+        const kpiItems: Array<[string, string]> = [
+          ["Расход", this.formatMoney(metrics.spend)],
+          ["Показы", this.formatMetric(metrics.impressions)],
+          ["Клики", this.formatMetric(metrics.clicks)],
+          ["Конверсии", this.formatMetric(metrics.conversions)],
+          ["CTR", this.formatPercent(metrics.ctr)],
+          ["Стоимость конверсии", this.formatMoney(metrics.costPerConversion)],
+        ];
+        kpiItems.forEach(([label, value], index) => {
+          const column = index % 3;
+          const row = Math.floor(index / 3);
+          const x = 0.72 + column * 4.12;
+          const y = 1.55 + row * 2.23;
+          kpis.rect(
+            x,
+            y,
+            3.65,
+            1.72,
+            index === 0 ? PPT.purpleLight : PPT.purplePale,
+          );
+          kpis.text(x + 0.28, y + 0.3, 3.05, 0.25, label, {
+            color: PPT.muted,
+            fontSize: 10,
+          });
+          kpis.text(x + 0.28, y + 0.78, 3.05, 0.48, value, {
+            color: PPT.ink,
+            fontSize: 20,
+            bold: true,
+          });
+        });
+        add(kpis);
+
+        const periodComparison = new PptSlide();
+        addSlideTitle(
+          periodComparison,
+          "Сравнение с предыдущим периодом",
+          comparison
+            ? `${currentPeriod} против ${comparison.period.startDate} - ${comparison.period.endDate}`
+            : "Для выбранного периода нет сравнения",
+        );
+        if (comparison) {
+          addTable(
+            periodComparison,
+            0.72,
+            1.55,
+            [3.5, 2.5, 2.5, 2.6],
+            ["Показатель", "Текущий", "Предыдущий", "Изменение"],
+            this.comparisonRows(comparison),
+          );
+        } else {
+          periodComparison.text(
+            0.72,
+            1.65,
+            8.5,
+            0.35,
+            "Недостаточно данных для сравнения периодов.",
+            {
+              color: PPT.muted,
+              fontSize: 14,
+            },
+          );
+        }
+        add(periodComparison);
+
+        const campaigns = new PptSlide();
+        addSlideTitle(
+          campaigns,
+          "Кампании",
+          `Топ кампаний по расходу за ${currentPeriod}`,
+        );
+        if (campaignRows.length) {
+          addTable(
+            campaigns,
+            0.72,
+            1.55,
+            [4.2, 1.7, 1.9, 1.5, 1.5],
+            ["Кампания", "Статус", "Расход", "Клики", "Конверсии"],
+            campaignRows,
+          );
+        } else {
+          campaigns.text(
+            0.72,
+            1.65,
+            8.5,
+            0.35,
+            "За выбранный период кампании не найдены.",
+            {
+              color: PPT.muted,
+              fontSize: 14,
+            },
+          );
+        }
+        add(campaigns);
+
+        const insights = new PptSlide();
+        addSlideTitle(
+          insights,
+          "Ключевые выводы",
+          "Выводы сформированы только на основе доступных метрик",
+        );
+        report.insights.slice(0, 4).forEach((insight, index) => {
+          const y = 1.55 + index * 1.15;
+          insights.ellipse(0.8, y + 0.06, 0.24, 0.24, PPT.purple);
+          insights.text(1.25, y, 10.6, 0.65, insight, {
+            color: PPT.ink,
+            fontSize: 14,
+          });
+        });
+        add(insights);
+
+        const notes = new PptSlide();
+        addSlideTitle(
+          notes,
+          "Источник и ограничения",
+          "Прозрачность данных отчёта",
+        );
+        const source = report.provenance.summary;
+        notes.rect(0.72, 1.48, 11.85, 3.65, PPT.purplePale);
+        notes.text(1.05, 1.85, 10.9, 0.35, "Источник", {
+          color: PPT.muted,
+          fontSize: 10,
+          bold: true,
+        });
+        notes.text(1.05, 2.2, 10.9, 0.4, source.sourceApi, {
+          color: PPT.ink,
+          fontSize: 15,
+          bold: true,
+        });
+        notes.text(1.05, 2.9, 10.9, 0.35, "Статус данных", {
+          color: PPT.muted,
+          fontSize: 10,
+          bold: true,
+        });
+        notes.text(
+          1.05,
+          3.25,
+          10.9,
+          0.4,
+          source.realData && source.dataStatus === "live"
+            ? "Получены из подключённого рекламного кабинета"
+            : "Данные могут быть неполными",
+          { color: PPT.ink, fontSize: 14 },
+        );
+        notes.text(
+          1.05,
+          4.1,
+          10.9,
+          0.52,
+          "Отчёт не содержит OAuth-токены, ключи API или другие секреты. Показатели без значения отмечены как «Нет данных» и не используются для категоричных выводов.",
+          { color: PPT.muted, fontSize: 10 },
+        );
+        add(notes);
+      },
+    );
+  }
+
+  private previousPeriod(period: ProviderDateRange): ProviderDateRange {
+    const start = new Date(`${period.startDate}T00:00:00.000Z`);
+    const end = new Date(`${period.endDate}T00:00:00.000Z`);
+    const dayMs = 24 * 60 * 60 * 1000;
+    const days = Math.floor((end.getTime() - start.getTime()) / dayMs) + 1;
+    if (!Number.isFinite(days) || days <= 0) {
+      throw new BadRequestException("The report period is invalid.");
+    }
+    const previousEnd = new Date(start.getTime() - dayMs);
+    const previousStart = new Date(previousEnd.getTime() - (days - 1) * dayMs);
+    return {
+      startDate: previousStart.toISOString().slice(0, 10),
+      endDate: previousEnd.toISOString().slice(0, 10),
+      ...(period.timezone ? { timezone: period.timezone } : {}),
+    };
   }
 
   private reportFindings(metrics: ProviderMetricSummary): string[] {
