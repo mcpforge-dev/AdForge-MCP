@@ -12,10 +12,26 @@ const checks = [
   { path: "/api/auth/registration-status", statuses: [200] },
   { path: "/auth/google/start", statuses: [302, 503] },
   { path: "/auth/google/callback?error=access_denied", statuses: [400, 401] },
-  { path: "/oauth/google/callback?error=access_denied", statuses: [400, 401] },
-  { path: "/oauth/meta/callback?error=access_denied", statuses: [400, 401] },
-  { path: "/oauth/yandex/callback?error=access_denied", statuses: [400, 401] },
-  { path: "/oauth/tiktok/callback?error=access_denied", statuses: [400, 401] },
+  {
+    path: "/oauth/google/callback?error=access_denied",
+    statuses: [302],
+    location: "/dashboard?section=connections&oauth=error&provider=google",
+  },
+  {
+    path: "/oauth/meta/callback?error=access_denied",
+    statuses: [302],
+    location: "/dashboard?section=connections&oauth=error&provider=meta",
+  },
+  {
+    path: "/oauth/yandex/callback?error=access_denied",
+    statuses: [302],
+    location: "/dashboard?section=connections&oauth=error&provider=yandex",
+  },
+  {
+    path: "/oauth/tiktok/callback?error=access_denied",
+    statuses: [302],
+    location: "/dashboard?section=connections&oauth=error&provider=tiktok",
+  },
   { path: "/api/meta/skills/collect-report", statuses: [401] },
   { path: "/api/mcp-token", statuses: [401] },
 ];
@@ -27,6 +43,11 @@ for (const check of checks) {
   if (!check.statuses.includes(response.status)) {
     throw new Error(
       `${check.path}: expected ${check.statuses.join("/")}, got ${response.status}`,
+    );
+  }
+  if (check.location && response.headers.get("location") !== check.location) {
+    throw new Error(
+      `${check.path}: expected location ${check.location}, got ${response.headers.get("location") ?? "none"}`,
     );
   }
   console.log(JSON.stringify({ path: check.path, status: response.status }));
