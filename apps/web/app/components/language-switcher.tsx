@@ -11,10 +11,15 @@ const PAIRS: Array<[string, string]> = [
   ["Рекламная аналитика и MCP", "Advertising analytics and MCP"],
   ["HolyMedia MCP", "HolyMedia MCP"],
   ["Как это работает", "How it works"],
+  ["Пример ответа", "Example answer"],
   ["Войти", "Sign in"],
   ["Создать аккаунт", "Create account"],
   ["Регистрация", "Sign up"],
   ["Вся ваша реклама — в одном AI-чате", "All your advertising in one AI chat"],
+  [
+    "Подключите Meta, Google Ads, TikTok и Яндекс Директ. Спрашивайте о кампаниях, расходах и результатах в Claude, ChatGPT или Codex.",
+    "Connect Meta, Google Ads, TikTok, and Yandex Direct. Ask about campaigns, spend, and results in Claude, ChatGPT, or Codex.",
+  ],
   ["Ваш AI-клиент", "Your AI client"],
   [
     "Какие кампании активны и сколько мы потратили за неделю?",
