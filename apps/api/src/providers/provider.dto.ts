@@ -1,4 +1,6 @@
 import {
+  ArrayMaxSize,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsOptional,
@@ -12,6 +14,14 @@ import {
 export class AccountSelectionDto {
   @IsBoolean()
   public enabled!: boolean;
+}
+
+export class AccountSelectionBulkDto {
+  @IsArray()
+  @ArrayMaxSize(500)
+  @IsString({ each: true })
+  @MaxLength(80, { each: true })
+  public enabledAccountIds!: string[];
 }
 
 export class OAuthCallbackDto {

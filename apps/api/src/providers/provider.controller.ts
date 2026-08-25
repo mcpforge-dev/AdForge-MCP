@@ -23,7 +23,11 @@ import {
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
-import { AccountSelectionDto, ProviderDateRangeDto } from "./provider.dto.js";
+import {
+  AccountSelectionBulkDto,
+  AccountSelectionDto,
+  ProviderDateRangeDto,
+} from "./provider.dto.js";
 import { ProviderService } from "./provider.service.js";
 import { isProviderId } from "./provider.types.js";
 
@@ -65,36 +69,43 @@ export class ProviderController {
   @Get("oauth/:provider/callback")
   public async callback(
     @Param("provider") provider: string,
-    @Query("state") state: string,
-    @Query("code") code: string,
+    @Query("state") state: string | undefined,
+    @Query("code") code: string | undefined,
     @Req() request: RequestWithAuth,
     @Res() reply: FastifyReply,
+    @Query("auth_code") authCode?: string,
+    @Query("error") oauthError?: string,
   ) {
     const providerId = this.provider(provider);
-    const redirect = (outcome: "success" | "error") =>
-      reply
-        .code(302)
-        .redirect(
-          `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}`,
-        );
+    const redirect = (outcome: "success" | "error", reason?: string) => {
+      const query = new URLSearchParams({
+        section: "connections",
+        oauth: outcome,
+        provider,
+        ...(reason ? { oauth_reason: reason } : {}),
+      });
+      return reply.code(302).redirect(`/dashboard?${query.toString()}`);
+    };
+    if (oauthError) return redirect("error", "authorization_denied");
+    const authorizationCode = code ?? authCode;
     if (
       typeof state !== "string" ||
       state.length < 32 ||
       state.length > 256 ||
-      typeof code !== "string" ||
-      code.length < 1 ||
-      code.length > 512
+      typeof authorizationCode !== "string" ||
+      authorizationCode.length < 1 ||
+      authorizationCode.length > 512
     )
-      return redirect("error");
+      return redirect("error", "invalid_callback");
     try {
       await this.providers.completeOAuthCallback(
         providerId,
-        { state, code },
+        { state, code: authorizationCode },
         request,
       );
       return redirect("success");
-    } catch {
-      return redirect("error");
+    } catch (error) {
+      return redirect("error", oauthFailureReason(error));
     }
   }
 
@@ -170,6 +181,25 @@ export class ProviderController {
       id,
       accountId,
       input.enabled,
+      principal,
+      request,
+    );
+  }
+
+  @Patch("workspaces/:id/connections/:connectionId/accounts")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.manage")
+  public selectAccounts(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Body() input: AccountSelectionBulkDto,
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.providers.setAccountsEnabled(
+      id,
+      connectionId,
+      input.enabledAccountIds,
       principal,
       request,
     );
@@ -337,4 +367,19 @@ export class ProviderController {
       throw new BadRequestException("Unsupported provider.");
     return normalized;
   }
+}
+
+function oauthFailureReason(error: unknown): string {
+  const message = error instanceof Error ? error.message.toLowerCase() : "";
+  if (message.includes("разреш") || message.includes("permission"))
+    return "insufficient_permissions";
+  if (message.includes("не настро") || message.includes("not configured"))
+    return "provider_not_configured";
+  if (message.includes("авторизац") || message.includes("authentication"))
+    return "authentication_failed";
+  if (message.includes("недейств") || message.includes("state"))
+    return "invalid_oauth_state";
+  if (message.includes("лимит") || message.includes("rate"))
+    return "rate_limited";
+  return "oauth_failed";
 }

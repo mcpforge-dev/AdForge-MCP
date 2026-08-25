@@ -184,6 +184,46 @@ export class BillingService {
     );
   }
 
+  public async setProviderAccountsEnabled(
+    workspaceId: string,
+    connectionId: string,
+    enabledAccountIds: string[],
+  ): Promise<boolean> {
+    const selectedIds = [...new Set(enabledAccountIds)];
+    const limit = await this.numericLimit(workspaceId, "provider_accounts");
+    await this.database.client.$transaction(
+      async (transaction) => {
+        if (limit !== null) {
+          const enabledOutsideConnection =
+            await transaction.providerAccount.count({
+              where: {
+                workspaceId,
+                enabled: true,
+                connectionId: { not: connectionId },
+              },
+            });
+          if (enabledOutsideConnection + selectedIds.length > limit)
+            throw new ForbiddenException("Provider account limit reached.");
+        }
+        await transaction.providerAccount.updateMany({
+          where: { workspaceId, connectionId },
+          data: { enabled: false },
+        });
+        if (selectedIds.length > 0)
+          await transaction.providerAccount.updateMany({
+            where: {
+              workspaceId,
+              connectionId,
+              id: { in: selectedIds },
+            },
+            data: { enabled: true },
+          });
+      },
+      { isolationLevel: "Serializable" },
+    );
+    return true;
+  }
+
   private async numericLimit(
     workspaceId: string,
     featureKey: string,

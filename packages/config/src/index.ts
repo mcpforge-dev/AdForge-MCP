@@ -77,7 +77,7 @@ const rawConfigSchema = z.object({
     .string()
     .url()
     .default(
-      "https://business-api.tiktok.com/open_api/v1.3/oauth2/access_token/",
+      "https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/token/",
     ),
   PROVIDER_TIKTOK_ADVERTISER_URI: z
     .string()

@@ -86,7 +86,7 @@ describe("provider OAuth callback UX", () => {
     );
 
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard?section=connections&oauth=error&provider=google",
+      "/dashboard?section=connections&oauth=error&provider=google&oauth_reason=oauth_failed",
     );
     expect(reply.code).toHaveBeenCalledWith(302);
   });
@@ -95,7 +95,44 @@ describe("provider OAuth callback UX", () => {
     const { controller, reply } = setup();
     await controller.callback("google", "short", "", request, reply as never);
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard?section=connections&oauth=error&provider=google",
+      "/dashboard?section=connections&oauth=error&provider=google&oauth_reason=invalid_callback",
+    );
+  });
+
+  it("accepts TikTok's auth_code callback parameter", async () => {
+    const { controller, providers, reply } = setup();
+
+    await controller.callback(
+      "tiktok",
+      validState,
+      undefined,
+      request,
+      reply as never,
+      "tiktok-auth-code",
+    );
+
+    expect(providers.completeOAuthCallback).toHaveBeenCalledWith(
+      "TIKTOK_ADS",
+      { state: validState, code: "tiktok-auth-code" },
+      request,
+    );
+  });
+
+  it("returns a safe reason when the provider denies authorization", async () => {
+    const { controller, reply } = setup();
+
+    await controller.callback(
+      "meta",
+      validState,
+      undefined,
+      request,
+      reply as never,
+      undefined,
+      "access_denied",
+    );
+
+    expect(reply.redirect).toHaveBeenCalledWith(
+      "/dashboard?section=connections&oauth=error&provider=meta&oauth_reason=authorization_denied",
     );
   });
 });

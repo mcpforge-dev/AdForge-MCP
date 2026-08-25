@@ -26,9 +26,10 @@ export const tiktokAdsDefinition = (
 });
 
 type TikTokPayload = {
-  code?: number;
+  code?: number | string;
   message?: string;
-  data?: Record<string, unknown>;
+  request_id?: string;
+  data?: Record<string, unknown> | unknown[];
 };
 
 export class TikTokAdsAdapter implements ProviderOAuthAdapter {
@@ -62,20 +63,34 @@ export class TikTokAdsAdapter implements ProviderOAuthAdapter {
   public async exchangeCode(
     context: OAuthExchangeContext,
   ): Promise<ProviderCredentialPayload> {
-    const payload = await providerJson<TikTokPayload>(
-      this.required(this.config.providerTikTokTokenUri),
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+    const tokenUrl = this.required(this.config.providerTikTokTokenUri);
+    const legacyTokenEndpoint = /\/oauth2\/access_token\/?$/i.test(
+      new URL(tokenUrl).pathname,
+    );
+    const body = legacyTokenEndpoint
+      ? {
           app_id: this.required(this.config.providerTikTokClientId),
           secret: this.required(this.config.providerTikTokClientSecret),
           auth_code: context.code,
-        }),
+        }
+      : {
+          client_id: this.required(this.config.providerTikTokClientId),
+          client_secret: this.required(this.config.providerTikTokClientSecret),
+          grant_type: "authorization_code",
+          auth_code: context.code,
+          redirect_uri: context.redirectUri,
+        };
+    const payload = await providerJson<TikTokPayload>(
+      tokenUrl,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(body),
       },
       20_000,
     );
-    const data = payload.data ?? {};
+    assertTikTokSuccess(payload);
+    const data = isRecord(payload.data) ? payload.data : {};
     const accessToken = String(data.access_token ?? "").trim();
     if (!accessToken)
       throw new ProviderError(
@@ -110,7 +125,8 @@ export class TikTokAdsAdapter implements ProviderOAuthAdapter {
       },
       20_000,
     );
-    const data = payload.data ?? {};
+    assertTikTokSuccess(payload);
+    const data = isRecord(payload.data) ? payload.data : {};
     const candidates =
       data.advertiser_ids ??
       data.advertiser_id_list ??
@@ -165,4 +181,44 @@ export class TikTokAdsAdapter implements ProviderOAuthAdapter {
       );
     return value;
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function assertTikTokSuccess(payload: TikTokPayload): void {
+  const rootCode = Number(payload.code ?? 0);
+  const data = isRecord(payload.data) ? payload.data : undefined;
+  const nestedCode = Number(data?.error_code ?? 0);
+  const code =
+    Number.isFinite(rootCode) && rootCode !== 0 ? rootCode : nestedCode;
+  if (!code) return;
+  const message = String(
+    payload.message ?? data?.description ?? "",
+  ).toLowerCase();
+  const providerCode = String(code).slice(0, 80);
+  if (/permission|scope|access|forbidden/.test(message))
+    throw new ProviderError(
+      "insufficient_permissions",
+      "TikTok authorization permissions are insufficient.",
+      false,
+      undefined,
+      providerCode,
+    );
+  if (/rate|limit|too many/.test(message))
+    throw new ProviderError(
+      "rate_limited",
+      "TikTok rate limit was reached.",
+      true,
+      undefined,
+      providerCode,
+    );
+  throw new ProviderError(
+    "authentication_failed",
+    "TikTok authorization was rejected.",
+    false,
+    undefined,
+    providerCode,
+  );
 }

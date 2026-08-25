@@ -287,6 +287,8 @@ describe("V1 partner OAuth adapters", () => {
       PROVIDER_TIKTOK_CLIENT_SECRET: "tiktok-secret",
       PROVIDER_TIKTOK_REDIRECT_URI:
         "https://mcp.example.test/oauth/tiktok/callback",
+      PROVIDER_TIKTOK_TOKEN_URI:
+        "https://business-api.tiktok.com/open_api/v1.3/tt_user/oauth2/token/",
     });
     const fetchMock = vi
       .fn()
@@ -313,6 +315,18 @@ describe("V1 partner OAuth adapters", () => {
       code: "code",
       redirectUri: partnerConfig.providerTikTokRedirectUri!,
     });
+    const [tokenUrl, tokenInit] = fetchMock.mock.calls[0] as [
+      string,
+      RequestInit,
+    ];
+    expect(tokenUrl).toContain("/tt_user/oauth2/token/");
+    expect(JSON.parse(String(tokenInit.body))).toMatchObject({
+      client_id: "tiktok-client",
+      client_secret: "tiktok-secret",
+      grant_type: "authorization_code",
+      auth_code: "code",
+      redirect_uri: "https://mcp.example.test/oauth/tiktok/callback",
+    });
     expect(credentials).not.toHaveProperty("clientSecret");
     const accounts = await adapter.discoverAccounts(credentials);
     expect(accounts).toEqual([
@@ -321,6 +335,34 @@ describe("V1 partner OAuth adapters", () => {
         displayName: "TikTok client",
       }),
     ]);
+  });
+
+  it("maps a TikTok HTTP-200 error payload to a safe provider error", async () => {
+    const partnerConfig = loadConfig({
+      NODE_ENV: "test",
+      PROVIDER_TIKTOK_CLIENT_ID: "tiktok-client",
+      PROVIDER_TIKTOK_CLIENT_SECRET: "tiktok-secret",
+      PROVIDER_TIKTOK_REDIRECT_URI:
+        "https://mcp.example.test/oauth/tiktok/callback",
+    });
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValue(
+          jsonResponse({ code: 40100, message: "permission denied" }),
+        ),
+    );
+    const adapter = new TikTokAdsAdapter(partnerConfig);
+    await expect(
+      adapter.exchangeCode({
+        code: "code",
+        redirectUri: partnerConfig.providerTikTokRedirectUri!,
+      }),
+    ).rejects.toMatchObject({
+      code: "insufficient_permissions",
+      providerCode: "40100",
+    });
   });
 });
 

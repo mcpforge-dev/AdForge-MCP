@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ForbiddenException,
   Inject,
   Injectable,
@@ -582,6 +583,55 @@ export class ProviderService {
       accountId,
     );
     return this.accountView(account);
+  }
+
+  public async setAccountsEnabled(
+    workspaceId: string,
+    connectionId: string,
+    enabledAccountIds: string[],
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ): Promise<ProviderAccountView[]> {
+    const connection = await this.database.client.providerConnection.findFirst({
+      where: { id: connectionId, workspaceId },
+      select: { provider: true },
+    });
+    if (!connection)
+      throw new NotFoundException("Provider connection not found.");
+
+    const selectedIds = [...new Set(enabledAccountIds)];
+    const accounts = await this.database.client.providerAccount.findMany({
+      where: { workspaceId, connectionId },
+      select: { id: true, enabled: true },
+    });
+    const availableIds = new Set(accounts.map((account) => account.id));
+    if (selectedIds.some((accountId) => !availableIds.has(accountId)))
+      throw new BadRequestException(
+        "One or more provider accounts are invalid.",
+      );
+
+    await this.billing.setProviderAccountsEnabled(
+      workspaceId,
+      connectionId,
+      selectedIds,
+    );
+    for (const account of accounts) {
+      const enabled = selectedIds.includes(account.id);
+      if (enabled !== account.enabled)
+        await this.record(
+          enabled ? "provider_account_enabled" : "provider_account_disabled",
+          request,
+          principal,
+          workspaceId,
+          connection.provider as ProviderId,
+          account.id,
+        );
+    }
+    const updated = await this.database.client.providerAccount.findMany({
+      where: { workspaceId, connectionId },
+      orderBy: { displayName: "asc" },
+    });
+    return updated.map((account) => this.accountView(account));
   }
 
   public async readAccountSummary(

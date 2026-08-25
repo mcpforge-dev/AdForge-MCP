@@ -214,7 +214,43 @@ function connectionStatus(status: string) {
   if (status === "DEGRADED") return { label: "Нужно проверить", tone: "warn" };
   if (status === "REAUTH_REQUIRED")
     return { label: "Нужно войти снова", tone: "warn" };
+  if (status === "ERROR") return { label: "Ошибка подключения", tone: "err" };
   return { label: "Не подключено", tone: "info" };
+}
+
+function oauthFailureMessage(provider: string | null, reason: string | null) {
+  const name = providerCopy(provider ?? "").name;
+  if (reason === "insufficient_permissions") {
+    if (provider === "META_ADS")
+      return "Meta не выдала нужные разрешения. Проверьте, что pages_read_engagement и ads_read одобрены для приложения, а ваш аккаунт добавлен в роли приложения.";
+    if (provider === "TIKTOK_ADS")
+      return "TikTok не выдал запрошенные разрешения. Проверьте одобрение приложения и права пользователя в TikTok Business Center.";
+    return `${name} не выдала запрошенные разрешения. Проверьте настройки приложения и права пользователя.`;
+  }
+  if (reason === "authorization_denied")
+    return `Авторизация ${name} отменена. Разрешите доступ и попробуйте ещё раз.`;
+  if (reason === "provider_not_configured")
+    return `${name} пока не настроена на сервере. Обратитесь к оператору.`;
+  if (reason === "invalid_callback")
+    return `${name} вернула неполный ответ авторизации. Запустите подключение заново.`;
+  if (reason === "authentication_failed")
+    return `${name} не подтвердила авторизацию. Проверьте аккаунт и повторите вход.`;
+  return `Подключение ${name} не завершено. Проверьте настройки приложения и попробуйте ещё раз.`;
+}
+
+async function responseErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const payload = (await response.json()) as {
+      error?: { message?: string };
+      message?: string;
+    };
+    return payload.error?.message || payload.message || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export default function DashboardPage() {
@@ -263,6 +299,7 @@ export default function DashboardPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [startingProvider, setStartingProvider] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
 
   const canManage = Boolean(active && ["OWNER", "ADMIN"].includes(active.role));
@@ -407,13 +444,18 @@ export default function DashboardPage() {
       setHighlightedProvider(
         oauthProviderAliases[oauthProvider] ?? oauthProvider,
       );
+    setStartingProvider(null);
+    setBusy(false);
     if (query.get("oauth") === "success")
       notify(
         "Платформа подключена. Откройте список кабинетов и выберите нужные.",
       );
     if (query.get("oauth") === "error")
       fail(
-        "Подключение не завершено. Попробуйте ещё раз или обратитесь в поддержку.",
+        oauthFailureMessage(
+          oauthProviderAliases[oauthProvider ?? ""] ?? oauthProvider ?? null,
+          query.get("oauth_reason"),
+        ),
       );
     if (query.has("oauth"))
       window.history.replaceState({}, "", "/dashboard?section=connections");
@@ -465,7 +507,7 @@ export default function DashboardPage() {
 
   async function startProvider(provider: string) {
     if (!active || provider === "GOOGLE_SEARCH_CONSOLE") return;
-    setBusy(true);
+    setStartingProvider(provider);
     try {
       const response = await fetch(
         `${API}/api/v1/workspaces/${active.id}/connections/${provider}/oauth/start`,
@@ -482,7 +524,8 @@ export default function DashboardPage() {
       fail(
         "Не удалось открыть вход в рекламную платформу. Попробуйте ещё раз.",
       );
-      setBusy(false);
+    } finally {
+      setStartingProvider(null);
     }
   }
 
@@ -556,28 +599,34 @@ export default function DashboardPage() {
     setSavingAccounts(connection.id);
     try {
       const csrfToken = await csrf();
-      const responses = await Promise.all(
-        changes.map((account) =>
-          fetch(
-            `${API}/api/v1/workspaces/${active.id}/provider-accounts/${account.id}`,
-            {
-              method: "PATCH",
-              credentials: "include",
-              headers: {
-                "content-type": "application/json",
-                "x-csrf-token": csrfToken,
-              },
-              body: JSON.stringify({ enabled: selected.has(account.id) }),
-            },
-          ),
-        ),
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          body: JSON.stringify({ enabledAccountIds: [...selected] }),
+        },
       );
-      if (responses.some((response) => !response.ok)) throw new Error();
+      if (!response.ok)
+        throw new Error(
+          await responseErrorMessage(
+            response,
+            "Не удалось сохранить выбор кабинетов.",
+          ),
+        );
       await loadConnections(active);
       notify("Выбранные кабинеты сохранены.");
-    } catch {
+    } catch (cause) {
       await loadConnections(active);
-      fail("Не удалось сохранить выбор. Изменения отменены.");
+      fail(
+        cause instanceof Error
+          ? cause.message
+          : "Не удалось сохранить выбор кабинетов.",
+      );
     } finally {
       setSavingAccounts(null);
     }
@@ -1178,6 +1227,7 @@ export default function DashboardPage() {
                             <button
                               className="ghost-button btn--small"
                               type="button"
+                              disabled={startingProvider !== null}
                               onClick={() => void startProvider(providerId)}
                             >
                               Подключить заново
@@ -1303,7 +1353,10 @@ export default function DashboardPage() {
                         <button
                           className="primary-button"
                           type="button"
-                          disabled={busy || definition?.status === "DISABLED"}
+                          disabled={
+                            startingProvider !== null ||
+                            definition?.status === "DISABLED"
+                          }
                           onClick={() => void startProvider(providerId)}
                         >
                           Подключить {copyText.name}

@@ -94,4 +94,52 @@ describe("Billing usage", () => {
       service.setProviderAccountEnabled("workspace-a", "account-b", true),
     ).rejects.toThrow("Provider account limit reached.");
   });
+
+  it("saves provider account selection in one transaction", async () => {
+    const transactions: unknown[] = [];
+    const updates: Record<string, unknown>[] = [];
+    const database = {
+      client: {
+        entitlement: { findMany: async () => [] },
+        workspaceSubscription: { findFirst: async () => null },
+        plan: {
+          findUnique: async () => ({ features: { provider_accounts: 2 } }),
+        },
+        $transaction: async (operation: (client: unknown) => Promise<void>) => {
+          transactions.push(operation);
+          return operation({
+            providerAccount: {
+              count: async () => 0,
+              updateMany: async (input: Record<string, unknown>) => {
+                updates.push(input);
+                return { count: 1 };
+              },
+            },
+          });
+        },
+      },
+    } as never;
+    const service = new BillingService(database);
+
+    await service.setProviderAccountsEnabled("workspace-a", "connection-a", [
+      "account-a",
+      "account-a",
+    ]);
+
+    expect(transactions).toHaveLength(1);
+    expect(updates).toEqual([
+      {
+        where: { workspaceId: "workspace-a", connectionId: "connection-a" },
+        data: { enabled: false },
+      },
+      {
+        where: {
+          workspaceId: "workspace-a",
+          connectionId: "connection-a",
+          id: { in: ["account-a"] },
+        },
+        data: { enabled: true },
+      },
+    ]);
+  });
 });
