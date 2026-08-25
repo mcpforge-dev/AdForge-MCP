@@ -6,6 +6,7 @@ import {
   Query,
   Res,
   UseGuards,
+  ValidationPipe,
 } from "@nestjs/common";
 import type { FastifyReply } from "fastify";
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
@@ -14,6 +15,10 @@ import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.gua
 import { BillingService } from "../billing/billing.service.js";
 import { PerformanceReportDto } from "./report.dto.js";
 import { ReportService, type PerformanceReport } from "./report.service.js";
+
+const reportQueryValidation = new ValidationPipe({
+  expectedType: PerformanceReportDto,
+});
 
 @Controller("workspaces/:id/reports")
 @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
@@ -27,7 +32,7 @@ export class ReportController {
   @Get("performance")
   public async performance(
     @Param("id") workspaceId: string,
-    @Query() input: PerformanceReportDto,
+    @Query(reportQueryValidation) input: PerformanceReportDto,
   ): Promise<PerformanceReport> {
     await this.billing.requireFeature(workspaceId, "reports");
     return this.reports.performance(workspaceId, input);
@@ -36,7 +41,7 @@ export class ReportController {
   @Get("performance.docx")
   public async performanceDocx(
     @Param("id") workspaceId: string,
-    @Query() input: PerformanceReportDto,
+    @Query(reportQueryValidation) input: PerformanceReportDto,
     @Res() reply: FastifyReply,
   ) {
     await this.billing.requireFeature(workspaceId, "reports");
@@ -56,7 +61,7 @@ export class ReportController {
   @Get("performance.pptx")
   public async performancePptx(
     @Param("id") workspaceId: string,
-    @Query() input: PerformanceReportDto,
+    @Query(reportQueryValidation) input: PerformanceReportDto,
     @Res() reply: FastifyReply,
   ) {
     await this.billing.requireFeature(workspaceId, "reports");
