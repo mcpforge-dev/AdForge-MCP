@@ -78,6 +78,13 @@ export type PerformanceReport = {
 };
 
 const REPORT_PROVIDERS = new Set(["GOOGLE_ADS", "META_ADS"]);
+const REAUTH_ERROR_PREFIXES = [
+  "authentication_failed",
+  "refresh_failed",
+  "connection_revoked",
+  "token_expired",
+  "insufficient_permissions",
+];
 const PPT = {
   purple: "42195C",
   purpleLight: "F1EAF6",
@@ -258,7 +265,12 @@ export class ReportService {
       include: { connection: true },
     });
     if (!account) throw new NotFoundException("Provider account not found.");
-    if (account.connection.status === "REAUTH_REQUIRED") {
+    if (
+      account.connection.status === "REAUTH_REQUIRED" ||
+      REAUTH_ERROR_PREFIXES.some((prefix) =>
+        String(account.connection.lastErrorCode ?? "").startsWith(prefix),
+      )
+    ) {
       throw new ConflictException("Provider authorization must be renewed.");
     }
     if (account.connection.status !== "CONNECTED") {

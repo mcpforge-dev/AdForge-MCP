@@ -286,6 +286,20 @@ export default function DashboardPage() {
       ),
     [enabledAccounts],
   );
+  const reportConnectionIssue = useMemo(
+    () =>
+      connections.find(
+        (connection) =>
+          ["META_ADS", "GOOGLE_ADS"].includes(connection.provider) &&
+          connection.status === "REAUTH_REQUIRED",
+      ) ??
+      connections.find(
+        (connection) =>
+          ["META_ADS", "GOOGLE_ADS"].includes(connection.provider) &&
+          connection.status === "DEGRADED",
+      ),
+    [connections],
+  );
   const connectedCount = connections.filter((connection) =>
     ["CONNECTED", "DEGRADED", "REAUTH_REQUIRED"].includes(connection.status),
   ).length;
@@ -1696,15 +1710,18 @@ export default function DashboardPage() {
                 {!reportableAccounts.length && (
                   <div className="empty-state">
                     <p>
-                      Для отчёта нужен подключённый и выбранный кабинет Meta Ads
-                      или Google Ads.
+                      {reportConnectionIssue
+                        ? `${providerCopy(reportConnectionIssue.provider).name} нужно переподключить, чтобы получить данные для отчёта.`
+                        : "Для отчёта нужен подключённый и выбранный кабинет Meta Ads или Google Ads."}
                     </p>
                     <button
                       className="secondary-button"
                       type="button"
                       onClick={() => setSection("connections")}
                     >
-                      Перейти к подключениям
+                      {reportConnectionIssue
+                        ? "Открыть подключения"
+                        : "Перейти к подключениям"}
                     </button>
                   </div>
                 )}

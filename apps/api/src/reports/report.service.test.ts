@@ -235,4 +235,34 @@ describe("V2 performance reports", () => {
       }),
     ).rejects.toBeInstanceOf(ConflictException);
   });
+
+  it("tells the client to reconnect when a degraded connection has an OAuth failure", async () => {
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-internal",
+            connectionId: "connection-1",
+            provider: "GOOGLE_ADS",
+            externalAccountId: "1234567890",
+            displayName: "Google account",
+            currency: "USD",
+            timezone: "UTC",
+            connection: {
+              status: "DEGRADED",
+              lastErrorCode: "refresh_failed:invalid_grant",
+            },
+          }),
+        },
+      },
+    } as never;
+
+    await expect(
+      new ReportService(database, {} as never).performance("workspace-a", {
+        accountId: "account-internal",
+        startDate: "2026-01-01",
+        endDate: "2026-01-07",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
 });

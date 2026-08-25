@@ -475,8 +475,12 @@ export class ProviderService {
           data: {
             status: "REAUTH_REQUIRED",
             lastErrorAt: new Date(),
-            lastErrorCode:
+            lastErrorCode: [
               error instanceof ProviderError ? error.code : "refresh_failed",
+              error instanceof ProviderError ? error.providerCode : undefined,
+            ]
+              .filter(Boolean)
+              .join(":"),
           },
         });
         throw toSafeProviderException(error);

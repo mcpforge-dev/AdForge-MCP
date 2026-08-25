@@ -130,10 +130,13 @@ export class GoogleAdsAdapter
         ...this.credentialsFromToken(response),
         refreshToken: credentials.refreshToken,
       };
-    } catch {
+    } catch (error) {
       throw new ProviderError(
         "refresh_failed",
         "Google authorization refresh failed.",
+        false,
+        error instanceof ProviderError ? error.providerStatus : undefined,
+        error instanceof ProviderError ? error.providerCode : undefined,
       );
     }
   }

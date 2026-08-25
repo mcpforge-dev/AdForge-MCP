@@ -101,17 +101,21 @@ function safeProviderError(payload: unknown): {
   const value = payload as Record<string, unknown>;
   const error = value.error;
   const providerCode =
-    error && typeof error === "object"
-      ? String(
-          (error as Record<string, unknown>).status ??
-            (error as Record<string, unknown>).code ??
-            "",
-        ).slice(0, 80) || undefined
-      : undefined;
+    typeof error === "string"
+      ? error.slice(0, 80) || undefined
+      : error && typeof error === "object"
+        ? String(
+            (error as Record<string, unknown>).status ??
+              (error as Record<string, unknown>).code ??
+              "",
+          ).slice(0, 80) || undefined
+        : undefined;
   const message =
-    error && typeof error === "object"
-      ? String((error as Record<string, unknown>).message ?? "").toLowerCase()
-      : "";
+    typeof error === "string"
+      ? String(value.error_description ?? "").toLowerCase()
+      : error && typeof error === "object"
+        ? String((error as Record<string, unknown>).message ?? "").toLowerCase()
+        : "";
   return /permission|access|scope|forbidden|unauthorized/.test(message)
     ? {
         code: "insufficient_permissions",

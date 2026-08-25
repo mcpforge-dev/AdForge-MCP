@@ -106,6 +106,34 @@ describe("Google Ads v2 adapter", () => {
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
     ).not.toContain("campaign_budget.currency_code");
   });
+
+  it("keeps an OAuth refresh rejection safe and diagnosable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: "invalid_grant",
+            error_description: "The token has expired or was revoked.",
+          },
+          400,
+        ),
+      ),
+    );
+    const adapter = new GoogleAdsAdapter(config);
+
+    await expect(
+      adapter.refreshCredentials({
+        accessToken: "access",
+        refreshToken: "refresh",
+        scopes: ["https://www.googleapis.com/auth/adwords"],
+      }),
+    ).rejects.toMatchObject({
+      code: "refresh_failed",
+      providerStatus: "400",
+      providerCode: "invalid_grant",
+    });
+  });
 });
 
 describe("Meta Ads v2 adapter", () => {
