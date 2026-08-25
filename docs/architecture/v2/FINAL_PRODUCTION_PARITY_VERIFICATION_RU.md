@@ -301,3 +301,63 @@ Google Search Console remains an incomplete legacy connection outside the V1
 production capability set.
 
 **TELEGRAM HERMES REAL E2E - DEFERRED BY PROJECT DECISION**
+
+## Reports production closure
+
+### Finding, investigation and resolution
+
+The Reports failure was not an account-selection loss. `ProviderAccount.enabled`
+and the atomic selection endpoint correctly persisted the selected Google Ads
+account. The report routes, however, used a type-only DTO import with Nest's
+strict query validation, so a valid query could reach the controller as
+`400/request_invalid`. Commit `ef8c464` supplies the runtime DTO explicitly
+to the validation pipe and adds regression coverage.
+
+During the investigation one Google connection was temporarily reported as
+`DEGRADED` with a sanitized provider authentication error. Read-only V1/V2
+comparison confirmed that the historical Google OAuth client, public callback
+`/oauth/google/callback`, Google Ads scope, offline access, consent and
+granted-scope behavior are identical. The Google hierarchy metadata repair in
+`8c127ed` restored the V1-compatible manager/customer context without
+changing credentials, account IDs or enabled selections. The existing
+credential subsequently refreshed successfully; no Google reauthorization,
+new OAuth application or callback change was required.
+
+Commit `3771f44` preserves sanitized refresh-failure classification and makes
+Reports distinguish an unselected account from a connection that genuinely
+needs reauthorization. The UI now directs the user to Connections for the
+latter state instead of incorrectly saying that no account was selected.
+
+### Controlled production verification
+
+The deployed image
+`ghcr.io/stanforge-labs/holymedia-mcp-v2:sha-3771f44f57d81deb4482cdb331835f1b543c9141`
+was verified through a temporary, authenticated, headless Playwright smoke
+using an existing production user. It performed no provider writes and
+restored the original account selection afterwards.
+
+- Google OAuth-start contract contained the historical callback, Google Ads
+  scope, offline access, consent, granted-scope preservation and a state
+  value; the external callback contract was not changed.
+- The existing Google connection was `CONNECTED`; credential, provider and
+  selected-account health checks all succeeded.
+- One real Google account was selected through the atomic batch endpoint,
+  persisted after a reload, and appeared in the Reports selector.
+- Performance preview returned `realData=true`; DOCX generation returned
+  valid DOCX payloads with real provider data for 7-, 14- and 30-day periods.
+  The report engine therefore received the requested date ranges rather than
+  using a placeholder or a hard-coded period.
+- Public `/health` and `/ready` returned `200`; public `/mcp` without a token
+  returned `401`.
+
+The production inventory currently contains 276 provider-account records with
+zero orphan rows, zero cross-workspace bindings and zero unexpected duplicate
+provider bindings. The user used for the controlled Google smoke has no Meta
+connection in any of their workspaces. A separate Meta connection is
+`CONNECTED` in production, but its workspace is not accessible to that user;
+an authenticated Meta DOCX request was intentionally not attempted because it
+would bypass tenant isolation. This is not evidence of a Reports regression.
+
+GitHub Actions for `3771f44` passed foundation, production image, full-stack
+Compose and browser/compatibility workflows. Critical findings remain `0` and
+High findings remain `0`.
