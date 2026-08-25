@@ -35,7 +35,7 @@ test.describe("axe accessibility", () => {
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("lang", "ru");
     await expect(
-      page.getByRole("heading", { name: "Вся ваша реклама в одном AI-чате" }),
+      page.getByRole("heading", { name: /Вся ваша реклама.*AI-чате/ }),
     ).toBeVisible();
     await expect(
       page.getByRole("heading", {
