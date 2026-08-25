@@ -60,6 +60,7 @@ describe("Google Ads v2 adapter", () => {
     expect(url.searchParams.get("scope")).toBe(
       "https://www.googleapis.com/auth/adwords",
     );
+    expect(url.searchParams.get("include_granted_scopes")).toBe("true");
     const accounts = await adapter.discoverAccounts({
       accessToken: "access",
       scopes: ["https://www.googleapis.com/auth/adwords"],
@@ -69,6 +70,10 @@ describe("Google Ads v2 adapter", () => {
       "2345678901",
     ]);
     expect(accounts[1]?.currency).toBe("KZT");
+    expect(accounts[1]?.metadata).toMatchObject({
+      managerCustomerId: "1234567890",
+      loginCustomerId: "1234567890",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 

@@ -1,8 +1,10 @@
 import {
   BadRequestException,
+  ConflictException,
   Inject,
   Injectable,
   NotFoundException,
+  ServiceUnavailableException,
 } from "@nestjs/common";
 import type {
   ProviderCampaign,
@@ -33,6 +35,7 @@ import {
 import JSZip from "jszip";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import { ProviderService } from "../providers/provider.service.js";
+import { ProviderError } from "../providers/provider.errors.js";
 
 export type PerformanceReportInput = {
   accountId: string;
@@ -251,11 +254,18 @@ export class ReportService {
         workspaceId,
         enabled: true,
         OR: [{ id: input.accountId }, { externalAccountId: input.accountId }],
-        connection: { status: "CONNECTED" },
       },
       include: { connection: true },
     });
     if (!account) throw new NotFoundException("Provider account not found.");
+    if (account.connection.status === "REAUTH_REQUIRED") {
+      throw new ConflictException("Provider authorization must be renewed.");
+    }
+    if (account.connection.status !== "CONNECTED") {
+      throw new ServiceUnavailableException(
+        "Provider connection is unavailable.",
+      );
+    }
     if (!REPORT_PROVIDERS.has(String(account.provider))) {
       throw new BadRequestException(
         "Performance reports are currently available for Meta Ads and Google Ads accounts.",
@@ -279,35 +289,58 @@ export class ReportService {
             ...(account.timezone ? { timezone: account.timezone } : {}),
           }
         : this.previousPeriod(period);
-    const [summary, metrics, campaigns, previousMetrics] = await Promise.all([
-      this.providers.readAccountSummary(
-        workspaceId,
-        account.connectionId,
-        account.id,
-        period,
-      ),
-      this.providers.readMetrics(
-        workspaceId,
-        account.connectionId,
-        account.id,
-        period,
-      ),
-      this.providers.readCampaigns(
-        workspaceId,
-        account.connectionId,
-        account.id,
-        period,
-        500,
-      ),
-      previousPeriod
-        ? this.providers.readMetrics(
-            workspaceId,
-            account.connectionId,
-            account.id,
-            previousPeriod,
-          )
-        : Promise.resolve(null),
-    ]);
+    let summary;
+    let metrics;
+    let campaigns;
+    let previousMetrics;
+    try {
+      [summary, metrics, campaigns, previousMetrics] = await Promise.all([
+        this.providers.readAccountSummary(
+          workspaceId,
+          account.connectionId,
+          account.id,
+          period,
+        ),
+        this.providers.readMetrics(
+          workspaceId,
+          account.connectionId,
+          account.id,
+          period,
+        ),
+        this.providers.readCampaigns(
+          workspaceId,
+          account.connectionId,
+          account.id,
+          period,
+          500,
+        ),
+        previousPeriod
+          ? this.providers.readMetrics(
+              workspaceId,
+              account.connectionId,
+              account.id,
+              previousPeriod,
+            )
+          : Promise.resolve(null),
+      ]);
+    } catch (error) {
+      if (
+        error instanceof ProviderError &&
+        [
+          "authentication_failed",
+          "refresh_failed",
+          "connection_revoked",
+        ].includes(error.code)
+      ) {
+        throw new ConflictException("Provider authorization must be renewed.");
+      }
+      if (error instanceof ProviderError) {
+        throw new ServiceUnavailableException(
+          "Provider report data is unavailable.",
+        );
+      }
+      throw error;
+    }
     const report: PerformanceReport = {
       reportType: "performance",
       generatedAt: new Date().toISOString(),

@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { ReportService } from "./report.service.js";
@@ -16,6 +16,7 @@ describe("V2 performance reports", () => {
             displayName: "Test account",
             currency: "USD",
             timezone: "UTC",
+            connection: { status: "CONNECTED" },
           }),
         },
       },
@@ -113,6 +114,7 @@ describe("V2 performance reports", () => {
             displayName: "Test account",
             currency: "USD",
             timezone: "UTC",
+            connection: { status: "CONNECTED" },
           }),
         },
       },
@@ -166,6 +168,7 @@ describe("V2 performance reports", () => {
             displayName: "Yandex account",
             currency: null,
             timezone: null,
+            connection: { status: "CONNECTED" },
           }),
         },
       },
@@ -203,7 +206,33 @@ describe("V2 performance reports", () => {
     expect(lookup).toMatchObject({
       workspaceId: "workspace-a",
       enabled: true,
-      connection: { status: "CONNECTED" },
     });
+  });
+
+  it("tells the client to reconnect instead of treating a stale account as unselected", async () => {
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-internal",
+            connectionId: "connection-1",
+            provider: "GOOGLE_ADS",
+            externalAccountId: "1234567890",
+            displayName: "Google account",
+            currency: "USD",
+            timezone: "UTC",
+            connection: { status: "REAUTH_REQUIRED" },
+          }),
+        },
+      },
+    } as never;
+
+    await expect(
+      new ReportService(database, {} as never).performance("workspace-a", {
+        accountId: "account-internal",
+        startDate: "2026-01-01",
+        endDate: "2026-01-07",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });
