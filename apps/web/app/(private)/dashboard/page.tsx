@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { SiteFooter } from "../../components/site-footer";
+import { LanguageSwitcher } from "../../components/language-switcher";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const MCP_URL = "https://mcp.holymedia.kz/mcp";
@@ -44,6 +45,41 @@ type Section =
   "overview" | "connections" | "mcp" | "reports" | "analysis" | "profile";
 type Client = "codex" | "claude" | "chatgpt";
 type ReportFormat = "docx" | "pptx";
+type ReportMetric = {
+  amount?: string;
+  currency?: string;
+} | null;
+type ReportPreview = {
+  period: { startDate: string; endDate: string };
+  account: {
+    provider: string;
+    externalAccountId: string;
+    name: string;
+    currency: string | null;
+  };
+  metrics: {
+    spend: ReportMetric;
+    impressions: number | null;
+    clicks: number | null;
+    ctr: number | null;
+    conversions: number | null;
+    costPerConversion: ReportMetric;
+  };
+  campaigns: Array<{
+    id: string;
+    name: string;
+    status: string | null;
+    metrics?: {
+      spend?: ReportMetric;
+      clicks?: number | null;
+      conversions?: number | null;
+    };
+  }>;
+  insights: string[];
+  provenance: {
+    summary: { sourceApi: string; realData: boolean; dataStatus: string };
+  };
+};
 type AnalysisMode = "quick" | "full";
 type AnalysisBrief = {
   siteType: string;
@@ -150,6 +186,19 @@ function dateRange(days: number) {
   };
 }
 
+function formatReportNumber(value: number | null | undefined): string {
+  return value === null || value === undefined
+    ? "Нет данных"
+    : new Intl.NumberFormat("ru-RU", { maximumFractionDigits: 2 }).format(
+        value,
+      );
+}
+
+function formatReportMoney(value: ReportMetric): string {
+  if (!value?.amount) return "Нет данных";
+  return `${formatReportNumber(Number(value.amount))} ${value.currency ?? ""}`.trim();
+}
+
 function providerCopy(provider: string) {
   return (
     PROVIDER_COPY[provider] ?? {
@@ -186,6 +235,12 @@ export default function DashboardPage() {
   const [savingAccounts, setSavingAccounts] = useState<string | null>(null);
   const [createdToken, setCreatedToken] = useState("");
   const [reportDays, setReportDays] = useState(7);
+  const [reportAccountId, setReportAccountId] = useState("");
+  const [reportPreview, setReportPreview] = useState<ReportPreview | null>(
+    null,
+  );
+  const [reportPreviewBusy, setReportPreviewBusy] = useState(false);
+  const [reportPreviewError, setReportPreviewError] = useState("");
   const [analysisUrl, setAnalysisUrl] = useState("");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("quick");
   const [analysisBrief, setAnalysisBrief] = useState<AnalysisBrief>({
@@ -373,6 +428,24 @@ export default function DashboardPage() {
   useEffect(() => {
     if (section === "analysis" && active) void loadAnalysisHistory();
   }, [active, section]);
+
+  useEffect(() => {
+    const first = reportableAccounts[0]?.account.id ?? "";
+    if (
+      !reportableAccounts.some(({ account }) => account.id === reportAccountId)
+    ) {
+      setReportAccountId(first);
+    }
+  }, [reportableAccounts, reportAccountId]);
+
+  useEffect(() => {
+    if (section !== "reports" || !active || !reportAccountId) {
+      setReportPreview(null);
+      setReportPreviewError("");
+      return;
+    }
+    void loadReportPreview(active.id, reportAccountId, reportDays);
+  }, [active, reportAccountId, reportDays, section]);
 
   useEffect(() => {
     if (!highlightedProvider) return;
@@ -590,11 +663,50 @@ export default function DashboardPage() {
     notify("Новый ключ готов. Сохраните его сейчас.");
   }
 
+  async function loadReportPreview(
+    workspaceId: string,
+    accountId: string,
+    days: number,
+  ) {
+    setReportPreviewBusy(true);
+    setReportPreviewError("");
+    try {
+      const query = new URLSearchParams({ accountId, ...dateRange(days) });
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${workspaceId}/reports/performance?${query}`,
+        { credentials: "include", cache: "no-store" },
+      );
+      if (!response.ok) {
+        const messages: Record<number, string> = {
+          400: "Для отчёта нужен выбранный кабинет Meta Ads или Google Ads.",
+          401: "Сессия закончилась. Войдите ещё раз.",
+          403: "Отчёты недоступны для этого кабинета или тарифа.",
+          404: "Кабинет больше недоступен. Обновите подключения.",
+          429: "Слишком много запросов. Повторите попытку через минуту.",
+          503: "Рекламная платформа временно не ответила.",
+        };
+        throw new Error(
+          messages[response.status] ?? "Не удалось получить данные отчёта.",
+        );
+      }
+      setReportPreview((await response.json()) as ReportPreview);
+    } catch (cause) {
+      setReportPreview(null);
+      setReportPreviewError(
+        cause instanceof Error
+          ? cause.message
+          : "Не удалось получить данные отчёта.",
+      );
+    } finally {
+      setReportPreviewBusy(false);
+    }
+  }
+
   async function downloadReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!active) return;
     const form = new FormData(event.currentTarget);
-    const accountId = String(form.get("account_id") ?? "");
+    const accountId = String(form.get("account_id") ?? reportAccountId);
     const requestedFormat = String(form.get("format") ?? "docx");
     const format: ReportFormat = requestedFormat === "pptx" ? "pptx" : "docx";
     if (!accountId) return;
@@ -626,8 +738,13 @@ export default function DashboardPage() {
       const link = document.createElement("a");
       link.href = url;
       link.download = `holymedia-performance-report.${format}`;
+      link.style.display = "none";
+      document.body.appendChild(link);
       link.click();
-      URL.revokeObjectURL(url);
+      window.setTimeout(() => {
+        URL.revokeObjectURL(url);
+        link.remove();
+      }, 1000);
       notify(format === "pptx" ? "Презентация готова." : "Отчёт готов.");
     } catch (cause) {
       fail(
@@ -829,6 +946,7 @@ export default function DashboardPage() {
             <span>HolyMedia MCP</span>
           </a>
           <div className="dashboard-actions">
+            <LanguageSwitcher compact />
             <button
               className="profile-link"
               type="button"
@@ -1434,7 +1552,14 @@ export default function DashboardPage() {
                 <form className="report-form" onSubmit={downloadReport}>
                   <label>
                     Рекламный кабинет
-                    <select name="account_id" required defaultValue="">
+                    <select
+                      name="account_id"
+                      required
+                      value={reportAccountId}
+                      onChange={(event) =>
+                        setReportAccountId(event.target.value)
+                      }
+                    >
                       <option value="" disabled>
                         Выберите кабинет
                       </option>
@@ -1471,16 +1596,110 @@ export default function DashboardPage() {
                   <button
                     className="primary-button"
                     type="submit"
-                    disabled={busy || !reportableAccounts.length}
+                    disabled={
+                      busy ||
+                      reportPreviewBusy ||
+                      !reportableAccounts.length ||
+                      !reportPreview
+                    }
                   >
-                    {busy ? "Готовим…" : "Скачать отчёт"}
+                    {busy
+                      ? "Готовим…"
+                      : reportPreviewBusy
+                        ? "Проверяем данные…"
+                        : "Скачать отчёт"}
                   </button>
                 </form>
+                {reportPreviewError && (
+                  <div
+                    className="report-status report-status--error"
+                    role="alert"
+                  >
+                    <strong>Не удалось подготовить отчёт</strong>
+                    <span>{reportPreviewError}</span>
+                    <button
+                      className="secondary-button btn--small"
+                      type="button"
+                      onClick={() =>
+                        active &&
+                        reportAccountId &&
+                        void loadReportPreview(
+                          active.id,
+                          reportAccountId,
+                          reportDays,
+                        )
+                      }
+                    >
+                      Повторить проверку
+                    </button>
+                  </div>
+                )}
+                {reportPreviewBusy && !reportPreviewError && (
+                  <div className="report-status" role="status">
+                    Получаем реальные показатели выбранного кабинета…
+                  </div>
+                )}
+                {reportPreview && !reportPreviewBusy && (
+                  <div className="report-data-preview">
+                    <div className="report-data-preview__head">
+                      <div>
+                        <strong>{reportPreview.account.name}</strong>
+                        <span>
+                          {providerCopy(reportPreview.account.provider).name} ·{" "}
+                          {reportPreview.period.startDate} —{" "}
+                          {reportPreview.period.endDate}
+                        </span>
+                      </div>
+                      <span className="status-badge ok">
+                        {reportPreview.provenance.summary.realData
+                          ? "Реальные данные"
+                          : "Данные недоступны"}
+                      </span>
+                    </div>
+                    <div
+                      className="report-kpis"
+                      aria-label="Основные показатели"
+                    >
+                      <span>
+                        <small>Расход</small>
+                        <strong>
+                          {formatReportMoney(reportPreview.metrics.spend)}
+                        </strong>
+                      </span>
+                      <span>
+                        <small>Показы</small>
+                        <strong>
+                          {formatReportNumber(
+                            reportPreview.metrics.impressions,
+                          )}
+                        </strong>
+                      </span>
+                      <span>
+                        <small>Клики</small>
+                        <strong>
+                          {formatReportNumber(reportPreview.metrics.clicks)}
+                        </strong>
+                      </span>
+                      <span>
+                        <small>Конверсии</small>
+                        <strong>
+                          {formatReportNumber(
+                            reportPreview.metrics.conversions,
+                          )}
+                        </strong>
+                      </span>
+                    </div>
+                    <p className="report-data-preview__note">
+                      В документ попадут показатели, сравнение периодов,
+                      кампании и выводы только из этого источника.
+                    </p>
+                  </div>
+                )}
                 {!reportableAccounts.length && (
                   <div className="empty-state">
                     <p>
-                      Для отчёта нужен выбранный кабинет Meta Ads или Google
-                      Ads.
+                      Для отчёта нужен подключённый и выбранный кабинет Meta Ads
+                      или Google Ads.
                     </p>
                     <button
                       className="secondary-button"
@@ -1505,9 +1724,11 @@ export default function DashboardPage() {
                     рекламным кампаниям
                   </strong>
                   <em>
-                    {reportableAccounts.length
-                      ? `${reportDays} дней · ${reportableAccounts.length} доступных кабинетов`
-                      : "Выберите кабинет и период"}
+                    {reportPreview
+                      ? `${reportDays} дней · ${reportPreview.account.name}`
+                      : reportableAccounts.length
+                        ? "Проверяем выбранный кабинет"
+                        : "Выберите кабинет и период"}
                   </em>
                 </div>
                 <p className="report-preview-card__footer">

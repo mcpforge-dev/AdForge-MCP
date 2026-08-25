@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteFooter } from "../../components/site-footer";
+import { LanguageSwitcher } from "../../components/language-switcher";
 
 export const metadata: Metadata = {
-  title: "Условия использования | HolyMedia MCP",
+  title: "Terms of use | HolyMedia MCP",
   robots: { index: true, follow: true },
 };
 
@@ -14,100 +15,103 @@ export default function TermsPage() {
         <span className="logo-dot" aria-hidden="true" />
         HolyMedia MCP
       </Link>
+      <div className="legal-language">
+        <LanguageSwitcher compact />
+      </div>
       <article className="legal-card">
-        <p className="eyebrow">Юридическая информация</p>
-        <h1>Условия использования HolyMedia MCP</h1>
-        <p className="legal-updated">Дата обновления: 22 июня 2026 года</p>
+        <p className="eyebrow">Legal information</p>
+        <h1>HolyMedia MCP Terms of Use</h1>
+        <p className="legal-updated">Last updated: June 22, 2026</p>
         <p>
-          Настоящие условия регулируют доступ к HolyMedia MCP: сайту, личному
-          кабинету, подключениям рекламных платформ, аналитике и связанным
-          AI-сценариям.
+          These terms govern access to HolyMedia MCP: the website, workspace,
+          advertising platform connections, analytics, and related AI features.
         </p>
-        <p>Используя HolyMedia MCP, вы соглашаетесь с этими условиями.</p>
-        <h2>1. Описание сервиса</h2>
+        <p>By using HolyMedia MCP, you agree to these terms.</p>
+        <h2>1. Service description</h2>
         <p>
-          HolyMedia MCP позволяет подключать рекламные аккаунты, просматривать
-          кампании, статусы и базовые метрики, готовить отчёты и задавать
-          вопросы через совместимые AI-клиенты.
+          HolyMedia MCP lets you connect advertising accounts, view campaigns,
+          statuses, and core metrics, prepare reports, and ask questions through
+          compatible AI clients.
         </p>
         <p>
-          Реальные изменения в рекламных кабинетах не выполняются без отдельного
-          подтверждения.
+          Real changes in advertising accounts are not performed without
+          separate confirmation.
         </p>
-        <h2>2. Право на использование</h2>
+        <h2>2. Right to use</h2>
         <p>
-          Пользователь должен иметь законные полномочия подключать и
-          просматривать рекламные аккаунты, которые он авторизует в HolyMedia
-          MCP.
+          You must have legal authority to connect and view the advertising
+          accounts you authorize in HolyMedia MCP.
         </p>
-        <h2>3. Аккаунт пользователя</h2>
+        <h2>3. User account</h2>
         <p>
-          Пользователь отвечает за безопасность своего email, пароля, ключей
-          доступа и подключений. При подозрении на раскрытие нужно сменить
-          пароль, отозвать ключ или обратиться в поддержку.
+          You are responsible for the security of your email, password, access
+          keys, and connections. If you suspect exposure, change your password,
+          revoke the key, or contact support.
         </p>
-        <h2>4. Подключение рекламных платформ</h2>
+        <h2>4. Advertising platform connections</h2>
         <p>
-          Подключая платформу, пользователь разрешает HolyMedia MCP получать
-          данные в пределах прав на экране OAuth-согласия. Доступ можно отозвать
-          в HolyMedia MCP или настройках платформы.
+          By connecting a platform, you allow HolyMedia MCP to receive data
+          within the permissions shown on the OAuth consent screen. You can
+          revoke access in HolyMedia MCP or the platform settings.
         </p>
-        <h2>5. Использование AI-клиентов</h2>
+        <h2>5. AI clients</h2>
         <p>
-          Пользователь сам выбирает AI-клиент и предоставляемый ему доступ.
-          Использование Claude, ChatGPT, Codex и других сторонних клиентов также
-          регулируется их собственными условиями.
+          You choose the AI client and the access you provide to it. Your use of
+          Claude, ChatGPT, Codex, and other third-party clients is also governed
+          by their own terms.
         </p>
-        <h2>6. Допустимое использование</h2>
+        <h2>6. Acceptable use</h2>
         <p>
-          Запрещены незаконная деятельность, доступ к чужим аккаунтам, обход
-          авторизации и ограничений, перегрузка сервиса, загрузка вредоносного
-          кода и нарушение правил рекламных платформ.
+          You may not use the service for illegal activity, access to accounts
+          belonging to others, bypassing authorization or limits, overloading
+          the service, uploading malicious code, or violating advertising
+          platform rules.
         </p>
-        <h2>7. Безопасность рекламных действий</h2>
+        <h2>7. Advertising action safety</h2>
         <p>
-          Рекомендации и отчёты не гарантируют рекламный результат и должны
-          проверяться пользователем. Любое доступное изменение рекламного
-          объекта требует предварительного просмотра и явного подтверждения.
+          Recommendations and reports do not guarantee advertising results and
+          must be reviewed by you. Any available advertising object change
+          requires a preview and explicit confirmation.
         </p>
-        <h2>8. Сторонние платформы</h2>
+        <h2>8. Third-party platforms</h2>
         <p>
-          Мы не отвечаем за сбои, ограничения API, изменения правил, блокировки
-          и проверки со стороны Google, Meta, TikTok, Yandex и других платформ.
+          We are not responsible for outages, API limits, rule changes,
+          suspensions, or reviews by Google, Meta, TikTok, Yandex, or other
+          platforms.
         </p>
-        <h2>9. Доступность и изменения сервиса</h2>
+        <h2>9. Availability and changes</h2>
         <p>
-          Функции могут обновляться или временно ограничиваться для улучшения
-          безопасности и качества сервиса.
+          Features may be updated or temporarily limited to improve security and
+          service quality.
         </p>
-        <h2>10. Интеллектуальная собственность</h2>
+        <h2>10. Intellectual property</h2>
         <p>
-          Интерфейс, код, документация, бренд и материалы HolyMedia MCP
-          принадлежат их правообладателям и не могут распространяться без
-          письменного разрешения.
+          The HolyMedia MCP interface, code, documentation, brand, and materials
+          belong to their rights holders and may not be distributed without
+          written permission.
         </p>
-        <h2>11. Отказ от гарантий</h2>
+        <h2>11. Disclaimer of warranties</h2>
         <p>
-          Сервис предоставляется «как есть» и «по мере доступности». Мы не
-          гарантируем непрерывную работу или конкретные рекламные результаты.
+          The service is provided “as is” and “as available.” We do not
+          guarantee uninterrupted operation or specific advertising results.
         </p>
-        <h2>12. Ограничение ответственности</h2>
+        <h2>12. Limitation of liability</h2>
         <p>
-          В максимальной степени, разрешённой законом, HolyMedia MCP не отвечает
-          за косвенные убытки, упущенную выгоду, рекламные расходы или действия
-          сторонних платформ.
+          To the maximum extent permitted by law, HolyMedia MCP is not liable
+          for indirect losses, lost profits, advertising expenses, or actions of
+          third-party platforms.
         </p>
-        <h2>13. Приостановка доступа</h2>
+        <h2>13. Suspension</h2>
         <p>
-          Мы можем ограничить доступ при нарушении условий, угрозе безопасности,
-          злоупотреблении сервисом или требованиях закона.
+          We may restrict access for a breach of these terms, a security threat,
+          abuse of the service, or legal requirements.
         </p>
-        <h2>14. Изменения условий</h2>
+        <h2>14. Changes to these terms</h2>
         <p>
-          Мы можем обновлять условия. Продолжение использования после обновления
-          означает согласие с новой версией.
+          We may update these terms. Continued use after an update means you
+          accept the new version.
         </p>
-        <h2>15. Контакты</h2>
+        <h2>15. Contact</h2>
         <p>
           <strong>HolyMedia MCP</strong>
           <br />

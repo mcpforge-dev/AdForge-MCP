@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { LanguageSwitcher } from "../../../components/language-switcher";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -62,6 +63,9 @@ export default function AcceptInvitationPage() {
   return (
     <main className="auth-shell">
       <section className="auth-card" aria-labelledby="invitation-title">
+        <div className="auth-language">
+          <LanguageSwitcher compact />
+        </div>
         <Link className="back-link" href="/">
           HolyMedia MCP v2
         </Link>

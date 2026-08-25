@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { SiteFooter } from "../components/site-footer";
+import { LanguageSwitcher } from "../components/language-switcher";
 
 const baseUrl =
   process.env.NEXT_PUBLIC_PUBLIC_BASE_URL ?? "https://mcp.holymedia.kz";
@@ -12,7 +13,7 @@ export default function PublicHomePage() {
     applicationCategory: "BusinessApplication",
     operatingSystem: "Web",
     url: baseUrl,
-    description: "Подключите рекламные кабинеты к Claude, ChatGPT или Codex.",
+    description: "Connect advertising accounts to Claude, ChatGPT, or Codex.",
     publisher: {
       "@type": "Organization",
       name: "HolyMedia",
@@ -33,16 +34,17 @@ export default function PublicHomePage() {
           <span className="logo-dot" aria-hidden="true" />
           HolyMedia MCP
         </Link>
-        <nav className="site-nav" aria-label="Навигация">
-          <a href="#steps">Как это работает</a>
+        <nav className="site-nav" aria-label="Navigation">
+          <a href="#steps">How it works</a>
+          <LanguageSwitcher compact />
           <Link className="btn btn--secondary btn--small" href="/auth">
-            Войти
+            Sign in
           </Link>
           <Link
             className="btn btn--primary btn--small"
             href="/auth?mode=signup"
           >
-            Создать аккаунт
+            Create account
           </Link>
         </nav>
       </header>
@@ -50,63 +52,62 @@ export default function PublicHomePage() {
       <div className="landing-main">
         <section className="hero">
           <div className="hero__copy">
-            <p className="eyebrow">Рекламная аналитика и MCP</p>
-            <h1>Вся ваша реклама — в одном AI-чате</h1>
+            <p className="eyebrow">Advertising analytics and MCP</p>
+            <h1>All your advertising in one AI chat</h1>
             <p>
-              Подключите Meta, Google Ads, TikTok и Яндекс Директ. Спрашивайте о
-              кампаниях, расходах и результатах в Claude, ChatGPT или Codex.
+              Connect Meta, Google Ads, TikTok, and Yandex Direct. Ask about
+              campaigns, spend, and results in Claude, ChatGPT, or Codex.
             </p>
             <div className="hero__actions">
               <Link className="btn btn--primary" href="/auth?mode=signup">
-                Создать аккаунт
+                Create account
               </Link>
               <Link className="btn btn--secondary" href="/auth">
-                Войти
+                Sign in
               </Link>
             </div>
           </div>
-          <div className="hero-chat" aria-label="Пример ответа AI">
+          <div className="hero-chat" aria-label="Example AI answer">
             <div className="hero-chat__title">
-              <span>Пример ответа</span>
+              <span>Example answer</span>
               <span>Claude · ChatGPT · Codex</span>
             </div>
             <div className="hero-chat__q">
-              Какие кампании активны и сколько мы потратили за неделю?
+              Which campaigns are active and how much did we spend this week?
             </div>
             <div className="hero-chat__a">
               <strong>
-                Активны 3 кампании, расходы за 7 дней — 412 500 ₸.
+                3 campaigns are active; spend over 7 days is 412,500 KZT.
               </strong>
               <span className="hero-chat__row">
-                <span>Лидогенерация · Meta Ads</span>
+                <span>Lead generation · Meta Ads</span>
                 <b>184 300 ₸</b>
               </span>
               <span className="hero-chat__row">
-                <span>Поиск · Google Ads</span>
+                <span>Search · Google Ads</span>
                 <b>141 900 ₸</b>
               </span>
               <span className="hero-chat__row">
-                <span>Ретаргетинг · Яндекс Директ</span>
+                <span>Retargeting · Yandex Direct</span>
                 <b>86 300 ₸</b>
               </span>
-              <span className="hero-chat__src">
-                Демонстрационные данные · только просмотр
-              </span>
+              <span className="hero-chat__src">Demo data · read-only</span>
             </div>
           </div>
         </section>
 
         <section id="steps" className="how" aria-labelledby="steps-title">
-          <h2 id="steps-title">Три шага до первого ответа</h2>
+          <h2 id="steps-title">Three steps to your first answer</h2>
           <p className="how__intro">
-            Подключение проходит через официальный вход рекламной платформы.
+            Connect through the advertising platform's official authorization
+            flow.
           </p>
           <ol className="how-steps">
             <li className="how-step">
               <div className="how-step__num">1</div>
               <div className="how-step__body">
-                <h3>Подключите платформу</h3>
-                <p>Войдите через Google, Meta, TikTok или Яндекс.</p>
+                <h3>Connect a platform</h3>
+                <p>Sign in with Google, Meta, TikTok, or Yandex.</p>
               </div>
             </li>
             <li className="how-arrow" aria-hidden="true">
@@ -115,8 +116,8 @@ export default function PublicHomePage() {
             <li className="how-step">
               <div className="how-step__num">2</div>
               <div className="how-step__body">
-                <h3>Выберите кабинеты</h3>
-                <p>Отметьте аккаунты, которые будут доступны AI-клиенту.</p>
+                <h3>Choose accounts</h3>
+                <p>Select the accounts your AI client can access.</p>
               </div>
             </li>
             <li className="how-arrow" aria-hidden="true">
@@ -125,10 +126,8 @@ export default function PublicHomePage() {
             <li className="how-step">
               <div className="how-step__num">3</div>
               <div className="how-step__body">
-                <h3>Подключите MCP</h3>
-                <p>
-                  Скопируйте адрес и следуйте инструкции для вашего клиента.
-                </p>
+                <h3>Connect MCP</h3>
+                <p>Copy the URL and follow the instructions for your client.</p>
               </div>
             </li>
           </ol>
@@ -136,54 +135,53 @@ export default function PublicHomePage() {
 
         <section className="capabilities" aria-labelledby="capabilities-title">
           <div className="capabilities__copy">
-            <h2 id="capabilities-title">Что можно узнать</h2>
-            <p>AI видит только выбранные вами рекламные кабинеты.</p>
+            <h2 id="capabilities-title">What you can learn</h2>
+            <p>AI can see only the advertising accounts you select.</p>
             <ul className="capabilities__list">
-              <li>какие кампании активны и где есть проблемы;</li>
-              <li>сколько потрачено за выбранный период;</li>
-              <li>как изменились показы, клики и конверсии;</li>
-              <li>какая кампания потратила больше всего.</li>
+              <li>which campaigns are active and where problems exist;</li>
+              <li>how much was spent during the selected period;</li>
+              <li>how impressions, clicks, and conversions changed;</li>
+              <li>which campaign spent the most.</li>
             </ul>
           </div>
-          <div className="question-list" aria-label="Примеры вопросов">
-            <span>Какие рекламные кабинеты подключены?</span>
-            <span>Какие кампании сейчас активны?</span>
-            <span>Покажи расходы за последние 7 дней</span>
-            <span>Сравни текущий период с предыдущим</span>
+          <div className="question-list" aria-label="Example questions">
+            <span>Which advertising accounts are connected?</span>
+            <span>Which campaigns are active right now?</span>
+            <span>Show spend for the last 7 days</span>
+            <span>Compare the current period with the previous one</span>
           </div>
         </section>
 
         <section className="control" aria-labelledby="control-title">
           <div className="control__panel">
             <div className="control__lead">
-              <span className="control__eyebrow">Безопасность</span>
-              <h2 id="control-title">Изменения — только после подтверждения</h2>
+              <span className="control__eyebrow">Security</span>
+              <h2 id="control-title">Changes require your approval</h2>
               <p>
-                По умолчанию HolyMedia MCP только читает данные. Любое доступное
-                изменение сначала показывает предварительный результат и ждёт
-                вашего подтверждения.
+                HolyMedia MCP is read-only by default. Any available change is
+                previewed first and waits for your approval.
               </p>
             </div>
             <ul className="control__points">
               <li>
                 <span aria-hidden="true">✓</span>
                 <div>
-                  <strong>Только выбранные кабинеты</strong>
-                  <span>Доступ ограничен вашим аккаунтом.</span>
+                  <strong>Only selected accounts</strong>
+                  <span>Access is limited to your account.</span>
                 </div>
               </li>
               <li>
                 <span aria-hidden="true">✓</span>
                 <div>
-                  <strong>Без передачи паролей</strong>
-                  <span>Подключение через официальный OAuth.</span>
+                  <strong>No password sharing</strong>
+                  <span>Connection uses official OAuth.</span>
                 </div>
               </li>
               <li>
                 <span aria-hidden="true">✓</span>
                 <div>
-                  <strong>Контроль действий</strong>
-                  <span>Без подтверждения ничего не меняется.</span>
+                  <strong>Action control</strong>
+                  <span>Nothing changes without approval.</span>
                 </div>
               </li>
             </ul>
@@ -191,10 +189,10 @@ export default function PublicHomePage() {
         </section>
 
         <section className="cta-band">
-          <h2>Подключите первый кабинет</h2>
-          <p>Создайте аккаунт и выберите рекламную платформу.</p>
+          <h2>Connect your first account</h2>
+          <p>Create an account and choose an advertising platform.</p>
           <Link className="btn btn--primary" href="/auth?mode=signup">
-            Создать аккаунт
+            Create account
           </Link>
         </section>
       </div>

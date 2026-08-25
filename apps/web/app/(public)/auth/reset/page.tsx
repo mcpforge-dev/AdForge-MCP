@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
+import { LanguageSwitcher } from "../../../components/language-switcher";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
@@ -63,6 +64,9 @@ export default function ResetPasswordPage() {
   return (
     <main className="auth-shell">
       <section className="auth-card">
+        <div className="auth-language">
+          <LanguageSwitcher compact />
+        </div>
         <Link className="back-link" href="/auth">
           ← Назад ко входу
         </Link>

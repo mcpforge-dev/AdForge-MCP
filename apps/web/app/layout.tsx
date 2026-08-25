@@ -4,8 +4,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "HolyMedia MCP",
-  description:
-    "Единое рабочее пространство для безопасной аналитики рекламных платформ.",
+  description: "A secure workspace for advertising platform analytics.",
   icons: { icon: "/icon.svg" },
 };
 
@@ -13,7 +12,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="ru">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

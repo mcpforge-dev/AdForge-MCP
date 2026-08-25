@@ -1,9 +1,10 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { SiteFooter } from "../../components/site-footer";
+import { LanguageSwitcher } from "../../components/language-switcher";
 
 export const metadata: Metadata = {
-  title: "Политика конфиденциальности | HolyMedia MCP",
+  title: "Privacy policy | HolyMedia MCP",
   robots: { index: true, follow: true },
 };
 
@@ -14,116 +15,107 @@ export default function PrivacyPage() {
         <span className="logo-dot" aria-hidden="true" />
         HolyMedia MCP
       </Link>
+      <div className="legal-language">
+        <LanguageSwitcher compact />
+      </div>
       <article className="legal-card">
-        <p className="eyebrow">Юридическая информация</p>
-        <h1>Политика конфиденциальности HolyMedia MCP</h1>
-        <p className="legal-updated">Дата обновления: 22 июня 2026 года</p>
+        <p className="eyebrow">Legal information</p>
+        <h1>HolyMedia MCP Privacy Policy</h1>
+        <p className="legal-updated">Last updated: June 22, 2026</p>
         <p>
-          HolyMedia MCP — это B2B-сервис для подключения рекламных кабинетов,
-          просмотра рекламных данных, анализа кампаний и работы с AI-клиентами.
+          HolyMedia MCP is a B2B service for connecting advertising accounts,
+          viewing advertising data, analyzing campaigns, and working with AI
+          clients.
         </p>
         <p>
-          Эта политика объясняет, какие данные мы собираем, как используем и
-          защищаем их при работе с сайтом, личным кабинетом и
-          OAuth-подключениями рекламных платформ.
+          This policy explains what data we collect, how we use it, and how we
+          protect it when you use the website, workspace, and OAuth connections
+          to advertising platforms.
         </p>
-        <h2>1. Какие данные мы собираем</h2>
-        <p>Мы можем обрабатывать следующие категории данных:</p>
+        <h2>1. Data we collect</h2>
+        <p>We may process the following categories of data:</p>
         <ul>
           <li>
-            данные аккаунта: имя, email, настройки профиля, статус аккаунта и
-            данные сессии;
+            account data: name, email, profile settings, account status, and
+            session data;
           </li>
           <li>
-            данные рекламных подключений: платформа, идентификаторы и названия
-            доступных рекламных аккаунтов, выбранные пользователем аккаунты;
+            advertising connection data: platform, IDs and names of available
+            advertising accounts, and accounts selected by the user;
           </li>
           <li>
-            рекламные данные: кампании, статусы, бюджеты, расходы, показы,
-            клики, конверсии и базовые метрики эффективности;
+            advertising data: campaigns, statuses, budgets, spend, impressions,
+            clicks, conversions, and core performance metrics;
           </li>
+          <li>authorization data needed to maintain connections;</li>
           <li>
-            служебные данные авторизации, необходимые для поддержания
-            подключений;
-          </li>
-          <li>
-            технические данные: IP-адрес, тип браузера, диагностические события,
-            ошибки и журналы безопасности.
+            technical data: IP address, browser type, diagnostic events, errors,
+            and security logs.
           </li>
         </ul>
-        <h2>2. Как мы используем данные</h2>
-        <p>
-          Мы используем данные только для предоставления функций HolyMedia MCP:
-        </p>
+        <h2>2. How we use data</h2>
+        <p>We use data only to provide HolyMedia MCP features:</p>
         <ul>
-          <li>создание и обслуживание личного кабинета;</li>
-          <li>подключение рекламных платформ через OAuth;</li>
-          <li>отображение рекламных аккаунтов, кампаний, статусов и метрик;</li>
+          <li>creating and maintaining your workspace;</li>
+          <li>connecting advertising platforms through OAuth;</li>
           <li>
-            подготовка отчётов, рекомендаций и предварительных вариантов
-            действий;
+            displaying advertising accounts, campaigns, statuses, and metrics;
           </li>
-          <li>доступ подключённых пользователем AI-клиентов;</li>
-          <li>
-            обеспечение безопасности, предотвращение злоупотреблений и поддержка
-            сервиса.
-          </li>
+          <li>preparing reports, recommendations, and action previews;</li>
+          <li>serving AI clients connected by the user;</li>
+          <li>providing security, abuse prevention, and service support.</li>
         </ul>
-        <h2>3. Использование данных Google и Meta</h2>
+        <h2>3. Google and Meta data</h2>
         <p>
-          HolyMedia MCP получает данные Google Ads и Meta Ads только после
-          явного OAuth-разрешения пользователя и использует их только для
-          рекламной аналитики и работы с подключёнными аккаунтами.
+          HolyMedia MCP receives Google Ads and Meta Ads data only after the
+          user's explicit OAuth permission and uses it only for advertising
+          analytics and work with connected accounts.
         </p>
         <p>
-          Мы не продаём данные рекламных платформ и не используем их для
-          кредитования, нерелевантного профилирования или сторонней рекламы.
-          Использование данных Google API соответствует Google API Services User
-          Data Policy, включая Limited Use.
+          We do not sell advertising platform data or use it for lending,
+          unrelated profiling, or third-party advertising. Google API data is
+          handled in accordance with the Google API Services User Data Policy,
+          including Limited Use requirements.
         </p>
-        <h2>4. Передача данных третьим лицам</h2>
+        <h2>4. Sharing with third parties</h2>
         <p>
-          Мы не продаём персональные или рекламные данные. Ограниченная передача
-          возможна только инфраструктурным провайдерам, авторизованным рекламным
-          платформам, самостоятельно подключённым AI-клиентам либо по законному
-          требованию.
+          We do not sell personal or advertising data. Limited sharing may occur
+          only with infrastructure providers, authorized advertising platforms,
+          AI clients connected by the user, or where legally required.
         </p>
-        <h2>5. Хранение и защита данных</h2>
+        <h2>5. Storage and security</h2>
         <p>
-          Мы применяем HTTPS, шифрование OAuth-подключений, хеширование ключей
-          доступа, разделение клиентских данных, ограничение production-доступа
-          и безопасные журналы диагностики.
+          We use HTTPS, encrypted OAuth connections, hashed access keys, tenant
+          isolation, restricted production access, and secure diagnostic logs.
         </p>
         <p>
-          Секреты платформ, ключи и служебные данные не публикуются и не
-          показываются повторно после сохранения.
+          Platform secrets, keys, and service data are never published or shown
+          again after they are saved.
         </p>
-        <h2>6. Срок хранения</h2>
+        <h2>6. Retention</h2>
         <p>
-          Данные хранятся столько, сколько необходимо для предоставления
-          сервиса, безопасности, выполнения требований закона и поддержки
-          пользователя.
+          Data is retained only as long as necessary to provide the service,
+          maintain security, meet legal requirements, and support users.
         </p>
-        <h2>7. Права пользователя и удаление данных</h2>
+        <h2>7. Your rights and deletion</h2>
         <p>
-          Пользователь может запросить удаление аккаунта, отключение рекламных
-          подключений, экспорт или уточнение данных по email поддержки. Доступ
-          приложения также можно отозвать в настройках соответствующей
-          платформы.
+          You may request account deletion, disconnection of advertising
+          platforms, export, or clarification of your data by contacting
+          support. You can also revoke application access in the settings of the
+          relevant platform.
         </p>
-        <h2>8. Международная обработка</h2>
+        <h2>8. International processing</h2>
         <p>
-          Данные могут обрабатываться на инфраструктуре за пределами страны
-          проживания пользователя. Мы принимаем разумные меры защиты согласно
-          этой политике.
+          Data may be processed on infrastructure outside the user's country of
+          residence. We apply reasonable safeguards consistent with this policy.
         </p>
-        <h2>9. Изменения политики</h2>
+        <h2>9. Policy changes</h2>
         <p>
-          Мы можем обновлять эту политику. Существенные изменения обработки
-          данных будут отражены на этой странице и, когда необходимо, потребуют
-          повторного согласия.
+          We may update this policy. Material changes to data processing will be
+          reflected on this page and, where required, will require renewed
+          consent.
         </p>
-        <h2>10. Контакты</h2>
+        <h2>10. Contact</h2>
         <p>
           <strong>HolyMedia MCP</strong>
           <br />
