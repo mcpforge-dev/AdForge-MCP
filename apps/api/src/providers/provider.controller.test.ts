@@ -98,4 +98,26 @@ describe("provider OAuth callback UX", () => {
       "/dashboard?section=connections&oauth=error&provider=google",
     );
   });
+
+  it("forwards one connection-scoped batch selection", async () => {
+    const setAccountsEnabled = vi.fn(async () => []);
+    const controller = new ProviderController({ setAccountsEnabled } as never);
+    const principal = { userId: "user-a", workspaceId: "workspace-a" } as never;
+
+    await controller.selectAccounts(
+      "workspace-a",
+      "connection-a",
+      { accountIds: ["account-a"] },
+      principal,
+      request,
+    );
+
+    expect(setAccountsEnabled).toHaveBeenCalledWith(
+      "workspace-a",
+      "connection-a",
+      ["account-a"],
+      principal,
+      request,
+    );
+  });
 });

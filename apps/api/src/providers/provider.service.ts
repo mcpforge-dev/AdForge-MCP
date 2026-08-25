@@ -584,6 +584,39 @@ export class ProviderService {
     return this.accountView(account);
   }
 
+  public async setAccountsEnabled(
+    workspaceId: string,
+    connectionId: string,
+    accountIds: string[],
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ): Promise<ProviderAccountView[]> {
+    const result = await this.billing.setProviderAccountsEnabled(
+      workspaceId,
+      connectionId,
+      accountIds,
+    );
+    const connection = await this.connectionWithAccounts(
+      workspaceId,
+      connectionId,
+    );
+    const changed = new Set(result.changedAccountIds);
+    for (const account of connection.accounts) {
+      if (!changed.has(account.id)) continue;
+      await this.record(
+        account.enabled
+          ? "provider_account_enabled"
+          : "provider_account_disabled",
+        request,
+        principal,
+        workspaceId,
+        account.provider as ProviderId,
+        account.id,
+      );
+    }
+    return connection.accounts.map((account) => this.accountView(account));
+  }
+
   public async readAccountSummary(
     workspaceId: string,
     connectionId: string,

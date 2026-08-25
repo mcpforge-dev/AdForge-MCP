@@ -1,8 +1,12 @@
 import {
+  ArrayMaxSize,
+  ArrayUnique,
+  IsArray,
   IsBoolean,
   IsDateString,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -12,6 +16,14 @@ import {
 export class AccountSelectionDto {
   @IsBoolean()
   public enabled!: boolean;
+}
+
+export class AccountSelectionBatchDto {
+  @IsArray()
+  @ArrayUnique()
+  @ArrayMaxSize(1000)
+  @IsUUID("4", { each: true })
+  public accountIds!: string[];
 }
 
 export class OAuthCallbackDto {

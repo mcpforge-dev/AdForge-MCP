@@ -179,4 +179,31 @@ describe("V2 performance reports", () => {
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
   });
+
+  it("requires the same enabled account state used by Connections", async () => {
+    let lookup: Record<string, unknown> | undefined;
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async (input: { where: Record<string, unknown> }) => {
+            lookup = input.where;
+            return null;
+          },
+        },
+      },
+    } as never;
+
+    await expect(
+      new ReportService(database, {} as never).performance("workspace-a", {
+        accountId: "account-a",
+        startDate: "2026-01-01",
+        endDate: "2026-01-07",
+      }),
+    ).rejects.toThrow("Provider account not found.");
+    expect(lookup).toMatchObject({
+      workspaceId: "workspace-a",
+      enabled: true,
+      connection: { status: "CONNECTED" },
+    });
+  });
 });

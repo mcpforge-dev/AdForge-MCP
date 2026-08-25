@@ -445,7 +445,7 @@ export default function DashboardPage() {
       return;
     }
     void loadReportPreview(active.id, reportAccountId, reportDays);
-  }, [active, reportAccountId, reportDays, section]);
+  }, [active, reportAccountId, reportDays, reportableAccounts, section]);
 
   useEffect(() => {
     if (!highlightedProvider) return;
@@ -556,23 +556,19 @@ export default function DashboardPage() {
     setSavingAccounts(connection.id);
     try {
       const csrfToken = await csrf();
-      const responses = await Promise.all(
-        changes.map((account) =>
-          fetch(
-            `${API}/api/v1/workspaces/${active.id}/provider-accounts/${account.id}`,
-            {
-              method: "PATCH",
-              credentials: "include",
-              headers: {
-                "content-type": "application/json",
-                "x-csrf-token": csrfToken,
-              },
-              body: JSON.stringify({ enabled: selected.has(account.id) }),
-            },
-          ),
-        ),
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/connections/${connection.id}/accounts`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": csrfToken,
+          },
+          body: JSON.stringify({ accountIds: [...selected] }),
+        },
       );
-      if (responses.some((response) => !response.ok)) throw new Error();
+      if (!response.ok) throw new Error();
       await loadConnections(active);
       notify("Выбранные кабинеты сохранены.");
     } catch {

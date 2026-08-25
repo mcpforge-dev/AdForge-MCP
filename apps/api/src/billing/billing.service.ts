@@ -184,6 +184,70 @@ export class BillingService {
     );
   }
 
+  public async setProviderAccountsEnabled(
+    workspaceId: string,
+    connectionId: string,
+    accountIds: string[],
+  ): Promise<{ changedAccountIds: string[] }> {
+    const selectedIds = [...new Set(accountIds)];
+    const limit = await this.numericLimit(workspaceId, "provider_accounts");
+
+    return this.database.client.$transaction(
+      async (transaction) => {
+        const accounts = await transaction.providerAccount.findMany({
+          where: { workspaceId, connectionId },
+          select: { id: true, enabled: true },
+        });
+        const accountIdsInConnection = new Set(
+          accounts.map((account) => account.id),
+        );
+        if (
+          selectedIds.some(
+            (accountId) => !accountIdsInConnection.has(accountId),
+          )
+        )
+          throw new ForbiddenException(
+            "Provider account selection is invalid.",
+          );
+
+        const selected = new Set(selectedIds);
+        const changedAccountIds = accounts
+          .filter((account) => account.enabled !== selected.has(account.id))
+          .map((account) => account.id);
+        const enabledOutsideConnection =
+          await transaction.providerAccount.count({
+            where: {
+              workspaceId,
+              connectionId: { not: connectionId },
+              enabled: true,
+            },
+          });
+        if (
+          limit !== null &&
+          enabledOutsideConnection + selectedIds.length > limit
+        )
+          throw new ForbiddenException("Provider account limit reached.");
+
+        await transaction.providerAccount.updateMany({
+          where: { workspaceId, connectionId, enabled: true },
+          data: { enabled: false },
+        });
+        if (selectedIds.length) {
+          await transaction.providerAccount.updateMany({
+            where: {
+              workspaceId,
+              connectionId,
+              id: { in: selectedIds },
+            },
+            data: { enabled: true },
+          });
+        }
+        return { changedAccountIds };
+      },
+      { isolationLevel: "Serializable" },
+    );
+  }
+
   private async numericLimit(
     workspaceId: string,
     featureKey: string,

@@ -94,4 +94,50 @@ describe("Billing usage", () => {
       service.setProviderAccountEnabled("workspace-a", "account-b", true),
     ).rejects.toThrow("Provider account limit reached.");
   });
+
+  it("atomically replaces one connection selection", async () => {
+    const accounts = [
+      { id: "account-a", enabled: true },
+      { id: "account-b", enabled: true },
+      { id: "account-c", enabled: true },
+    ];
+    const database = {
+      client: {
+        entitlement: {
+          findMany: async () => [{ featureKey: "legacy_access", value: true }],
+        },
+        workspaceSubscription: { findFirst: async () => null },
+        $transaction: async (
+          operation: (client: unknown) => Promise<unknown>,
+        ) =>
+          operation({
+            providerAccount: {
+              findMany: async () =>
+                accounts.map(({ id, enabled }) => ({ id, enabled })),
+              count: async () => 0,
+              updateMany: async (input: { data: { enabled: boolean } }) => {
+                for (const account of accounts) {
+                  account.enabled = input.data.enabled
+                    ? account.id === "account-b"
+                    : false;
+                }
+                return { count: accounts.length };
+              },
+            },
+          }),
+      },
+    } as never;
+    const service = new BillingService(database);
+
+    await expect(
+      service.setProviderAccountsEnabled("workspace-a", "connection-a", [
+        "account-b",
+      ]),
+    ).resolves.toEqual({ changedAccountIds: ["account-a", "account-c"] });
+    expect(accounts.map((account) => [account.id, account.enabled])).toEqual([
+      ["account-a", false],
+      ["account-b", true],
+      ["account-c", false],
+    ]);
+  });
 });

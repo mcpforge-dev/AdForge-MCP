@@ -23,7 +23,11 @@ import {
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
-import { AccountSelectionDto, ProviderDateRangeDto } from "./provider.dto.js";
+import {
+  AccountSelectionBatchDto,
+  AccountSelectionDto,
+  ProviderDateRangeDto,
+} from "./provider.dto.js";
 import { ProviderService } from "./provider.service.js";
 import { isProviderId } from "./provider.types.js";
 
@@ -154,6 +158,25 @@ export class ProviderController {
     @Req() request: RequestWithAuth,
   ) {
     return this.providers.discover(id, connectionId, principal, request);
+  }
+
+  @Patch("workspaces/:id/connections/:connectionId/accounts")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.manage")
+  public selectAccounts(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Body() input: AccountSelectionBatchDto,
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.providers.setAccountsEnabled(
+      id,
+      connectionId,
+      input.accountIds,
+      principal,
+      request,
+    );
   }
 
   @Patch("workspaces/:id/provider-accounts/:accountId")

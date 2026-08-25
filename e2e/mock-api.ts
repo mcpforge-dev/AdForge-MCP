@@ -31,9 +31,14 @@ const cors = {
 };
 
 async function json(route: Route, body: unknown) {
+  const origin = route.request().headers().origin ?? "http://localhost:3000";
   await route.fulfill({
     status: 200,
-    headers: { ...cors, "content-type": "application/json" },
+    headers: {
+      ...cors,
+      "access-control-allow-origin": origin,
+      "content-type": "application/json",
+    },
     body: JSON.stringify(body),
   });
 }
@@ -43,7 +48,14 @@ export async function installMockApi(page: Page) {
     const request = route.request();
     const path = new URL(request.url()).pathname;
     if (request.method() === "OPTIONS")
-      return route.fulfill({ status: 204, headers: cors });
+      return route.fulfill({
+        status: 204,
+        headers: {
+          ...cors,
+          "access-control-allow-origin":
+            request.headers().origin ?? "http://localhost:3000",
+        },
+      });
     if (path === "/api/v1/auth/csrf")
       return json(route, { csrfToken: "mock-csrf" });
     if (["/api/v1/auth/login", "/api/v1/auth/signup"].includes(path))
@@ -189,12 +201,33 @@ export async function installMockApi(page: Page) {
           ],
         },
       ]);
-    if (path.includes("/provider-accounts/") && request.method() === "PATCH") {
-      const account = accounts.find((item) => path.endsWith(`/${item.id}`));
-      if (account) {
-        const body = request.postDataJSON() as { enabled?: boolean };
-        account.enabled = Boolean(body.enabled);
-      }
+    if (path.includes("/reports/performance") && request.method() === "GET")
+      return json(route, {
+        account: {
+          provider: "META_ADS",
+          externalAccountId: accounts[0].externalAccountId,
+          name: accounts[0].displayName,
+          currency: "USD",
+          timezone: "UTC",
+        },
+        period: { startDate: "2026-01-01", endDate: "2026-01-07" },
+        metrics: {
+          spend: { amount: "10", currency: "USD" },
+          impressions: 100,
+          clicks: 10,
+          conversions: 1,
+        },
+        campaigns: [],
+        provenance: { summary: { realData: true } },
+      });
+    if (
+      path.endsWith(`/connections/${connectionId}/accounts`) &&
+      request.method() === "PATCH"
+    ) {
+      const body = request.postDataJSON() as { accountIds?: string[] };
+      const selected = new Set(body.accountIds ?? []);
+      for (const account of accounts)
+        account.enabled = selected.has(account.id);
       return json(route, { success: true });
     }
     if (path.endsWith("/accounts/discover"))

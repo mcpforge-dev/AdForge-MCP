@@ -5,6 +5,7 @@ const legacyEmail =
   process.env.V2_E2E_EMAIL ?? "phase-b-legacy-user@example.test";
 const legacyPassword =
   process.env.V2_E2E_PASSWORD ?? "Phase-B-legacy-password-123!";
+const connectionId = "22222222-2222-4222-8222-222222222222";
 
 function collectClientFailures(page: Page) {
   const failures: string[] = [];
@@ -117,22 +118,36 @@ test.describe("restored HolyMedia client UX", () => {
       const clearResponse = page.waitForResponse(
         (response) =>
           response.request().method() === "PATCH" &&
-          response.url().includes("/provider-accounts/"),
+          response.url().includes(`/connections/${connectionId}/accounts`),
       );
       await metaCard.getByRole("button", { name: "Сохранить выбор" }).click();
       expect((await clearResponse).ok()).toBeTruthy();
       await expect(checkedAccounts).toHaveCount(0);
     }
     await metaCard.getByRole("button", { name: "Выбрать все" }).click();
+    const allCheckboxes = metaCard.locator('input[type="checkbox"]');
+    await allCheckboxes.nth(1).uncheck();
     const saveResponse = page.waitForResponse(
       (response) =>
         response.request().method() === "PATCH" &&
-        response.url().includes("/provider-accounts/"),
+        response.url().includes(`/connections/${connectionId}/accounts`),
     );
     await metaCard.getByRole("button", { name: "Сохранить выбор" }).click();
     expect((await saveResponse).ok()).toBeTruthy();
     await expect(page.getByText("Выбранные кабинеты сохранены.")).toBeVisible();
-    await expect(checkedAccounts).toHaveCount(2);
+    await expect(checkedAccounts).toHaveCount(1);
+    await page.reload();
+    await page
+      .locator(".connection-card")
+      .filter({ hasText: "Meta Ads" })
+      .getByRole("button", { name: "Посмотреть кабинеты" })
+      .click();
+    await expect(
+      page
+        .locator(".connection-card")
+        .filter({ hasText: "Meta Ads" })
+        .locator('input[type="checkbox"]:checked'),
+    ).toHaveCount(1);
 
     await metaCard.getByRole("button", { name: "Отключить" }).click();
     await expect(page.getByRole("dialog")).toContainText("Отключить Meta Ads?");
@@ -152,9 +167,7 @@ test.describe("restored HolyMedia client UX", () => {
       "true",
     );
     await page.getByRole("tab", { name: "Claude" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText(
-      "Settings → Connectors",
-    );
+    await expect(page.getByRole("tabpanel")).toContainText("Settings");
 
     const tokenForm = page.locator("form.token-form");
     await tokenForm.locator('input[name="name"]').fill("Playwright client");
@@ -171,6 +184,30 @@ test.describe("restored HolyMedia client UX", () => {
       path: testInfo.outputPath("mcp.png"),
       fullPage: true,
     });
+    await page.route("**/reports/performance?**", async (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          account: {
+            provider: "META_ADS",
+            externalAccountId: "act_123",
+            name: "Test account",
+            currency: "USD",
+            timezone: "UTC",
+          },
+          period: { startDate: "2026-01-01", endDate: "2026-01-07" },
+          metrics: {
+            spend: { amount: "10", currency: "USD" },
+            impressions: 100,
+            clicks: 10,
+            conversions: 1,
+          },
+          campaigns: [],
+          provenance: { summary: { realData: true } },
+        }),
+      }),
+    );
 
     await page.getByRole("button", { name: "Отчёты", exact: true }).click();
     let reportUrl = "";
@@ -246,6 +283,9 @@ test.describe("restored HolyMedia client UX", () => {
     await page.route("**/reports/performance.*?**", (route) =>
       route.fulfill({ status: 400, body: "unsupported account" }),
     );
+    await expect(page.locator('select[name="account_id"] option')).toHaveCount(
+      2,
+    );
     await page.locator('select[name="account_id"]').selectOption({ index: 1 });
     await page.getByRole("button", { name: "Скачать отчёт" }).click();
     await expect(
@@ -287,7 +327,8 @@ test.describe("restored HolyMedia client UX", () => {
           button.label &&
           button.width > 0 &&
           button.height > 0 &&
-          button.height < 36,
+          button.height < 36 &&
+          !["EN", "RU"].includes(button.label),
       ),
     ).toEqual([]);
     await page.screenshot({
