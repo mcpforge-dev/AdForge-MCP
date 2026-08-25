@@ -51,7 +51,9 @@ test.describe("axe accessibility", () => {
       .click();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
     await expect(
-      page.getByRole("link", { name: "How it works" }),
+      page.getByRole("heading", {
+        name: "All your advertising in one AI chat",
+      }),
     ).toBeVisible();
   });
 
