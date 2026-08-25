@@ -4,7 +4,9 @@ import { useEffect } from "react";
 
 type Language = "en" | "ru";
 
-const STORAGE_KEY = "holymedia-language";
+// Keep the old key out of the default decision: the previous release stored
+// its English default as if the user had explicitly selected it.
+const STORAGE_KEY = "holymedia-language-v2";
 const PAIRS: Array<[string, string]> = [
   ["Рекламная аналитика и MCP", "Advertising analytics and MCP"],
   ["HolyMedia MCP", "HolyMedia MCP"],
@@ -267,19 +269,28 @@ const PAIRS: Array<[string, string]> = [
 ];
 
 const translations = new Map(PAIRS);
+const reverseTranslations = new Map(
+  PAIRS.map(([russian, english]) => [english, russian]),
+);
 const orderedPairs = [...PAIRS].sort(
   (left, right) => right[0].length - left[0].length,
 );
+const reversePairs = [...PAIRS]
+  .map(([russian, english]) => [english, russian] as const)
+  .sort((left, right) => right[0].length - left[0].length);
 const originals = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Record<string, string>>();
-let activeLanguage: Language = "en";
+let activeLanguage: Language = "ru";
 let applyingLanguage = false;
 
 function translate(value: string, language: Language): string {
-  if (language === "ru") return value;
-  const exact = translations.get(value);
+  const exact =
+    language === "ru"
+      ? reverseTranslations.get(value)
+      : translations.get(value);
   if (exact) return exact;
-  return orderedPairs.reduce(
+  const pairs = language === "ru" ? reversePairs : orderedPairs;
+  return pairs.reduce(
     (current, [source, target]) => current.split(source).join(target),
     value,
   );
@@ -322,11 +333,13 @@ function applyLanguage(language: Language): void {
       const stored = originals.get(textNode);
       const base =
         stored === undefined ||
-        (/[А-Яа-яЁё]/.test(current) && current !== translate(stored, "en"))
+        (current !== translate(stored, "ru") &&
+          current !== translate(stored, "en"))
           ? current
           : stored;
-      originals.set(textNode, base ?? current);
-      textNode.nodeValue = translate(base ?? current, language);
+      originals.set(textNode, base);
+      const next = translate(base, language);
+      if (current !== next) textNode.nodeValue = next;
     });
     document
       .querySelectorAll<HTMLElement>("[placeholder], [title], [aria-label]")
@@ -337,16 +350,18 @@ function applyLanguage(language: Language): void {
             const current = element.getAttribute(attribute);
             if (!current) return;
             const base =
-              saved[attribute] === undefined || /[А-Яа-яЁё]/.test(current)
+              saved[attribute] === undefined ||
+              (current !== translate(saved[attribute], "ru") &&
+                current !== translate(saved[attribute], "en"))
                 ? current
                 : saved[attribute];
             saved[attribute] = base;
-            element.setAttribute(attribute, translate(base, language));
+            const next = translate(base, language);
+            if (current !== next) element.setAttribute(attribute, next);
           },
         );
         originalAttributes.set(element, saved);
       });
-    window.localStorage.setItem(STORAGE_KEY, language);
   } finally {
     applyingLanguage = false;
   }
@@ -355,20 +370,20 @@ function applyLanguage(language: Language): void {
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    activeLanguage = saved === "ru" ? "ru" : "en";
+    activeLanguage = saved === "en" ? "en" : "ru";
     const apply = () => applyLanguage(activeLanguage);
     const observer = new MutationObserver(() => apply());
     apply();
     observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true,
     });
     return () => observer.disconnect();
   }, []);
 
   function select(language: Language) {
     activeLanguage = language;
+    window.localStorage.setItem(STORAGE_KEY, language);
     applyLanguage(language);
   }
 

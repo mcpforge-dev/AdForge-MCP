@@ -24,6 +24,35 @@ async function login(page: Page) {
 }
 
 test.describe("axe accessibility", () => {
+  test("starts in Russian without a translation observer loop", async ({
+    page,
+  }) => {
+    const consoleErrors: string[] = [];
+    page.on("console", (message) => {
+      if (message.type() === "error") consoleErrors.push(message.text());
+    });
+
+    await page.goto("/");
+    await expect(page.locator("html")).toHaveAttribute("lang", "ru");
+    await expect(
+      page.getByRole("link", { name: "Как это работает" }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: "How it works" })).toHaveCount(
+      0,
+    );
+    await page.waitForTimeout(500);
+    expect(consoleErrors).toEqual([]);
+
+    await page
+      .getByRole("navigation")
+      .getByRole("button", { name: "English" })
+      .click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(
+      page.getByRole("link", { name: "How it works" }),
+    ).toBeVisible();
+  });
+
   test("public authentication and legal pages", async ({ page }) => {
     for (const path of [
       "/",
