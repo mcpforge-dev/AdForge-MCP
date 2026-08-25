@@ -12,7 +12,7 @@ import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import { RequirePermissions } from "../auth/auth.decorators.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
 import { BillingService } from "../billing/billing.service.js";
-import type { PerformanceReportDto } from "./report.dto.js";
+import { PerformanceReportDto } from "./report.dto.js";
 import { ReportService, type PerformanceReport } from "./report.service.js";
 
 @Controller("workspaces/:id/reports")
