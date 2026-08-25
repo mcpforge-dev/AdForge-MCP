@@ -35,11 +35,13 @@ test.describe("axe accessibility", () => {
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("lang", "ru");
     await expect(
-      page.getByRole("link", { name: "Как это работает" }),
+      page.getByRole("heading", { name: "Вся ваша реклама в одном AI-чате" }),
     ).toBeVisible();
-    await expect(page.getByRole("link", { name: "How it works" })).toHaveCount(
-      0,
-    );
+    await expect(
+      page.getByRole("heading", {
+        name: "All your advertising in one AI chat",
+      }),
+    ).toHaveCount(0);
     await page.waitForTimeout(500);
     expect(consoleErrors).toEqual([]);
 
