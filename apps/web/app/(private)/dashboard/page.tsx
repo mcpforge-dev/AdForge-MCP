@@ -959,8 +959,11 @@ export default function DashboardPage() {
             href="/dashboard"
             aria-label="HolyMedia MCP — обзор"
           >
-            <span className="logo-dot" aria-hidden="true" />
-            <span>HolyMedia MCP</span>
+            <img
+              className="brand-logo"
+              src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+              alt=""
+            />
           </a>
           <div className="dashboard-actions">
             <LanguageSwitcher compact />

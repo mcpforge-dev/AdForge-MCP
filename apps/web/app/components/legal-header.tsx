@@ -50,8 +50,11 @@ export function LegalHeader() {
           });
         }}
       >
-        <span className="logo-dot" aria-hidden="true" />
-        HolyMedia MCP
+        <img
+          className="brand-logo"
+          src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+          alt=""
+        />
       </Link>
       <div className="legal-language">
         <LanguageSwitcher compact />

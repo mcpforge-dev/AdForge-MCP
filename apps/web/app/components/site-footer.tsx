@@ -28,7 +28,14 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
       data-language-static
     >
       <div className="footer__left">
-        <span className="footer__product">{copy.product}</span>
+        <div className="footer__identity">
+          <img
+            className="footer__brand-logo"
+            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+            alt="HolyMedia MCP"
+          />
+          <span className="footer__product">{copy.product}</span>
+        </div>
         <a
           className="footer__partner"
           href="https://astanahub.com/"

@@ -17,8 +17,11 @@ export function LandingHeader() {
   return (
     <header className={scrolled ? "site-header is-scrolled" : "site-header"}>
       <Link className="site-brand" href="/" aria-label="HolyMedia MCP">
-        <span className="logo-dot" aria-hidden="true" />
-        HolyMedia MCP
+        <img
+          className="brand-logo"
+          src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+          alt=""
+        />
       </Link>
       <nav className="site-nav" aria-label="Навигация">
         <a href="#steps">Как это работает</a>
