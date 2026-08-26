@@ -2239,7 +2239,16 @@ pre {
 }
 
 .dashboard-actions {
-  gap: 12px;
+  gap: 16px;
+}
+
+.dashboard-actions .profile-link,
+.dashboard-actions > .ghost-button {
+  padding-inline: 0;
+}
+
+.copy-row .secondary-button {
+  min-height: 44px;
 }
 
 .nav-tab {
@@ -2318,7 +2327,7 @@ pre {
 }
 
 .legal-card > * {
-  max-width: 76ch;
+  max-width: 104ch;
 }
 
 .legal-card h1 {

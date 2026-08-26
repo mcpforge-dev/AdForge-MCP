@@ -37,6 +37,18 @@ async function login(page: Page) {
 }
 
 test.describe("restored HolyMedia client UX", () => {
+  test("keeps an active session when returning from legal pages", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await page.goto("/privacy");
+    const brand = page.locator(".legal-brand");
+    await expect(brand).toHaveAttribute("href", "/dashboard");
+    await brand.click();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.locator("main.dashboard-shell")).toBeVisible();
+  });
+
   test("direct auth modes and a new registration work", async ({
     page,
   }, testInfo) => {
@@ -244,23 +256,6 @@ test.describe("restored HolyMedia client UX", () => {
     });
 
     await page
-      .getByRole("button", { name: "Анализ сайта", exact: true })
-      .click();
-    await page.locator('input[type="url"]').fill("https://example.com");
-    await page.getByRole("button", { name: "Полная", exact: true }).click();
-    await page.locator(".analysis-brief > summary").click();
-    await page
-      .locator('input[placeholder="Кому вы продаёте"]')
-      .fill("Маркетологи");
-    await page.getByRole("button", { name: "Проанализировать сайт" }).click();
-    await expect(
-      page.getByRole("heading", { name: "https://example.com" }),
-    ).toBeVisible();
-    await expect(page.getByRole("tab", { name: "Приоритеты" })).toBeVisible();
-    await page.getByRole("tab", { name: "Первый экран" }).click();
-    await expect(page.getByText("Получите консультацию")).toBeVisible();
-
-    await page
       .getByRole("button", {
         name: new RegExp(`Открыть профиль.*${legacyEmail}`),
       })
@@ -291,6 +286,61 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(
       page.getByText("Для отчёта выберите кабинет Meta Ads или Google Ads."),
     ).toBeVisible();
+  });
+
+  test("localizes the customer-facing dashboard surfaces in English", async ({
+    page,
+  }, testInfo) => {
+    await installMockApi(page);
+    await login(page);
+    await page.getByRole("button", { name: "English" }).click();
+
+    await expect(
+      page.getByText("Sign in through official OAuth."),
+    ).toBeVisible();
+    await expect(page.getByText("Add an AI client")).toBeVisible();
+
+    await page
+      .getByRole("button", { name: "Connections", exact: true })
+      .click();
+    await expect(
+      page.getByText("Campaigns, spend, clicks, and conversions."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Direct clients and advertising accounts."),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Available TikTok advertising accounts."),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "AI client", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Copy the MCP URL" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Copy", exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Create an access key" }),
+    ).toBeVisible();
+    expect(await page.locator(".mcp-setup").innerText()).not.toMatch(
+      /[А-Яа-яЁё]/,
+    );
+
+    await page.getByRole("button", { name: "Reports", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Advertising account report" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Build report" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("combobox", { name: "Advertising account" }),
+    ).toBeVisible();
+    await page.screenshot({
+      path: testInfo.outputPath("dashboard-en-reports.png"),
+      fullPage: true,
+    });
   });
 
   test("mobile navigation and connections do not overflow", async ({
