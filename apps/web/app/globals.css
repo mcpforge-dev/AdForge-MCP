@@ -604,7 +604,7 @@ form {
 }
 .footer__left {
   display: grid;
-  gap: 9px;
+  gap: 20px;
   min-width: 0;
 }
 .footer__links {
@@ -2250,8 +2250,16 @@ pre {
 
 .footer--landing,
 .footer--app {
+  align-items: center;
   margin-top: 0;
+}
+
+.footer--landing {
   padding: 0 0 20px;
+}
+
+.footer--app {
+  padding: 20px 0;
 }
 
 .footer__product {
@@ -2375,6 +2383,11 @@ pre {
 
   .footer__partner img {
     height: 26px;
+  }
+
+  .footer--landing,
+  .footer--app {
+    align-items: flex-start;
   }
 
   .legal-page {
