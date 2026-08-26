@@ -29,7 +29,7 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         <div className="footer__identity">
           <img
             className="footer__brand-logo"
-            src="/assets/brand/holymedia-mcp-horizontal.svg"
+            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
             alt="HolyMedia MCP"
           />
         </div>
