@@ -164,6 +164,21 @@ test.describe("axe accessibility", () => {
     await expectAccessible(page, "profile");
   });
 
+  test("reports account picker is accessible", async ({ page }) => {
+    await installMockApi(page);
+    await login(page);
+    await page.goto("/dashboard?section=reports");
+    await expectAccessible(page, "reports without a selected account");
+    await page.locator(".report-account-trigger").click();
+    const picker = page.getByRole("dialog", {
+      name: "Выберите рекламную платформу",
+    });
+    await expect(picker).toBeVisible();
+    await expectAccessible(page, "reports platform picker");
+    await picker.getByRole("button", { name: "Показать кабинеты" }).click();
+    await expectAccessible(page, "reports account picker");
+  });
+
   test("shows the shared feedback form without exposing technical terms", async ({
     page,
   }, testInfo) => {

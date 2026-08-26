@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { BrandLockup } from "../../components/brand-lockup";
 import { SiteFooter } from "../../components/site-footer";
@@ -50,6 +50,7 @@ type Section =
   "overview" | "connections" | "mcp" | "reports" | "analysis" | "profile";
 type Client = "codex" | "claude" | "chatgpt";
 type ReportFormat = "docx" | "pptx";
+type ReportableAccount = { account: ProviderAccount; connection: Connection };
 type ReportMetric = {
   amount?: string;
   currency?: string;
@@ -198,6 +199,21 @@ function dateRange(days: number) {
   };
 }
 
+function reportErrorMessage(status: number, phase: "preview" | "download") {
+  const action =
+    phase === "preview" ? "получить данные отчёта" : "собрать отчёт";
+  const messages: Record<number, string> = {
+    400: "Для отчёта выберите подключённый кабинет Meta Ads или Google Ads.",
+    401: "Сессия закончилась. Войдите ещё раз.",
+    403: "Отчёты недоступны для этого кабинета или тарифа.",
+    404: "Кабинет больше недоступен. Обновите подключения и выберите его заново.",
+    409: "Платформа требует повторного входа. Переподключите её в разделе «Подключения».",
+    429: "Слишком много запросов. Повторите попытку через минуту.",
+    503: "Рекламная платформа временно не ответила. Повторите попытку позже.",
+  };
+  return messages[status] ?? `Не удалось ${action}. Попробуйте ещё раз.`;
+}
+
 function formatReportNumber(value: number | null | undefined): string {
   return value === null || value === undefined
     ? "Нет данных"
@@ -322,11 +338,19 @@ export default function DashboardPage() {
   const [tokenActionId, setTokenActionId] = useState<string | null>(null);
   const [reportDays, setReportDays] = useState(7);
   const [reportAccountId, setReportAccountId] = useState("");
+  const [reportFormat, setReportFormat] = useState<ReportFormat>("docx");
+  const [reportPickerOpen, setReportPickerOpen] = useState(false);
+  const [reportPickerProvider, setReportPickerProvider] = useState<
+    string | null
+  >(null);
+  const [reportAccountSearch, setReportAccountSearch] = useState("");
   const [reportPreview, setReportPreview] = useState<ReportPreview | null>(
     null,
   );
   const [reportPreviewBusy, setReportPreviewBusy] = useState(false);
   const [reportPreviewError, setReportPreviewError] = useState("");
+  const [reportDownloadError, setReportDownloadError] = useState("");
+  const reportAccountTriggerRef = useRef<HTMLButtonElement>(null);
   const [analysisUrl, setAnalysisUrl] = useState("");
   const [analysisMode, setAnalysisMode] = useState<AnalysisMode>("quick");
   const [analysisBrief, setAnalysisBrief] = useState<AnalysisBrief>({
@@ -375,6 +399,41 @@ export default function DashboardPage() {
       ),
     [enabledAccounts],
   );
+  const reportPickerConnections = useMemo(
+    () =>
+      ["GOOGLE_ADS", "META_ADS", "YANDEX_DIRECT", "TIKTOK_ADS"]
+        .map((provider) =>
+          connections.find((connection) => connection.provider === provider),
+        )
+        .filter((connection): connection is Connection => Boolean(connection)),
+    [connections],
+  );
+  const selectedReportAccount = useMemo(
+    () =>
+      reportableAccounts.find(
+        ({ account }) => account.id === reportAccountId,
+      ) ?? null,
+    [reportAccountId, reportableAccounts],
+  );
+  const reportPickerConnection =
+    reportPickerConnections.find(
+      (connection) => connection.provider === reportPickerProvider,
+    ) ?? null;
+  const reportPickerAccounts = useMemo(() => {
+    if (!reportPickerConnection) return [];
+    const needle = reportAccountSearch.trim().toLocaleLowerCase();
+    return reportPickerConnection.accounts.filter((account) => {
+      const reportable = reportableAccounts.some(
+        (item) => item.account.id === account.id,
+      );
+      return (
+        reportable &&
+        (!needle ||
+          account.displayName.toLocaleLowerCase().includes(needle) ||
+          account.externalAccountId.toLocaleLowerCase().includes(needle))
+      );
+    });
+  }, [reportAccountSearch, reportPickerConnection, reportableAccounts]);
   const reportConnectionIssue = useMemo(
     () =>
       connections.find(
@@ -389,6 +448,28 @@ export default function DashboardPage() {
       ),
     [connections],
   );
+  const reportCardCopy =
+    language === "en"
+      ? {
+          eyebrow: "MONTHLY ADS REPORT",
+          title: "Advertising performance report",
+          noAccount: "Choose an account and period",
+          checking: "Preparing selected account",
+          footer: "Cover · KPI · comparison · campaigns · insights",
+          docx: "Word document",
+          pptx: "Presentation",
+        }
+      : {
+          eyebrow: "ЕЖЕМЕСЯЧНЫЙ ОТЧЁТ ПО РЕКЛАМЕ",
+          title: "Отчёт по рекламным кампаниям",
+          noAccount: "Выберите кабинет и период",
+          checking: "Проверяем выбранный кабинет",
+          footer: "Обложка · KPI · сравнение · кампании · выводы",
+          docx: "Word-документ",
+          pptx: "Презентация",
+        };
+  const reportFormatLabel =
+    reportFormat === "pptx" ? reportCardCopy.pptx : reportCardCopy.docx;
   const connectedCount = connections.filter((connection) =>
     ["CONNECTED", "DEGRADED", "REAUTH_REQUIRED"].includes(connection.status),
   ).length;
@@ -567,11 +648,11 @@ export default function DashboardPage() {
   }, [active, section]);
 
   useEffect(() => {
-    const first = reportableAccounts[0]?.account.id ?? "";
     if (
+      reportAccountId &&
       !reportableAccounts.some(({ account }) => account.id === reportAccountId)
     ) {
-      setReportAccountId(first);
+      setReportAccountId("");
     }
   }, [reportableAccounts, reportAccountId]);
 
@@ -627,6 +708,15 @@ export default function DashboardPage() {
     return () => window.removeEventListener("keydown", close);
   }, [openAccountsId]);
 
+  useEffect(() => {
+    if (!reportPickerOpen) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeReportPicker();
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [reportPickerOpen]);
+
   function openAccountSelector(connection: Connection) {
     setDrafts((current) => ({
       ...current,
@@ -641,6 +731,41 @@ export default function DashboardPage() {
   function closeAccountSelector() {
     setOpenAccountsId(null);
     setAccountSearch("");
+  }
+
+  function openReportPicker() {
+    setReportPickerOpen(true);
+    setReportPickerProvider(null);
+    setReportAccountSearch("");
+    setReportPreviewError("");
+    setReportDownloadError("");
+  }
+
+  function closeReportPicker() {
+    setReportPickerOpen(false);
+    setReportPickerProvider(null);
+    setReportAccountSearch("");
+    requestAnimationFrame(() => reportAccountTriggerRef.current?.focus());
+  }
+
+  function openReportProvider(connection: Connection) {
+    if (connection.status !== "CONNECTED") return;
+    if (!["GOOGLE_ADS", "META_ADS"].includes(connection.provider)) return;
+    setReportPickerProvider(connection.provider);
+    setReportAccountSearch("");
+  }
+
+  function selectReportAccount(entry: ReportableAccount) {
+    setReportAccountId(entry.account.id);
+    setReportPreviewError("");
+    setReportDownloadError("");
+    closeReportPicker();
+  }
+
+  function openReportConnections(provider?: string) {
+    if (provider) setHighlightedProvider(provider);
+    setSection("connections");
+    closeReportPicker();
   }
 
   async function startProvider(provider: string) {
@@ -901,18 +1026,7 @@ export default function DashboardPage() {
         { credentials: "include", cache: "no-store" },
       );
       if (!response.ok) {
-        const messages: Record<number, string> = {
-          400: "Для отчёта нужен выбранный кабинет Meta Ads или Google Ads.",
-          409: "Google Ads нужно переподключить. Перейдите в «Подключения».",
-          401: "Сессия закончилась. Войдите ещё раз.",
-          403: "Отчёты недоступны для этого кабинета или тарифа.",
-          404: "Кабинет больше недоступен. Обновите подключения.",
-          429: "Слишком много запросов. Повторите попытку через минуту.",
-          503: "Рекламная платформа временно не ответила.",
-        };
-        throw new Error(
-          messages[response.status] ?? "Не удалось получить данные отчёта.",
-        );
+        throw new Error(reportErrorMessage(response.status, "preview"));
       }
       setReportPreview((await response.json()) as ReportPreview);
     } catch (cause) {
@@ -929,13 +1043,11 @@ export default function DashboardPage() {
 
   async function downloadReport(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!active) return;
-    const form = new FormData(event.currentTarget);
-    const accountId = String(form.get("account_id") ?? reportAccountId);
-    const requestedFormat = String(form.get("format") ?? "docx");
-    const format: ReportFormat = requestedFormat === "pptx" ? "pptx" : "docx";
-    if (!accountId) return;
+    if (!active || !reportAccountId || !reportPreview) return;
+    const accountId = reportAccountId;
+    const format = reportFormat;
     setBusy(true);
+    setReportDownloadError("");
     try {
       const query = new URLSearchParams({
         accountId,
@@ -946,19 +1058,7 @@ export default function DashboardPage() {
         { credentials: "include" },
       );
       if (!response.ok) {
-        const messages: Record<number, string> = {
-          400: "Для отчёта выберите кабинет Meta Ads или Google Ads.",
-          409: "Google Ads нужно переподключить. Перейдите в «Подключения».",
-          401: "Сессия закончилась. Войдите ещё раз.",
-          403: "Для этого кабинета отчёты пока недоступны.",
-          404: "Кабинет больше недоступен. Обновите список подключений.",
-          429: "Слишком много запросов. Подождите немного и повторите попытку.",
-          503: "Платформа временно не ответила. Попробуйте ещё раз или проверьте подключение.",
-        };
-        throw new Error(
-          messages[response.status] ??
-            "Не удалось собрать отчёт. Попробуйте ещё раз.",
-        );
+        throw new Error(reportErrorMessage(response.status, "download"));
       }
       const url = URL.createObjectURL(await response.blob());
       const link = document.createElement("a");
@@ -973,7 +1073,7 @@ export default function DashboardPage() {
       }, 1000);
       notify(format === "pptx" ? "Презентация готова." : "Отчёт готов.");
     } catch (cause) {
-      fail(
+      setReportDownloadError(
         cause instanceof Error
           ? cause.message
           : "Не удалось собрать отчёт. Попробуйте ещё раз.",
@@ -1750,7 +1850,10 @@ export default function DashboardPage() {
         )}
 
         {section === "reports" && (
-          <section className="section" aria-labelledby="reports-title">
+          <section
+            className="section report-section"
+            aria-labelledby="reports-title"
+          >
             <div className="section-head">
               <div>
                 <p className="eyebrow">Отчёты</p>
@@ -1771,26 +1874,29 @@ export default function DashboardPage() {
                   В отчёт попадут только данные выбранного кабинета и периода.
                 </p>
                 <form className="report-form" onSubmit={downloadReport}>
-                  <label>
+                  <label className="report-form__account">
                     Рекламный кабинет
-                    <select
-                      name="account_id"
-                      required
-                      value={reportAccountId}
-                      onChange={(event) =>
-                        setReportAccountId(event.target.value)
-                      }
+                    <button
+                      ref={reportAccountTriggerRef}
+                      className="report-account-trigger"
+                      type="button"
+                      aria-haspopup="dialog"
+                      aria-expanded={reportPickerOpen}
+                      onClick={openReportPicker}
                     >
-                      <option value="" disabled>
-                        Выберите кабинет
-                      </option>
-                      {reportableAccounts.map(({ account, connection }) => (
-                        <option key={account.id} value={account.id}>
-                          {account.displayName} ·{" "}
-                          {providerCopy(connection.provider).name}
-                        </option>
-                      ))}
-                    </select>
+                      <span>
+                        {selectedReportAccount
+                          ? selectedReportAccount.account.displayName
+                          : "Выберите кабинет"}
+                      </span>
+                      <small>
+                        {selectedReportAccount
+                          ? providerCopy(
+                              selectedReportAccount.connection.provider,
+                            ).name
+                          : "Платформа → кабинет"}
+                      </small>
+                    </button>
                   </label>
                   <label>
                     Период
@@ -1809,7 +1915,15 @@ export default function DashboardPage() {
                   </label>
                   <label>
                     Формат
-                    <select name="format" defaultValue="docx">
+                    <select
+                      name="format"
+                      value={reportFormat}
+                      onChange={(event) =>
+                        setReportFormat(
+                          event.target.value === "pptx" ? "pptx" : "docx",
+                        )
+                      }
+                    >
                       <option value="docx">Word (.docx)</option>
                       <option value="pptx">PowerPoint (.pptx)</option>
                     </select>
@@ -1820,7 +1934,7 @@ export default function DashboardPage() {
                     disabled={
                       busy ||
                       reportPreviewBusy ||
-                      !reportableAccounts.length ||
+                      !reportAccountId ||
                       !reportPreview
                     }
                   >
@@ -1831,6 +1945,22 @@ export default function DashboardPage() {
                         : "Скачать отчёт"}
                   </button>
                 </form>
+                {!reportAccountId && (
+                  <div className="report-status" role="status">
+                    <strong>Сначала выберите рекламный кабинет.</strong>
+                    <span>
+                      В picker попадут только кабинеты, включённые в разделе
+                      «Подключения».
+                    </span>
+                    <button
+                      className="secondary-button btn--small"
+                      type="button"
+                      onClick={openReportPicker}
+                    >
+                      Выбрать кабинет
+                    </button>
+                  </div>
+                )}
                 {reportPreviewError && (
                   <div
                     className="report-status report-status--error"
@@ -1853,6 +1983,29 @@ export default function DashboardPage() {
                     >
                       Повторить проверку
                     </button>
+                  </div>
+                )}
+                {reportDownloadError && (
+                  <div
+                    className="report-status report-status--error"
+                    role="alert"
+                  >
+                    <strong>Не удалось скачать отчёт</strong>
+                    <span>{reportDownloadError}</span>
+                    {selectedReportAccount?.connection.status ===
+                      "REAUTH_REQUIRED" && (
+                      <button
+                        className="secondary-button btn--small"
+                        type="button"
+                        onClick={() =>
+                          openReportConnections(
+                            selectedReportAccount.connection.provider,
+                          )
+                        }
+                      >
+                        Открыть подключения
+                      </button>
+                    )}
                   </div>
                 )}
                 {reportPreviewBusy && !reportPreviewError && (
@@ -1937,26 +2090,23 @@ export default function DashboardPage() {
               </section>
               <aside className="report-preview-card" aria-label="Отчёт">
                 <div className="report-preview-card__topline">
-                  <span>MONTHLY ADS REPORT</span>
-                  <span>01</span>
+                  <span>{reportCardCopy.eyebrow}</span>
+                  <span>{reportFormat.toUpperCase()}</span>
                 </div>
                 <div className="report-preview-card__body">
                   <span>HOLYMEDIA MCP</span>
-                  <strong>
-                    Отчёт по
-                    <br />
-                    рекламным кампаниям
-                  </strong>
+                  <strong>{reportCardCopy.title}</strong>
                   <em>
                     {reportPreview
-                      ? `${reportDays} дней · ${reportPreview.account.name}`
-                      : reportableAccounts.length
-                        ? "Проверяем выбранный кабинет"
-                        : "Выберите кабинет и период"}
+                      ? `${reportPreview.period.startDate} — ${reportPreview.period.endDate} · ${reportPreview.account.name}`
+                      : selectedReportAccount
+                        ? `${reportDays} дней · ${selectedReportAccount.account.displayName}`
+                        : reportCardCopy.noAccount}
                   </em>
+                  <small>{reportFormatLabel}</small>
                 </div>
                 <p className="report-preview-card__footer">
-                  Обложка · KPI · сравнение · кампании · выводы
+                  {reportCardCopy.footer}
                 </p>
               </aside>
             </div>
@@ -2402,6 +2552,209 @@ export default function DashboardPage() {
 
       <FeedbackBlock />
       <SiteFooter compact />
+
+      {reportPickerOpen && (
+        <div
+          className="modal"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeReportPicker();
+          }}
+        >
+          <section
+            className="modal__panel modal__panel--wide report-picker-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="report-picker-title"
+          >
+            <div className="report-picker__head">
+              <div>
+                <p className="eyebrow">ОТЧЁТЫ · ШАГ 1 ИЗ 2</p>
+                <h2 id="report-picker-title">
+                  {reportPickerConnection
+                    ? `Кабинеты ${providerCopy(reportPickerConnection.provider).name}`
+                    : "Выберите рекламную платформу"}
+                </h2>
+                <p>
+                  {reportPickerConnection
+                    ? "Выберите один включённый кабинет для этого отчёта."
+                    : "Сначала выберите платформу, затем рекламный кабинет."}
+                </p>
+              </div>
+              <button
+                className="modal__close account-selector__close"
+                type="button"
+                autoFocus
+                aria-label="Закрыть выбор кабинета для отчёта"
+                onClick={closeReportPicker}
+              >
+                ×
+              </button>
+            </div>
+
+            {reportPickerConnection ? (
+              <>
+                <div className="report-picker__controls">
+                  <button
+                    className="secondary-button btn--small"
+                    type="button"
+                    onClick={() => {
+                      setReportPickerProvider(null);
+                      setReportAccountSearch("");
+                    }}
+                  >
+                    Назад к платформам
+                  </button>
+                  <button
+                    className="ghost-button btn--small"
+                    type="button"
+                    onClick={() => {
+                      setReportPickerProvider(null);
+                      setReportAccountSearch("");
+                    }}
+                  >
+                    Скрыть кабинеты
+                  </button>
+                </div>
+                <label className="account-selector__search">
+                  <span>Поиск кабинета</span>
+                  <input
+                    autoFocus
+                    value={reportAccountSearch}
+                    onChange={(event) =>
+                      setReportAccountSearch(event.target.value)
+                    }
+                    placeholder="Название или ID"
+                  />
+                </label>
+                <div className="report-account-list" aria-live="polite">
+                  {reportPickerAccounts.map((account) => (
+                    <button
+                      className="report-account-option"
+                      type="button"
+                      key={account.id}
+                      onClick={() =>
+                        selectReportAccount({
+                          account,
+                          connection: reportPickerConnection,
+                        })
+                      }
+                    >
+                      <span>
+                        <strong>{account.displayName}</strong>
+                        <small>{account.externalAccountId}</small>
+                      </span>
+                      {account.status && <em>{account.status}</em>}
+                    </button>
+                  ))}
+                </div>
+                {!reportPickerAccounts.length && (
+                  <div className="empty-state report-picker__empty">
+                    <p>
+                      Включённых кабинетов по этому запросу не найдено. Выберите
+                      их в разделе «Подключения».
+                    </p>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() =>
+                        openReportConnections(reportPickerConnection.provider)
+                      }
+                    >
+                      Открыть подключения
+                    </button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="report-provider-grid" aria-live="polite">
+                {reportPickerConnections.map((connection) => {
+                  const supported = ["GOOGLE_ADS", "META_ADS"].includes(
+                    connection.provider,
+                  );
+                  const selectable =
+                    connection.status === "CONNECTED" && supported;
+                  const enabledCount = connection.accounts.filter(
+                    (account) => account.enabled,
+                  ).length;
+                  return (
+                    <article
+                      className={`report-provider-option ${
+                        selectable ? "" : "is-unavailable"
+                      }`}
+                      key={connection.id}
+                    >
+                      <div>
+                        <span className="provider-mark">
+                          {providerCopy(connection.provider).short}
+                        </span>
+                        <span>
+                          <strong>
+                            {providerCopy(connection.provider).name}
+                          </strong>
+                          <small>
+                            {supported
+                              ? `${enabledCount} включённых кабинетов`
+                              : "Отчёты для этой платформы пока не поддерживаются"}
+                          </small>
+                        </span>
+                      </div>
+                      <span
+                        className={`status-badge ${
+                          connectionStatus(connection.status).tone
+                        }`}
+                      >
+                        {connectionStatus(connection.status).label}
+                      </span>
+                      {selectable ? (
+                        <button
+                          className="secondary-button btn--small"
+                          type="button"
+                          onClick={() => openReportProvider(connection)}
+                        >
+                          Показать кабинеты
+                        </button>
+                      ) : connection.status === "REAUTH_REQUIRED" ||
+                        connection.status === "DEGRADED" ? (
+                        <button
+                          className="secondary-button btn--small"
+                          type="button"
+                          onClick={() =>
+                            openReportConnections(connection.provider)
+                          }
+                        >
+                          Переподключить
+                        </button>
+                      ) : (
+                        <span className="report-provider-option__note">
+                          {supported
+                            ? "Сначала подключите платформу"
+                            : "Генерация недоступна"}
+                        </span>
+                      )}
+                    </article>
+                  );
+                })}
+                {!reportPickerConnections.length && (
+                  <div className="empty-state report-picker__empty">
+                    <p>
+                      Подключите Meta Ads или Google Ads и включите нужный
+                      кабинет, чтобы сформировать отчёт.
+                    </p>
+                    <button
+                      className="secondary-button"
+                      type="button"
+                      onClick={() => openReportConnections()}
+                    >
+                      Открыть подключения
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       {selectorConnection && (
         <div

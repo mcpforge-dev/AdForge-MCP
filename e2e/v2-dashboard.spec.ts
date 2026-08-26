@@ -124,6 +124,7 @@ test.describe("restored HolyMedia client UX", () => {
     const metaCard = page
       .locator(".connection-card")
       .filter({ hasText: "Meta Ads" });
+    await expect(metaCard).toBeVisible();
     await metaCard.getByRole("button", { name: "Посмотреть кабинеты" }).click();
     const selector = page.getByRole("dialog", { name: "Выберите кабинеты" });
     const close = selector.getByRole("button", {
@@ -311,8 +312,10 @@ test.describe("restored HolyMedia client UX", () => {
       path: testInfo.outputPath("mcp.png"),
       fullPage: true,
     });
-    await page.route("**/reports/performance?**", async (route) =>
-      route.fulfill({
+    let reportUrl = "";
+    await page.route("**/reports/performance?**", async (route) => {
+      reportUrl = route.request().url();
+      await route.fulfill({
         status: 200,
         contentType: "application/json",
         body: JSON.stringify({
@@ -333,11 +336,10 @@ test.describe("restored HolyMedia client UX", () => {
           campaigns: [],
           provenance: { summary: { realData: true } },
         }),
-      }),
-    );
+      });
+    });
 
     await page.getByRole("button", { name: "Отчёты", exact: true }).click();
-    let reportUrl = "";
     await page.route("**/reports/performance.*?**", async (route) => {
       reportUrl = route.request().url();
       const isPresentation = new URL(reportUrl).pathname.endsWith(".pptx");
@@ -349,7 +351,57 @@ test.describe("restored HolyMedia client UX", () => {
         body: "PK-test",
       });
     });
-    await page.locator('select[name="account_id"]').selectOption({ index: 1 });
+    await expect(
+      page.getByText("Сначала выберите рекламный кабинет."),
+    ).toBeVisible();
+    await page.locator(".report-account-trigger").click();
+    const reportPicker = page.getByRole("dialog", {
+      name: "Выберите рекламную платформу",
+    });
+    await expect(reportPicker).toBeVisible();
+    await expect(reportPicker.getByText("Meta Ads")).toBeVisible();
+    await expect(
+      reportPicker.getByRole("button", {
+        name: "Закрыть выбор кабинета для отчёта",
+      }),
+    ).toBeFocused();
+    await page.keyboard.press("Escape");
+    await expect(reportPicker).toHaveCount(0);
+    await expect(page.locator(".report-account-trigger")).toBeFocused();
+    await page.locator(".report-account-trigger").click();
+    await reportPicker
+      .getByRole("button", { name: "Показать кабинеты" })
+      .click();
+    await expect(
+      page.getByRole("dialog", { name: /Кабинеты Meta Ads/ }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: /Основной рекламный кабинет/ })
+      .first()
+      .click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+    await expect.poll(() => reportUrl).not.toBe("");
+    let previewParams = new URL(reportUrl).searchParams;
+    expect(
+      (new Date(previewParams.get("endDate")!).getTime() -
+        new Date(previewParams.get("startDate")!).getTime()) /
+        86_400_000,
+    ).toBe(6);
+    for (const [days, expectedRange] of [
+      ["14", 13],
+      ["30", 29],
+    ]) {
+      reportUrl = "";
+      await page.locator('select[name="period"]').selectOption(days);
+      await expect.poll(() => reportUrl).not.toBe("");
+      previewParams = new URL(reportUrl).searchParams;
+      expect(
+        (new Date(previewParams.get("endDate")!).getTime() -
+          new Date(previewParams.get("startDate")!).getTime()) /
+          86_400_000,
+      ).toBe(expectedRange);
+    }
+    reportUrl = "";
     await page.locator('select[name="period"]').selectOption("14");
     await page.getByRole("button", { name: "Скачать отчёт" }).click();
     await expect.poll(() => reportUrl).not.toBe("");
@@ -389,17 +441,69 @@ test.describe("restored HolyMedia client UX", () => {
   }) => {
     await installMockApi(page);
     await login(page);
-    await page.getByRole("button", { name: "Отчёты", exact: true }).click();
-    await page.route("**/reports/performance.*?**", (route) =>
+    await page.goto("/dashboard?section=reports");
+    await expect(
+      page.getByRole("heading", { name: "Отчёт по рекламному кабинету" }),
+    ).toBeVisible();
+    await page.route("**/reports/performance?**", (route) =>
       route.fulfill({ status: 400, body: "unsupported account" }),
     );
-    await expect(page.locator('select[name="account_id"] option')).toHaveCount(
-      2,
-    );
-    await page.locator('select[name="account_id"]').selectOption({ index: 1 });
-    await page.getByRole("button", { name: "Скачать отчёт" }).click();
+    await page.locator(".report-account-trigger").click();
+    await page.getByRole("button", { name: "Показать кабинеты" }).click();
+    await page
+      .getByRole("button", { name: /Основной рекламный кабинет/ })
+      .first()
+      .click();
     await expect(
-      page.getByText("Для отчёта выберите кабинет Meta Ads или Google Ads."),
+      page.getByText(
+        "Для отчёта выберите подключённый кабинет Meta Ads или Google Ads.",
+      ),
+    ).toBeVisible();
+  });
+
+  test("reports expose reauth and empty account states without a placeholder", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await page.route("**/api/v1/workspaces/**/connections", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "access-control-allow-origin": "http://localhost:3000",
+          "access-control-allow-credentials": "true",
+        },
+        body: JSON.stringify([
+          {
+            id: "88888888-8888-4888-8888-888888888888",
+            provider: "META_ADS",
+            displayName: "Expired Meta",
+            status: "REAUTH_REQUIRED",
+            accounts: [],
+          },
+        ]),
+      }),
+    );
+    await login(page);
+    await page.goto("/dashboard?section=reports");
+    await expect(
+      page.getByText(
+        "Meta Ads нужно переподключить, чтобы получить данные для отчёта.",
+      ),
+    ).toBeVisible();
+    await expect(page.locator(".report-account-trigger")).toContainText(
+      "Выберите кабинет",
+    );
+    await page.locator(".report-account-trigger").click();
+    const reportPicker = page.getByRole("dialog", {
+      name: "Выберите рекламную платформу",
+    });
+    await expect(
+      reportPicker.getByRole("button", { name: "Переподключить" }),
+    ).toBeVisible();
+    await reportPicker.getByRole("button", { name: "Переподключить" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Подключения" }),
     ).toBeVisible();
   });
 
@@ -408,7 +512,7 @@ test.describe("restored HolyMedia client UX", () => {
   }) => {
     await installMockApi(page);
     await login(page);
-    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
+    await page.goto("/dashboard?section=mcp");
 
     const tokenList = page.locator(".token-list");
     await expect(
@@ -509,6 +613,10 @@ test.describe("restored HolyMedia client UX", () => {
     await page.getByRole("button", { name: "English" }).click();
 
     await expect(
+      page.getByRole("button", { name: "Connections", exact: true }),
+    ).toBeVisible();
+
+    await expect(
       page.getByText("Sign in through official OAuth."),
     ).toBeVisible();
     await expect(page.getByText("Add an AI client")).toBeVisible();
@@ -547,9 +655,7 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(
       page.getByRole("heading", { name: "Build report" }),
     ).toBeVisible();
-    await expect(
-      page.getByRole("combobox", { name: "Advertising account" }),
-    ).toBeVisible();
+    await expect(page.locator(".report-account-trigger")).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath("dashboard-en-reports.png"),
       fullPage: true,
