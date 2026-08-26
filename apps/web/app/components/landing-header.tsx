@@ -19,7 +19,7 @@ export function LandingHeader() {
       <Link className="site-brand" href="/" aria-label="HolyMedia MCP">
         <img
           className="brand-logo"
-          src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+          src="/assets/brand/holymedia-mcp-horizontal.svg"
           alt=""
         />
       </Link>

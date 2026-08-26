@@ -961,7 +961,7 @@ export default function DashboardPage() {
           >
             <img
               className="brand-logo"
-              src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+              src="/assets/brand/holymedia-mcp-horizontal.svg"
               alt=""
             />
           </a>

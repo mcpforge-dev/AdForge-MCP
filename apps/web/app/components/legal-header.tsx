@@ -52,7 +52,7 @@ export function LegalHeader() {
       >
         <img
           className="brand-logo"
-          src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+          src="/assets/brand/holymedia-mcp-horizontal.svg"
           alt=""
         />
       </Link>

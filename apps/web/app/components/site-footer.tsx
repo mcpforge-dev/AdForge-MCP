@@ -8,14 +8,14 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
   const copy =
     language === "ru"
       ? {
-          product: "HolyMedia MCP — продукт агентства HolyMedia.",
+          contact: "Напишите нам:",
           legal: "Юридическая информация",
           privacy: "Политика конфиденциальности",
           terms: "Условия использования",
           astanaHub: "Astana Hub",
         }
       : {
-          product: "HolyMedia MCP is a HolyMedia agency product.",
+          contact: "Email us:",
           legal: "Legal information",
           privacy: "Privacy policy",
           terms: "Terms of use",
@@ -31,10 +31,13 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         <div className="footer__identity">
           <img
             className="footer__brand-logo"
-            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+            src="/assets/brand/holymedia-mcp-horizontal.svg"
             alt="HolyMedia MCP"
           />
-          <span className="footer__product">{copy.product}</span>
+          <span className="footer__contact">
+            {copy.contact}{" "}
+            <a href="mailto:mcp@holymedia.kz">mcp@holymedia.kz</a>
+          </span>
         </div>
         <a
           className="footer__partner"

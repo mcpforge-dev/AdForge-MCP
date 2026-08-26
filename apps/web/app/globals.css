@@ -105,8 +105,10 @@ pre {
 }
 .brand-logo {
   display: block;
-  width: 148px;
+  width: 132px;
   height: auto;
+  filter: brightness(0) saturate(100%) invert(69%) sepia(61%) saturate(632%)
+    hue-rotate(193deg) brightness(101%) contrast(102%);
 }
 .btn,
 .primary-button,
@@ -619,8 +621,23 @@ form {
 }
 .footer__brand-logo {
   display: block;
-  width: 152px;
+  width: 136px;
   height: auto;
+  filter: brightness(0) saturate(100%) invert(69%) sepia(61%) saturate(632%)
+    hue-rotate(193deg) brightness(101%) contrast(102%);
+}
+.footer__contact {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.footer__contact a {
+  color: var(--text);
+  text-decoration-color: var(--border-strong);
+  text-underline-offset: 3px;
+}
+.footer__contact a:hover,
+.footer__contact a:focus-visible {
+  color: var(--accent-strong);
 }
 .footer__links {
   display: flex;
@@ -2435,11 +2452,11 @@ pre {
   }
 
   .brand-logo {
-    width: 132px;
+    width: 118px;
   }
 
   .footer__brand-logo {
-    width: 144px;
+    width: 126px;
   }
 
   .legal-header {
