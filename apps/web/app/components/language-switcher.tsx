@@ -1,15 +1,18 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
-type Language = "en" | "ru";
+export type Language = "en" | "ru";
 
 // Keep the old key out of the default decision: the previous release stored
 // its English default as if the user had explicitly selected it.
 const STORAGE_KEY = "holymedia-language-v2";
+const LANGUAGE_CHANGE_EVENT = "holymedia-language-change";
 const PAIRS: Array<[string, string]> = [
   ["Рекламная аналитика и MCP", "Advertising analytics and MCP"],
   ["HolyMedia MCP", "HolyMedia MCP"],
+  ["Навигация", "Navigation"],
+  ["Пример ответа AI", "Example AI answer"],
   ["Как это работает", "How it works"],
   ["Пример ответа", "Example answer"],
   ["Войти", "Sign in"],
@@ -304,7 +307,9 @@ function translate(value: string, language: Language): string {
 function isUiNode(node: Node): boolean {
   const parent = node.parentElement;
   return Boolean(
-    parent?.closest("[data-language-switcher], script, style, noscript"),
+    parent?.closest(
+      "[data-language-switcher], [data-language-static], script, style, noscript",
+    ),
   );
 }
 
@@ -323,6 +328,12 @@ function applyLanguage(language: Language): void {
           button.setAttribute("aria-pressed", String(active));
         });
     });
+    document
+      .querySelectorAll<HTMLElement>("[data-language-title]")
+      .forEach((element) => {
+        const title = element.dataset.languageTitle;
+        if (title) document.title = translate(title, language);
+      });
     const walker = document.createTreeWalker(
       document.body,
       NodeFilter.SHOW_TEXT,
@@ -349,6 +360,7 @@ function applyLanguage(language: Language): void {
     document
       .querySelectorAll<HTMLElement>("[placeholder], [title], [aria-label]")
       .forEach((element) => {
+        if (element.closest("[data-language-static]")) return;
         const saved = originalAttributes.get(element) ?? {};
         (["placeholder", "title", "aria-label"] as const).forEach(
           (attribute) => {
@@ -367,9 +379,28 @@ function applyLanguage(language: Language): void {
         );
         originalAttributes.set(element, saved);
       });
+    window.dispatchEvent(
+      new CustomEvent<Language>(LANGUAGE_CHANGE_EVENT, { detail: language }),
+    );
   } finally {
     applyingLanguage = false;
   }
+}
+
+export function useLanguage(): Language {
+  const [language, setLanguage] = useState<Language>("ru");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    setLanguage(saved === "en" ? "en" : "ru");
+    const onChange = (event: Event) => {
+      setLanguage((event as CustomEvent<Language>).detail);
+    };
+    window.addEventListener(LANGUAGE_CHANGE_EVENT, onChange);
+    return () => window.removeEventListener(LANGUAGE_CHANGE_EVENT, onChange);
+  }, []);
+
+  return language;
 }
 
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {

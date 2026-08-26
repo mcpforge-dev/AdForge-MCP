@@ -1,17 +1,46 @@
+"use client";
+
 import Link from "next/link";
-import { LanguageSwitcher } from "./language-switcher";
+import { useLanguage } from "./language-switcher";
 
 export function SiteFooter({ compact = false }: { compact?: boolean }) {
+  const language = useLanguage();
+  const copy =
+    language === "ru"
+      ? {
+          product: "HolyMedia MCP — продукт агентства HolyMedia.",
+          legal: "Юридическая информация",
+          privacy: "Политика конфиденциальности",
+          terms: "Условия использования",
+          astanaHub: "Astana Hub",
+        }
+      : {
+          product: "HolyMedia MCP is a HolyMedia agency product.",
+          legal: "Legal information",
+          privacy: "Privacy policy",
+          terms: "Terms of use",
+          astanaHub: "Astana Hub",
+        };
+
   return (
     <footer
       className={compact ? "footer footer--app" : "footer footer--landing"}
+      data-language-static
     >
-      <span>HolyMedia MCP — продукт агентства HolyMedia.</span>
+      <span className="footer__product">{copy.product}</span>
       <div className="footer__right">
-        <LanguageSwitcher compact />
-        <nav className="footer__links" aria-label="Юридическая информация">
-          <Link href="/privacy">Политика конфиденциальности</Link>
-          <Link href="/terms">Условия использования</Link>
+        <a
+          className="footer__partner"
+          href="https://astanahub.com/"
+          target="_blank"
+          rel="noreferrer"
+          aria-label={copy.astanaHub}
+        >
+          <img src="/assets/astana-hub-logo.svg" alt="Astana Hub" />
+        </a>
+        <nav className="footer__links" aria-label={copy.legal}>
+          <Link href="/privacy">{copy.privacy}</Link>
+          <Link href="/terms">{copy.terms}</Link>
         </nav>
       </div>
     </footer>

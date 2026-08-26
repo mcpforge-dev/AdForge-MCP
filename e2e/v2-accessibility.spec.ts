@@ -29,7 +29,17 @@ test.describe("axe accessibility", () => {
   }) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
-      if (message.type() === "error") consoleErrors.push(message.text());
+      if (
+        message.type() === "error" &&
+        !message
+          .text()
+          .includes("eval() is not supported in this environment") &&
+        !message
+          .text()
+          .includes("React will never use eval() in production mode")
+      ) {
+        consoleErrors.push(message.text());
+      }
     });
 
     await page.goto("/");
@@ -70,6 +80,34 @@ test.describe("axe accessibility", () => {
     }
   });
 
+  test("keeps the shared public shell localized and accessible", async ({
+    page,
+  }) => {
+    await page.goto("/privacy");
+    const header = page.locator(".legal-header");
+    await expect(header).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, 240));
+    expect(
+      await header.evaluate((element) => element.getBoundingClientRect().top),
+    ).toBeLessThanOrEqual(1);
+
+    const footer = page.locator("footer");
+    await expect(footer.getByRole("button", { name: "English" })).toHaveCount(
+      0,
+    );
+    await expect(
+      footer.locator('a[href="https://astanahub.com/"] img'),
+    ).toHaveAttribute("src", "/assets/astana-hub-logo.svg");
+
+    await page.getByRole("button", { name: "English" }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    await expect(
+      page.getByRole("heading", { name: "HolyMedia MCP Privacy Policy" }),
+    ).toBeVisible();
+    expect(await page.locator("main").innerText()).not.toMatch(/[А-Яа-яЁё]/);
+    await expectAccessible(page, "privacy in English");
+  });
+
   test("private customer sections", async ({ page }) => {
     await installMockApi(page);
     await login(page);
@@ -85,5 +123,20 @@ test.describe("axe accessibility", () => {
     }
     await page.getByRole("button", { name: /Открыть профиль/ }).click();
     await expectAccessible(page, "profile");
+  });
+
+  test("shows the shared feedback form without exposing technical terms", async ({
+    page,
+  }, testInfo) => {
+    await installMockApi(page);
+    await login(page);
+    const feedback = page.locator(".feedback-block");
+    await expect(feedback).toBeVisible();
+    await expect(feedback.locator('textarea[name="message"]')).toBeVisible();
+    await expect(
+      feedback.getByRole("button", { name: "Написать в поддержку" }),
+    ).toBeVisible();
+    await feedback.screenshot({ path: testInfo.outputPath("feedback.png") });
+    await expectAccessible(page, "shared feedback");
   });
 });

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { SiteFooter } from "../../components/site-footer";
 import { LanguageSwitcher } from "../../components/language-switcher";
+import { FeedbackBlock } from "../../components/feedback-block";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const MCP_URL = "https://mcp.holymedia.kz/mcp";
@@ -929,12 +930,17 @@ export default function DashboardPage() {
     window.location.assign("/auth");
   }
 
-  const nav: Array<{ id?: Section; label: string; disabled?: boolean }> = [
+  const nav: Array<{
+    id?: Section;
+    label: string;
+    disabled?: boolean;
+    soon?: boolean;
+  }> = [
     { id: "overview", label: "Обзор" },
     { id: "connections", label: "Подключения" },
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
-    { id: "analysis", label: "Анализ сайта" },
+    { id: "analysis", label: "Анализ сайта", soon: true },
     { label: "SEO", disabled: true },
     { label: "Тарифы", disabled: true },
   ];
@@ -993,7 +999,12 @@ export default function DashboardPage() {
               title={item.disabled ? "Скоро" : undefined}
               onClick={() => item.id && setSection(item.id)}
             >
-              {item.label}
+              <span>{item.label}</span>
+              {item.soon && (
+                <span className="nav-soon" aria-hidden="true">
+                  Скоро
+                </span>
+              )}
               {item.disabled && <small>Скоро</small>}
             </button>
           ))}
@@ -2191,6 +2202,7 @@ export default function DashboardPage() {
         )}
       </div>
 
+      <FeedbackBlock />
       <SiteFooter compact />
 
       {confirm && (
