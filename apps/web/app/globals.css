@@ -126,26 +126,13 @@ pre {
   filter: none;
 }
 .brand-lockup {
-  display: inline-flex;
-  align-items: center;
-  gap: 24px;
-  height: 36px;
-}
-.brand-lockup__mark,
-.brand-lockup__wordmark {
   display: block;
   height: 36px;
-  background-image: url("/assets/brand/holymedia-mcp-horizontal-dark.svg");
-  background-repeat: no-repeat;
-  background-size: auto 36px;
 }
-.brand-lockup__mark {
-  width: 37px;
-  background-position: left center;
-}
-.brand-lockup__wordmark {
-  width: 83px;
-  background-position: right center;
+.brand-lockup__image {
+  display: block;
+  height: 36px;
+  width: auto;
 }
 .btn,
 .primary-button,
@@ -2659,16 +2646,9 @@ pre {
   .brand-lockup {
     height: 30px;
   }
-  .brand-lockup__mark,
-  .brand-lockup__wordmark {
+  .brand-lockup__image {
     height: 30px;
-    background-size: auto 30px;
-  }
-  .brand-lockup__mark {
-    width: 31px;
-  }
-  .brand-lockup__wordmark {
-    width: 69px;
+    width: auto;
   }
 
   .footer__brand-logo {

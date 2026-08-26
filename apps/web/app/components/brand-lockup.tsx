@@ -1,8 +1,7 @@
 export function BrandLockup({ className = "" }: { className?: string }) {
   return (
     <span className={`brand-lockup ${className}`} aria-hidden="true">
-      <span className="brand-lockup__mark" />
-      <span className="brand-lockup__wordmark" />
+      <img className="brand-lockup__image" src="/assets/brand/holymedia-mcp-logo.svg" alt="" />
     </span>
   );
 }
