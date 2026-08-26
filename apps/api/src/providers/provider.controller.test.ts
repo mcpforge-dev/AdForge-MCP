@@ -27,6 +27,7 @@ describe("provider OAuth callback UX", () => {
       "google",
       validState,
       "authorization-code",
+      undefined as never,
       request,
       reply as never,
     );
@@ -55,6 +56,7 @@ describe("provider OAuth callback UX", () => {
         pathProvider,
         validState,
         "authorization-code",
+        undefined as never,
         request,
         reply as never,
       );
@@ -81,6 +83,7 @@ describe("provider OAuth callback UX", () => {
       "google",
       validState,
       "authorization-code",
+      undefined as never,
       request,
       reply as never,
     );
@@ -93,9 +96,38 @@ describe("provider OAuth callback UX", () => {
 
   it("returns an actionable safe error for malformed callback values", async () => {
     const { controller, reply } = setup();
-    await controller.callback("google", "short", "", request, reply as never);
+    await controller.callback(
+      "google",
+      "short",
+      "",
+      undefined as never,
+      request,
+      reply as never,
+    );
     expect(reply.redirect).toHaveBeenCalledWith(
       "/dashboard?section=connections&oauth=error&provider=google",
+    );
+  });
+
+  it("accepts TikTok's historical auth_code callback parameter", async () => {
+    const { controller, providers, reply } = setup();
+
+    await controller.callback(
+      "tiktok",
+      validState,
+      "",
+      "tiktok-authorization-code",
+      request,
+      reply as never,
+    );
+
+    expect(providers.completeOAuthCallback).toHaveBeenCalledWith(
+      "TIKTOK_ADS",
+      { state: validState, code: "tiktok-authorization-code" },
+      request,
+    );
+    expect(reply.redirect).toHaveBeenCalledWith(
+      "/dashboard?section=connections&oauth=success&provider=tiktok",
     );
   });
 

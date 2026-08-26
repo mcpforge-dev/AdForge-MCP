@@ -71,10 +71,15 @@ export class ProviderController {
     @Param("provider") provider: string,
     @Query("state") state: string,
     @Query("code") code: string,
+    @Query("auth_code") authCode: string,
     @Req() request: RequestWithAuth,
     @Res() reply: FastifyReply,
   ) {
     const providerId = this.provider(provider);
+    // TikTok's established callback contract uses auth_code, while the other
+    // OAuth providers use code. Keep both public callback shapes compatible.
+    const authorizationCode =
+      providerId === "TIKTOK_ADS" ? authCode || code : code;
     const redirect = (outcome: "success" | "error") =>
       reply
         .code(302)
@@ -85,15 +90,15 @@ export class ProviderController {
       typeof state !== "string" ||
       state.length < 32 ||
       state.length > 256 ||
-      typeof code !== "string" ||
-      code.length < 1 ||
-      code.length > 512
+      typeof authorizationCode !== "string" ||
+      authorizationCode.length < 1 ||
+      authorizationCode.length > 512
     )
       return redirect("error");
     try {
       await this.providers.completeOAuthCallback(
         providerId,
-        { state, code },
+        { state, code: authorizationCode },
         request,
       );
       return redirect("success");

@@ -805,6 +805,8 @@ form {
   display: grid;
   place-items: center;
   padding: 20px;
+  background: rgba(4, 6, 10, 0.76);
+  backdrop-filter: blur(4px);
 }
 .modal__backdrop {
   position: absolute;
@@ -1566,6 +1568,15 @@ pre {
   display: grid;
   gap: 3px;
 }
+.connection-card__head > .connection-card__statuses {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px;
+}
+.status-badge--muted {
+  opacity: 0.72;
+}
 .connection-card__head h2 {
   font-size: 17px;
 }
@@ -1606,6 +1617,14 @@ pre {
   gap: 8px;
   margin-top: 16px;
 }
+.connection-actions .secondary-button--danger {
+  color: #f3a8ad;
+  border-color: rgba(240, 114, 124, 0.45);
+}
+.connection-actions .secondary-button--danger:hover {
+  background: rgba(240, 114, 124, 0.1);
+  border-color: rgba(240, 114, 124, 0.7);
+}
 .connection-empty {
   justify-content: space-between;
   padding-top: 14px;
@@ -1621,10 +1640,9 @@ pre {
 .danger-link:hover {
   text-decoration: underline;
 }
-.account-selector {
-  margin-top: 16px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border);
+.account-selector-dialog {
+  display: grid;
+  gap: 14px;
 }
 .account-selector__head {
   display: flex;
@@ -1633,7 +1651,7 @@ pre {
   gap: 12px;
   margin-bottom: 8px;
 }
-.account-selector__head h3 {
+.account-selector__head h2 {
   font-size: 15px;
 }
 .account-selector__head p {
@@ -1652,18 +1670,42 @@ pre {
   font-size: 12px;
   font-weight: 650;
 }
+.account-selector__search {
+  display: grid;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+.account-selector__search input {
+  width: 100%;
+}
+.account-selector__hint {
+  color: var(--text-faint);
+  font-size: 12px;
+}
 .account-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px 18px;
 }
 .account-list .account-row {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
   min-width: 0;
   min-height: 48px;
   padding: 8px;
   border: 1px solid transparent;
   border-radius: 6px;
   cursor: pointer;
+}
+.account-list .account-row.is-inactive {
+  opacity: 0.62;
+}
+.account-list .account-row em {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-style: normal;
 }
 .account-list .account-row:hover {
   border-color: var(--border);
@@ -1686,6 +1728,7 @@ pre {
 .account-selector__save {
   display: flex;
   justify-content: flex-end;
+  gap: 8px;
   margin-top: 12px;
 }
 .empty-state {
@@ -2103,8 +2146,9 @@ pre {
   .connection-card__head {
     grid-template-columns: 40px minmax(0, 1fr);
   }
-  .connection-card__head .status-badge {
+  .connection-card__statuses {
     grid-column: 2;
+    justify-content: flex-start;
   }
   .provider-mark {
     width: 40px;

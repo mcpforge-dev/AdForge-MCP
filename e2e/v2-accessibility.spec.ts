@@ -144,6 +144,16 @@ test.describe("axe accessibility", () => {
     for (const label of ["Подключения", "AI-клиент", "Отчёты"]) {
       await page.getByRole("button", { name: label, exact: true }).click();
       await expectAccessible(page, label);
+      if (label === "Подключения") {
+        const metaCard = page
+          .locator(".connection-card")
+          .filter({ hasText: "Meta Ads" });
+        await metaCard
+          .getByRole("button", { name: "Посмотреть кабинеты" })
+          .click();
+        await expectAccessible(page, "account selector dialog");
+        await page.getByRole("button", { name: "Отмена" }).first().click();
+      }
     }
     for (const label of ["Анализ сайта", "SEO", "Тарифы"]) {
       const item = page.getByRole("button", { name: new RegExp(label) });

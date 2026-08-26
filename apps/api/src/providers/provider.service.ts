@@ -499,40 +499,36 @@ export class ProviderService {
       10,
       900,
     );
-    const connection = await this.connectionWithCredential(
+    const context = await this.connectionReadCredentials(
       workspaceId,
       connectionId,
     );
-    if (!connection.credential)
-      throw new ProviderError(
-        "authentication_failed",
-        "Provider authorization is required.",
-      );
-    const credentials = this.vault.decrypt<ProviderCredentialPayload>(
-      connection.credential.encryptedPayload,
-      connection.credential.encryptionVersion,
-    );
-    const adapter = this.registry.adapter(connection.provider as ProviderId);
     try {
+      // Discovery is also a provider read. Refresh an expired access token before
+      // asking the provider for accounts, exactly as metrics/read operations do.
+      const fresh = await this.refreshCoordinator.withLock(
+        context.connection.id,
+        () => this.refreshForRead(context),
+      );
       const startedAt = Date.now();
       await this.persistAccounts(
         workspaceId,
         connectionId,
-        connection.provider as ProviderId,
-        credentials,
-        adapter,
+        fresh.connection.provider as ProviderId,
+        fresh.credentials,
+        fresh.adapter,
       );
       await this.record(
         "accounts_discovered",
         request,
         principal,
         workspaceId,
-        connection.provider as ProviderId,
+        fresh.connection.provider as ProviderId,
         connectionId,
       );
       this.metrics.record(
         "account_discovery_success",
-        connection.provider as ProviderId,
+        fresh.connection.provider as ProviderId,
         Date.now() - startedAt,
       );
       const current = await this.connectionWithAccounts(
@@ -543,7 +539,7 @@ export class ProviderService {
     } catch (error) {
       this.metrics.record(
         "account_discovery_failure",
-        connection.provider as ProviderId,
+        context.connection.provider as ProviderId,
       );
       await this.database.client.providerConnection.update({
         where: { id: connectionId },
@@ -1148,14 +1144,16 @@ export class ProviderService {
     return { connection, credentials, adapter };
   }
 
-  private async refreshForRead(context: {
-    connection: { id: string; provider: ProviderId };
-    credentials: ProviderCredentialPayload;
-    adapter: {
+  private async refreshForRead<
+    TAdapter extends {
       refreshCredentials?: (
         credentials: ProviderCredentialPayload,
       ) => Promise<ProviderCredentialPayload>;
-    };
+    },
+  >(context: {
+    connection: { id: string; provider: ProviderId };
+    credentials: ProviderCredentialPayload;
+    adapter: TAdapter;
   }) {
     if (
       !context.credentials.expiresAt ||

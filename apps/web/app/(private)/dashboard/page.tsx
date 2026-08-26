@@ -218,6 +218,12 @@ function connectionStatus(status: string) {
   return { label: "Не подключено", tone: "info" };
 }
 
+function isInactiveProviderAccount(status: string | null) {
+  return ["DISABLED", "INACTIVE", "CLOSED", "SUSPENDED", "ARCHIVED"].includes(
+    (status ?? "").toUpperCase(),
+  );
+}
+
 export default function DashboardPage() {
   const [active, setActive] = useState<Workspace | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
@@ -230,6 +236,7 @@ export default function DashboardPage() {
   const [client, setClient] = useState<Client>("codex");
   const [drafts, setDrafts] = useState<Record<string, string[]>>({});
   const [openAccountsId, setOpenAccountsId] = useState<string | null>(null);
+  const [accountSearch, setAccountSearch] = useState("");
   const [highlightedProvider, setHighlightedProvider] = useState<string | null>(
     null,
   );
@@ -304,6 +311,21 @@ export default function DashboardPage() {
   const connectedCount = connections.filter((connection) =>
     ["CONNECTED", "DEGRADED", "REAUTH_REQUIRED"].includes(connection.status),
   ).length;
+  const selectorConnection =
+    connections.find((connection) => connection.id === openAccountsId) ?? null;
+  const selectorSelected = new Set(
+    selectorConnection ? (drafts[selectorConnection.id] ?? []) : [],
+  );
+  const selectorAccounts = selectorConnection
+    ? selectorConnection.accounts.filter((account) => {
+        const needle = accountSearch.trim().toLocaleLowerCase();
+        return (
+          !needle ||
+          account.displayName.toLocaleLowerCase().includes(needle) ||
+          account.externalAccountId.toLocaleLowerCase().includes(needle)
+        );
+      })
+    : [];
 
   function notify(text: string) {
     setError("");
@@ -478,6 +500,31 @@ export default function DashboardPage() {
     return () => window.removeEventListener("keydown", close);
   }, [confirm]);
 
+  useEffect(() => {
+    if (!openAccountsId) return;
+    const close = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeAccountSelector();
+    };
+    window.addEventListener("keydown", close);
+    return () => window.removeEventListener("keydown", close);
+  }, [openAccountsId]);
+
+  function openAccountSelector(connection: Connection) {
+    setDrafts((current) => ({
+      ...current,
+      [connection.id]: connection.accounts
+        .filter((account) => account.enabled)
+        .map((account) => account.id),
+    }));
+    setAccountSearch("");
+    setOpenAccountsId(connection.id);
+  }
+
+  function closeAccountSelector() {
+    setOpenAccountsId(null);
+    setAccountSearch("");
+  }
+
   async function startProvider(provider: string) {
     if (!active || provider === "GOOGLE_SEARCH_CONSOLE") return;
     setBusy(true);
@@ -501,7 +548,7 @@ export default function DashboardPage() {
     }
   }
 
-  async function discover(connection: Connection) {
+  async function refreshAccounts(connection: Connection) {
     if (!active) return;
     setBusy(true);
     try {
@@ -515,9 +562,11 @@ export default function DashboardPage() {
       );
       if (!response.ok) throw new Error();
       await loadConnections(active);
-      notify("Список кабинетов обновлён.");
+      notify("Список кабинетов обновлён. Сохранённый выбор не изменён.");
     } catch {
-      fail("Не удалось обновить список кабинетов.");
+      fail(
+        "Не удалось обновить список кабинетов. Проверьте подключение платформы и попробуйте ещё раз.",
+      );
     } finally {
       setBusy(false);
     }
@@ -585,6 +634,7 @@ export default function DashboardPage() {
       );
       if (!response.ok) throw new Error();
       await loadConnections(active);
+      closeAccountSelector();
       notify("Выбранные кабинеты сохранены.");
     } catch {
       await loadConnections(active);
@@ -1131,9 +1181,6 @@ export default function DashboardPage() {
                 const selected = new Set(
                   connection ? (drafts[connection.id] ?? []) : [],
                 );
-                const accountsOpen = connection
-                  ? openAccountsId === connection.id
-                  : false;
                 return (
                   <article
                     className={`connection-card ${
@@ -1153,9 +1200,16 @@ export default function DashboardPage() {
                         <h2>{copyText.name}</h2>
                         <p>{copyText.description}</p>
                       </div>
-                      <span className={`status-badge ${status.tone}`}>
-                        {status.label}
-                      </span>
+                      <div className="connection-card__statuses">
+                        <span className={`status-badge ${status.tone}`}>
+                          {status.label}
+                        </span>
+                        {providerId === "META_ADS" && !connection && (
+                          <span className="status-badge info status-badge--muted">
+                            Проходит верификацию
+                          </span>
+                        )}
+                      </div>
                     </div>
                     {connection ? (
                       <>
@@ -1174,23 +1228,16 @@ export default function DashboardPage() {
                           <button
                             className="primary-button btn--small"
                             type="button"
-                            aria-expanded={accountsOpen}
-                            aria-controls={`accounts-${connection.id}`}
-                            onClick={() =>
-                              setOpenAccountsId(
-                                accountsOpen ? null : connection.id,
-                              )
-                            }
+                            aria-haspopup="dialog"
+                            onClick={() => openAccountSelector(connection)}
                           >
-                            {accountsOpen
-                              ? "Скрыть кабинеты"
-                              : "Посмотреть кабинеты"}
+                            Посмотреть кабинеты
                           </button>
                           <button
                             className="secondary-button btn--small"
                             type="button"
                             disabled={busy}
-                            onClick={() => void discover(connection)}
+                            onClick={() => void refreshAccounts(connection)}
                           >
                             Обновить
                           </button>
@@ -1203,119 +1250,22 @@ export default function DashboardPage() {
                               Подключить заново
                             </button>
                           )}
-                        </div>
-                        <button
-                          className="danger-link connection-disconnect"
-                          type="button"
-                          onClick={() =>
-                            setConfirm({
-                              title: `Отключить ${copyText.name}?`,
-                              description:
-                                "Кабинеты этой платформы перестанут быть доступны в AI-клиенте. Чтобы вернуть доступ, потребуется подключить её снова.",
-                              confirmLabel: "Отключить",
-                              run: () => disconnect(connection),
-                            })
-                          }
-                        >
-                          Отключить
-                        </button>
-                        {accountsOpen && (
-                          <div
-                            className="account-selector"
-                            id={`accounts-${connection.id}`}
+                          <button
+                            className="secondary-button secondary-button--danger btn--small"
+                            type="button"
+                            onClick={() =>
+                              setConfirm({
+                                title: `Отключить ${copyText.name}?`,
+                                description:
+                                  "Кабинеты этой платформы перестанут быть доступны в AI-клиенте. Чтобы вернуть доступ, потребуется подключить её снова.",
+                                confirmLabel: "Отключить",
+                                run: () => disconnect(connection),
+                              })
+                            }
                           >
-                            <div className="account-selector__head">
-                              <div>
-                                <h3>Выберите кабинеты</h3>
-                                <p>
-                                  {selected.size} из{" "}
-                                  {connection.accounts.length}
-                                </p>
-                              </div>
-                              {connection.accounts.length > 0 && (
-                                <div className="bulk-actions">
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setDrafts((current) => ({
-                                        ...current,
-                                        [connection.id]:
-                                          connection.accounts.map(
-                                            (account) => account.id,
-                                          ),
-                                      }))
-                                    }
-                                  >
-                                    Выбрать все
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() =>
-                                      setDrafts((current) => ({
-                                        ...current,
-                                        [connection.id]: [],
-                                      }))
-                                    }
-                                  >
-                                    Снять все
-                                  </button>
-                                </div>
-                              )}
-                            </div>
-                            {connection.accounts.length ? (
-                              <div className="account-list">
-                                {connection.accounts.map((account) => (
-                                  <label
-                                    className="account-row"
-                                    key={account.id}
-                                  >
-                                    <input
-                                      type="checkbox"
-                                      checked={selected.has(account.id)}
-                                      onChange={() =>
-                                        toggleDraft(connection.id, account.id)
-                                      }
-                                    />
-                                    <span>
-                                      <strong>{account.displayName}</strong>
-                                      <small>
-                                        {account.status === "ENABLED" ||
-                                        !account.status
-                                          ? "Доступен"
-                                          : "Проверьте статус в платформе"}
-                                      </small>
-                                    </span>
-                                  </label>
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="empty-state">
-                                <p>Кабинеты пока не найдены.</p>
-                                <button
-                                  className="secondary-button"
-                                  type="button"
-                                  onClick={() => void discover(connection)}
-                                >
-                                  Найти кабинеты
-                                </button>
-                              </div>
-                            )}
-                            {connection.accounts.length > 0 && (
-                              <div className="account-selector__save">
-                                <button
-                                  className="primary-button"
-                                  type="button"
-                                  disabled={savingAccounts === connection.id}
-                                  onClick={() => void saveAccounts(connection)}
-                                >
-                                  {savingAccounts === connection.id
-                                    ? "Сохраняем…"
-                                    : "Сохранить выбор"}
-                                </button>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                            Отключить
+                          </button>
+                        </div>
                       </>
                     ) : (
                       <div className="connection-empty">
@@ -1334,15 +1284,6 @@ export default function DashboardPage() {
                 );
               })}
             </div>
-            <details className="support-details">
-              <summary>Нужна помощь с подключением Meta?</summary>
-              <p>
-                Напишите на{" "}
-                <a href="mailto:mcp@holymedia.kz">mcp@holymedia.kz</a>.
-                Специалист поможет, не получая лишнего доступа к вашему
-                аккаунту.
-              </p>
-            </details>
           </section>
         )}
 
@@ -2201,6 +2142,147 @@ export default function DashboardPage() {
 
       <FeedbackBlock />
       <SiteFooter compact />
+
+      {selectorConnection && (
+        <div
+          className="modal"
+          role="presentation"
+          onMouseDown={(event) => {
+            if (event.target === event.currentTarget) closeAccountSelector();
+          }}
+        >
+          <section
+            className="modal__panel modal__panel--wide account-selector-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="account-selector-title"
+          >
+            <button
+              className="modal__close"
+              type="button"
+              aria-label="Закрыть выбор кабинетов"
+              onClick={closeAccountSelector}
+            >
+              ×
+            </button>
+            <div className="account-selector__head">
+              <div>
+                <h2 id="account-selector-title">Выберите кабинеты</h2>
+                <p>
+                  {selectorSelected.size} из{" "}
+                  {selectorConnection.accounts.length} выбрано
+                </p>
+              </div>
+              {selectorConnection.accounts.length > 0 && (
+                <div className="bulk-actions">
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDrafts((current) => ({
+                        ...current,
+                        [selectorConnection.id]:
+                          selectorConnection.accounts.map(
+                            (account) => account.id,
+                          ),
+                      }))
+                    }
+                  >
+                    Выбрать все
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDrafts((current) => ({
+                        ...current,
+                        [selectorConnection.id]: [],
+                      }))
+                    }
+                  >
+                    Снять все
+                  </button>
+                </div>
+              )}
+            </div>
+            {selectorConnection.accounts.length ? (
+              <>
+                <label className="account-selector__search">
+                  <span>Поиск кабинета</span>
+                  <input
+                    autoFocus
+                    value={accountSearch}
+                    onChange={(event) => setAccountSearch(event.target.value)}
+                    placeholder="Название или ID"
+                  />
+                </label>
+                <p className="account-selector__hint">
+                  Статус показываем только если его передала рекламная
+                  платформа.
+                </p>
+                <div className="account-list" aria-live="polite">
+                  {selectorAccounts.map((account) => {
+                    const inactive = isInactiveProviderAccount(account.status);
+                    return (
+                      <label
+                        className={`account-row ${inactive ? "is-inactive" : ""}`}
+                        key={account.id}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectorSelected.has(account.id)}
+                          onChange={() =>
+                            toggleDraft(selectorConnection.id, account.id)
+                          }
+                        />
+                        <span>
+                          <strong>{account.displayName}</strong>
+                          <small>{account.externalAccountId}</small>
+                        </span>
+                        {inactive && <em>Неактивен</em>}
+                      </label>
+                    );
+                  })}
+                </div>
+                {!selectorAccounts.length && (
+                  <p className="empty-inline">
+                    По этому запросу кабинеты не найдены.
+                  </p>
+                )}
+                <div className="account-selector__save">
+                  <button
+                    className="secondary-button"
+                    type="button"
+                    onClick={closeAccountSelector}
+                  >
+                    Отмена
+                  </button>
+                  <button
+                    className="primary-button"
+                    type="button"
+                    disabled={savingAccounts === selectorConnection.id}
+                    onClick={() => void saveAccounts(selectorConnection)}
+                  >
+                    {savingAccounts === selectorConnection.id
+                      ? "Сохраняем…"
+                      : "Сохранить выбор"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="empty-state">
+                <p>Кабинеты пока не найдены.</p>
+                <button
+                  className="secondary-button"
+                  type="button"
+                  disabled={busy}
+                  onClick={() => void refreshAccounts(selectorConnection)}
+                >
+                  Найти кабинеты
+                </button>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
 
       {confirm && (
         <div
