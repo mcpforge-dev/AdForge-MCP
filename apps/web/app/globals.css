@@ -2239,12 +2239,16 @@ pre {
 }
 
 .dashboard-actions {
-  gap: 16px;
+  gap: 8px;
 }
 
-.dashboard-actions .profile-link,
+.dashboard-actions .profile-link {
+  padding-inline: 10px;
+}
+
 .dashboard-actions > .ghost-button {
-  padding-inline: 0;
+  min-height: 42px;
+  padding-inline: 12px;
 }
 
 .copy-row .secondary-button {
@@ -2324,14 +2328,18 @@ pre {
 .legal-card {
   width: 100%;
   margin-bottom: 80px;
+  padding: clamp(32px, 4vw, 56px);
 }
 
 .legal-card > * {
-  max-width: 104ch;
+  max-width: none;
 }
 
-.legal-card h1 {
-  max-width: 24ch;
+.legal-card > .eyebrow,
+.legal-card > h1,
+.legal-card > .legal-updated {
+  margin-inline: auto;
+  text-align: center;
 }
 
 .legal-card section + section {
@@ -2401,6 +2409,10 @@ pre {
 
   .legal-page {
     width: calc(100% - 28px);
+  }
+
+  .legal-card {
+    padding: 24px;
   }
 
   .footer__product {
