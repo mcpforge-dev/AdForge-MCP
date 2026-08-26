@@ -647,8 +647,6 @@ form {
   display: block;
   width: 136px;
   height: auto;
-  filter: brightness(0) saturate(100%) invert(69%) sepia(61%) saturate(632%)
-    hue-rotate(193deg) brightness(101%) contrast(102%);
 }
 .footer__contact {
   color: var(--text-muted);
