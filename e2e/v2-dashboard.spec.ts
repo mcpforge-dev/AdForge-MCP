@@ -314,6 +314,104 @@ test.describe("restored HolyMedia client UX", () => {
     ).toBeVisible();
   });
 
+  test("keeps the service-token lifecycle clear without re-exposing secrets", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await login(page);
+    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
+
+    const tokenList = page.locator(".token-list");
+    await expect(
+      tokenList.getByText("Без названия", { exact: true }),
+    ).toBeVisible();
+    await expect(tokenList.getByText("Истёк", { exact: true })).toBeVisible();
+    await expect(tokenList.getByText(/Создан/).first()).toBeVisible();
+    await expect(tokenList.getByText(/Действует до/).first()).toBeVisible();
+
+    const unnamedToken = tokenList
+      .locator(".token-row")
+      .filter({ hasText: "Без названия" });
+    await unnamedToken.getByRole("button", { name: "Назвать" }).click();
+    await tokenList
+      .locator(".token-name-editor")
+      .getByRole("textbox", { name: "Название ключа" })
+      .fill("Codex");
+    const renameResponse = page.waitForResponse(
+      (response) =>
+        response.request().method() === "PATCH" &&
+        response.url().includes("/service-tokens/"),
+    );
+    await tokenList
+      .locator(".token-name-editor")
+      .getByRole("button", { name: "Сохранить" })
+      .click();
+    expect((await renameResponse).ok()).toBeTruthy();
+    await expect(tokenList.getByText("Codex", { exact: true })).toBeVisible();
+
+    const tokenForm = page.locator("form.token-form");
+    await tokenForm.locator('input[name="name"]').fill("30-day client");
+    await tokenForm
+      .locator('select[name="expires_in_days"]')
+      .selectOption("30");
+    await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
+    await expect(page.locator(".one-time-secret")).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
+    await expect(page.locator(".one-time-secret")).toHaveCount(0);
+    const thirtyDayToken = page
+      .locator(".token-row")
+      .filter({ hasText: "30-day client" });
+    await expect(
+      thirtyDayToken.getByText("Активен", { exact: true }),
+    ).toBeVisible();
+    await expect(thirtyDayToken.getByText(/Действует до/)).toBeVisible();
+
+    await tokenForm.locator('input[name="name"]').fill("90-day client");
+    await tokenForm
+      .locator('select[name="expires_in_days"]')
+      .selectOption("90");
+    await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
+    await expect(page.locator(".one-time-secret")).toBeVisible();
+    await page.getByRole("button", { name: "Скрыть" }).click();
+    await page.reload();
+    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
+    const ninetyDayToken = page
+      .locator(".token-row")
+      .filter({ hasText: "90-day client" });
+    await expect(ninetyDayToken.getByText("Действует до")).toBeVisible();
+
+    await thirtyDayToken.getByRole("button", { name: "Отозвать" }).click();
+    await expect(page.getByRole("dialog")).toContainText("30-day client");
+    await page.getByRole("button", { name: "Отозвать" }).last().click();
+    await expect(
+      thirtyDayToken.getByText("Отозван", { exact: true }),
+    ).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
+    await expect(
+      page
+        .locator(".token-row")
+        .filter({ hasText: "30-day client" })
+        .getByText("Отозван", { exact: true }),
+    ).toBeVisible();
+
+    const codexToken = page.locator(".token-row").filter({ hasText: "Codex" });
+    await codexToken.getByRole("button", { name: "Обновить" }).click();
+    await expect(page.getByRole("dialog")).toContainText("Codex");
+    await page.getByRole("button", { name: "Обновить" }).last().click();
+    await expect(page.locator(".one-time-secret")).toBeVisible();
+    await page.reload();
+    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
+    await expect(page.locator(".one-time-secret")).toHaveCount(0);
+    await expect(
+      page
+        .locator(".token-row")
+        .filter({ hasText: "Codex" })
+        .getByText("Активен", { exact: true }),
+    ).toBeVisible();
+  });
+
   test("localizes the customer-facing dashboard surfaces in English", async ({
     page,
   }, testInfo) => {

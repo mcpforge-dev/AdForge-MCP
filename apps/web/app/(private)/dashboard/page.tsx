@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { SiteFooter } from "../../components/site-footer";
-import { LanguageSwitcher } from "../../components/language-switcher";
+import {
+  LanguageSwitcher,
+  useLanguage,
+} from "../../components/language-switcher";
 import { FeedbackBlock } from "../../components/feedback-block";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -139,6 +142,13 @@ type ConfirmAction = {
   run: () => Promise<void>;
 };
 
+type TokenLifecycle = {
+  label: string;
+  tone: "active" | "revoked" | "expired";
+  createdLabel: string;
+  expiryLabel: string;
+};
+
 const PROVIDER_COPY: Record<
   string,
   { name: string; description: string; short: string }
@@ -224,7 +234,70 @@ function isInactiveProviderAccount(status: string | null) {
   );
 }
 
+function tokenDisplayName(token: ServiceToken, language: "ru" | "en") {
+  const name = token.name.trim();
+  if (!name || /^personal mcp token$/i.test(name))
+    return language === "ru" ? "Без названия" : "Untitled";
+  return name;
+}
+
+function tokenLifecycle(
+  token: ServiceToken,
+  language: "ru" | "en",
+): TokenLifecycle {
+  const locale = language === "ru" ? "ru-RU" : "en-GB";
+  const date = (value: string) =>
+    new Date(value).toLocaleDateString(locale, {
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    });
+  const createdLabel =
+    language === "ru"
+      ? `Создан ${date(token.createdAt)}`
+      : `Created ${date(token.createdAt)}`;
+
+  if (token.revokedAt)
+    return {
+      label: language === "ru" ? "Отозван" : "Revoked",
+      tone: "revoked",
+      createdLabel,
+      expiryLabel: token.expiresAt
+        ? language === "ru"
+          ? `Действовал до ${date(token.expiresAt)}`
+          : `Expired on ${date(token.expiresAt)}`
+        : language === "ru"
+          ? "Бессрочный до отзыва"
+          : "No expiration before revocation",
+    };
+
+  if (token.expiresAt && new Date(token.expiresAt).getTime() <= Date.now())
+    return {
+      label: language === "ru" ? "Истёк" : "Expired",
+      tone: "expired",
+      createdLabel,
+      expiryLabel:
+        language === "ru"
+          ? `Истёк ${date(token.expiresAt)}`
+          : `Expired ${date(token.expiresAt)}`,
+    };
+
+  return {
+    label: language === "ru" ? "Активен" : "Active",
+    tone: "active",
+    createdLabel,
+    expiryLabel: token.expiresAt
+      ? language === "ru"
+        ? `Действует до ${date(token.expiresAt)}`
+        : `Expires ${date(token.expiresAt)}`
+      : language === "ru"
+        ? "Бессрочно"
+        : "No expiration",
+  };
+}
+
 export default function DashboardPage() {
+  const language = useLanguage();
   const [active, setActive] = useState<Workspace | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -242,6 +315,10 @@ export default function DashboardPage() {
   );
   const [savingAccounts, setSavingAccounts] = useState<string | null>(null);
   const [createdToken, setCreatedToken] = useState("");
+  const [tokenName, setTokenName] = useState("");
+  const [editingTokenId, setEditingTokenId] = useState<string | null>(null);
+  const [tokenNameDraft, setTokenNameDraft] = useState("");
+  const [tokenActionId, setTokenActionId] = useState<string | null>(null);
   const [reportDays, setReportDays] = useState(7);
   const [reportAccountId, setReportAccountId] = useState("");
   const [reportPreview, setReportPreview] = useState<ReportPreview | null>(
@@ -666,7 +743,7 @@ export default function DashboardPage() {
             "x-csrf-token": await csrf(),
           },
           body: JSON.stringify({
-            name: form.get("name"),
+            name: String(form.get("name") ?? "").trim(),
             scopes: form.get("write")
               ? ["adforge:mcp:read", "adforge:mcp:write"]
               : ["adforge:mcp:read"],
@@ -679,6 +756,7 @@ export default function DashboardPage() {
       const data = (await response.json()) as ServiceToken & { token: string };
       setCreatedToken(data.token);
       formElement.reset();
+      setTokenName("");
       await loadTokens(active);
       notify("Ключ создан. Сохраните его сейчас.");
     } catch {
@@ -690,38 +768,80 @@ export default function DashboardPage() {
 
   async function revokeToken(token: ServiceToken) {
     if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}`,
-      {
-        method: "DELETE",
-        credentials: "include",
-        headers: { "x-csrf-token": await csrf() },
-      },
-    );
-    if (!response.ok) return fail("Не удалось отозвать ключ.");
-    await loadTokens(active);
-    notify("Ключ отозван.");
+    setTokenActionId(token.id);
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}`,
+        {
+          method: "DELETE",
+          credentials: "include",
+          headers: { "x-csrf-token": await csrf() },
+        },
+      );
+      if (!response.ok) throw new Error();
+      await loadTokens(active);
+      notify("Ключ отозван.");
+    } catch {
+      fail("Не удалось отозвать ключ.");
+    } finally {
+      setTokenActionId(null);
+    }
   }
 
   async function rotateToken(token: ServiceToken) {
     if (!active) return;
-    const response = await fetch(
-      `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}/rotate`,
-      {
-        method: "POST",
-        credentials: "include",
-        headers: {
-          "content-type": "application/json",
-          "x-csrf-token": await csrf(),
+    setTokenActionId(token.id);
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}/rotate`,
+        {
+          method: "POST",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": await csrf(),
+          },
+          body: "{}",
         },
-        body: "{}",
-      },
-    );
-    if (!response.ok) return fail("Не удалось обновить ключ.");
-    const data = (await response.json()) as ServiceToken & { token: string };
-    setCreatedToken(data.token);
-    await loadTokens(active);
-    notify("Новый ключ готов. Сохраните его сейчас.");
+      );
+      if (!response.ok) throw new Error();
+      const data = (await response.json()) as ServiceToken & { token: string };
+      setCreatedToken(data.token);
+      await loadTokens(active);
+      notify("Новый ключ готов. Сохраните его сейчас.");
+    } catch {
+      fail("Не удалось обновить ключ.");
+    } finally {
+      setTokenActionId(null);
+    }
+  }
+
+  async function renameToken(token: ServiceToken) {
+    if (!active || !tokenNameDraft.trim()) return;
+    setTokenActionId(token.id);
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}`,
+        {
+          method: "PATCH",
+          credentials: "include",
+          headers: {
+            "content-type": "application/json",
+            "x-csrf-token": await csrf(),
+          },
+          body: JSON.stringify({ name: tokenNameDraft.trim() }),
+        },
+      );
+      if (!response.ok) throw new Error();
+      await loadTokens(active);
+      setEditingTokenId(null);
+      setTokenNameDraft("");
+      notify("Название ключа сохранено.");
+    } catch {
+      fail("Не удалось сохранить название ключа.");
+    } finally {
+      setTokenActionId(null);
+    }
   }
 
   async function loadReportPreview(
@@ -1328,7 +1448,17 @@ export default function DashboardPage() {
                             name="name"
                             required
                             minLength={2}
-                            placeholder="Например, Codex"
+                            value={tokenName}
+                            onChange={(event) =>
+                              setTokenName(event.target.value)
+                            }
+                            placeholder={`Например, ${
+                              client === "chatgpt"
+                                ? "ChatGPT"
+                                : client === "claude"
+                                  ? "Claude"
+                                  : "Codex"
+                            }`}
                           />
                         </label>
                         <label>
@@ -1400,56 +1530,137 @@ export default function DashboardPage() {
                     </div>
                   )}
                   {canManage && tokens.length > 0 && (
-                    <div className="token-list">
+                    <div className="token-list" aria-live="polite">
                       <h3>Ваши ключи</h3>
-                      {tokens.map((token) => (
-                        <div className="token-row" key={token.id}>
-                          <span>
-                            <strong>{token.name}</strong>
-                            <small>
-                              {token.revokedAt
-                                ? "Отозван"
-                                : token.expiresAt
-                                  ? `Действует до ${new Date(token.expiresAt).toLocaleDateString("ru-RU")}`
-                                  : "Без срока"}
-                            </small>
-                          </span>
-                          {!token.revokedAt && (
-                            <div>
-                              <button
-                                className="ghost-button btn--small"
-                                type="button"
-                                onClick={() =>
-                                  setConfirm({
-                                    title: `Обновить ключ «${token.name}»?`,
-                                    description:
-                                      "Старое значение сразу перестанет работать.",
-                                    confirmLabel: "Обновить",
-                                    run: () => rotateToken(token),
-                                  })
-                                }
-                              >
-                                Обновить
-                              </button>
-                              <button
-                                className="danger-link"
-                                type="button"
-                                onClick={() =>
-                                  setConfirm({
-                                    title: `Отозвать ключ «${token.name}»?`,
-                                    description:
-                                      "AI-клиент с этим ключом потеряет доступ.",
-                                    confirmLabel: "Отозвать",
-                                    run: () => revokeToken(token),
-                                  })
-                                }
-                              >
-                                Отозвать
-                              </button>
+                      {tokens.map((token) => {
+                        const lifecycle = tokenLifecycle(token, language);
+                        const displayName = tokenDisplayName(token, language);
+                        const isEditing = editingTokenId === token.id;
+                        const actionPending = tokenActionId === token.id;
+                        const isExpired = lifecycle.tone === "expired";
+                        return (
+                          <article className="token-row" key={token.id}>
+                            <div className="token-row__identity">
+                              {isEditing ? (
+                                <form
+                                  className="token-name-editor"
+                                  onSubmit={(event) => {
+                                    event.preventDefault();
+                                    void renameToken(token);
+                                  }}
+                                >
+                                  <label>
+                                    <span className="sr-only">
+                                      Название ключа
+                                    </span>
+                                    <input
+                                      autoFocus
+                                      value={tokenNameDraft}
+                                      minLength={2}
+                                      maxLength={160}
+                                      required
+                                      aria-label="Название ключа"
+                                      onChange={(event) =>
+                                        setTokenNameDraft(event.target.value)
+                                      }
+                                    />
+                                  </label>
+                                  <button
+                                    className="token-action"
+                                    type="submit"
+                                    disabled={actionPending}
+                                  >
+                                    {actionPending ? "Сохраняем…" : "Сохранить"}
+                                  </button>
+                                  <button
+                                    className="token-action"
+                                    type="button"
+                                    disabled={actionPending}
+                                    onClick={() => {
+                                      setEditingTokenId(null);
+                                      setTokenNameDraft("");
+                                    }}
+                                  >
+                                    Отмена
+                                  </button>
+                                </form>
+                              ) : (
+                                <>
+                                  <div className="token-row__title">
+                                    <strong>{displayName}</strong>
+                                    <span
+                                      className={`token-status token-status--${lifecycle.tone}`}
+                                    >
+                                      {lifecycle.label}
+                                    </span>
+                                  </div>
+                                  <div className="token-row__meta">
+                                    <small>{lifecycle.createdLabel}</small>
+                                    <small>{lifecycle.expiryLabel}</small>
+                                  </div>
+                                </>
+                              )}
                             </div>
-                          )}
-                        </div>
-                      ))}
+                            {!isEditing && (
+                              <div className="token-row__actions">
+                                <button
+                                  className="token-action"
+                                  type="button"
+                                  disabled={actionPending}
+                                  onClick={() => {
+                                    setEditingTokenId(token.id);
+                                    setTokenNameDraft(
+                                      /^personal mcp token$/i.test(token.name)
+                                        ? ""
+                                        : token.name,
+                                    );
+                                  }}
+                                >
+                                  {/^personal mcp token$/i.test(token.name)
+                                    ? "Назвать"
+                                    : "Переименовать"}
+                                </button>
+                                {!token.revokedAt && !isExpired && (
+                                  <>
+                                    <button
+                                      className="token-action"
+                                      type="button"
+                                      disabled={actionPending}
+                                      onClick={() =>
+                                        setConfirm({
+                                          title: `Обновить ключ «${displayName}»?`,
+                                          description:
+                                            "Текущее значение сразу перестанет работать. Новый ключ будет показан один раз.",
+                                          confirmLabel: "Обновить",
+                                          run: () => rotateToken(token),
+                                        })
+                                      }
+                                    >
+                                      Обновить
+                                    </button>
+                                    <button
+                                      className="token-action token-action--danger"
+                                      type="button"
+                                      disabled={actionPending}
+                                      onClick={() =>
+                                        setConfirm({
+                                          title: `Отозвать ключ «${displayName}»?`,
+                                          description:
+                                            "AI-клиент с этим ключом потеряет доступ. Вернуть этот ключ нельзя.",
+                                          confirmLabel: "Отозвать",
+                                          run: () => revokeToken(token),
+                                        })
+                                      }
+                                    >
+                                      Отозвать
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </article>
+                        );
+                      })}
                     </div>
                   )}
                 </div>

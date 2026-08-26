@@ -85,6 +85,37 @@ describe.skipIf(!integrationEnabled)(
       expect(stored.tokenDigest).not.toContain(rotated.token);
     });
 
+    it("renames a token without changing its digest or lifecycle", async () => {
+      const created = await serviceTokens.create(
+        workspaceId,
+        { name: "Personal MCP token", scopes: ["adforge:mcp:read"] },
+        principal,
+        request,
+      );
+      const before = await database.client.serviceToken.findUniqueOrThrow({
+        where: { id: created.id },
+        select: { tokenDigest: true, expiresAt: true },
+      });
+
+      const renamed = await serviceTokens.updateName(
+        workspaceId,
+        created.id,
+        { name: "Codex" },
+        principal,
+        request,
+      );
+      const after = await database.client.serviceToken.findUniqueOrThrow({
+        where: { id: created.id },
+        select: { tokenDigest: true, expiresAt: true },
+      });
+
+      expect(renamed.name).toBe("Codex");
+      expect(after).toEqual(before);
+      expect((await serviceTokens.authenticate(created.token))?.tokenId).toBe(
+        created.id,
+      );
+    });
+
     it("authenticates an imported V1-compatible digest without token reissue", async () => {
       const rawToken = `hmst_migrated_${randomUUID()}`;
       const identity = await database.client.serviceIdentity.create({

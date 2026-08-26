@@ -34,6 +34,18 @@
 * {
   box-sizing: border-box;
 }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
 [hidden] {
   display: none !important;
 }
@@ -1826,22 +1838,96 @@ pre {
 }
 .token-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
-  gap: 12px;
-  padding: 12px 0;
+  gap: 16px;
+  padding: 14px 0;
   border-top: 1px solid var(--border);
 }
-.token-row > span {
+.token-row__identity {
   display: grid;
-  gap: 2px;
+  flex: 1;
+  min-width: 0;
+  gap: 7px;
 }
-.token-row > span small {
+.token-row__title,
+.token-row__meta,
+.token-row__actions,
+.token-name-editor {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.token-row__title {
+  flex-wrap: wrap;
+}
+.token-row__meta {
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+.token-row__meta small {
   color: var(--text-faint);
 }
-.token-row > div {
-  display: flex;
-  gap: 4px;
+.token-row__actions {
+  flex: none;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.token-status {
+  display: inline-flex;
+  align-items: center;
+  min-height: 22px;
+  padding: 2px 8px;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.token-status--active {
+  border-color: rgba(81, 214, 160, 0.36);
+  background: rgba(81, 214, 160, 0.1);
+  color: #91e2bb;
+}
+.token-status--revoked,
+.token-status--expired {
+  border-color: var(--border-strong);
+  background: var(--surface-inset);
+  color: var(--text-muted);
+}
+.token-action {
+  min-height: 34px;
+  padding: 6px 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text);
+  font-size: 13px;
+  font-weight: 650;
+}
+.token-action:hover:not(:disabled) {
+  border-color: var(--accent);
+  background: rgba(124, 154, 255, 0.1);
+}
+.token-action:disabled {
+  cursor: wait;
+  opacity: 0.62;
+}
+.token-action--danger {
+  border-color: rgba(246, 115, 120, 0.45);
+  color: #ff9ca0;
+}
+.token-action--danger:hover:not(:disabled) {
+  border-color: var(--err);
+  background: rgba(246, 115, 120, 0.1);
+}
+.token-name-editor {
+  flex-wrap: wrap;
+}
+.token-name-editor label {
+  flex: 1 1 220px;
+}
+.token-name-editor input {
+  min-height: 36px;
 }
 .client-tabs {
   display: grid;
@@ -2202,13 +2288,17 @@ pre {
     text-align: left;
     padding-inline: 12px;
   }
-  .token-row > div,
+  .token-row__actions,
+  .token-name-editor,
   .confirm-actions {
     width: 100%;
   }
-  .token-row > div > button,
+  .token-row__actions > button,
   .confirm-actions > button {
     flex: 1;
+  }
+  .token-name-editor label {
+    flex-basis: 100%;
   }
   .report-form {
     grid-template-columns: 1fr;

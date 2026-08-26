@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { Page, Route } from "@playwright/test";
 
 const workspace = {
@@ -43,7 +44,45 @@ async function json(route: Route, body: unknown) {
   });
 }
 
+type MockServiceToken = {
+  id: string;
+  name: string;
+  tokenPrefix: string;
+  scopes: string[];
+  accountIds: string[];
+  createdAt: string;
+  expiresAt: string | null;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+};
+
 export async function installMockApi(page: Page) {
+  const now = Date.now();
+  const tokens: MockServiceToken[] = [
+    {
+      id: "55555555-5555-4555-8555-555555555555",
+      name: "Personal MCP token",
+      tokenPrefix: "hmst_legacy",
+      scopes: ["adforge:mcp:read"],
+      accountIds: [accounts[0].id],
+      createdAt: new Date(now - 3 * 86_400_000).toISOString(),
+      expiresAt: new Date(now + 27 * 86_400_000).toISOString(),
+      revokedAt: null,
+      lastUsedAt: null,
+    },
+    {
+      id: "66666666-6666-4666-8666-666666666665",
+      name: "Old client",
+      tokenPrefix: "hmst_expired",
+      scopes: ["adforge:mcp:read"],
+      accountIds: [accounts[0].id],
+      createdAt: new Date(now - 90 * 86_400_000).toISOString(),
+      expiresAt: new Date(now - 2 * 86_400_000).toISOString(),
+      revokedAt: null,
+      lastUsedAt: null,
+    },
+  ];
+
   await page.route("**/api/**", async (route) => {
     const request = route.request();
     const path = new URL(request.url()).pathname;
@@ -238,20 +277,62 @@ export async function installMockApi(page: Page) {
     )
       return json(route, { success: true });
     if (path.endsWith("/service-tokens") && request.method() === "GET")
-      return json(route, []);
-    if (path.endsWith("/service-tokens") && request.method() === "POST")
-      return json(route, {
-        id: "55555555-5555-4555-8555-555555555555",
-        name: "Playwright client",
-        tokenPrefix: "hm_test",
-        token: "mock-one-time-token",
-        scopes: ["adforge:mcp:read"],
-        accountIds: [accounts[0]?.id],
+      return json(route, tokens);
+    if (path.endsWith("/service-tokens") && request.method() === "POST") {
+      const input = request.postDataJSON() as {
+        name: string;
+        accountIds?: string[];
+        scopes?: string[];
+        expiresInDays?: number;
+      };
+      const created: MockServiceToken = {
+        id: randomUUID(),
+        name: input.name,
+        tokenPrefix: "hmst_generated",
+        scopes: input.scopes ?? ["adforge:mcp:read"],
+        accountIds: input.accountIds ?? [],
         createdAt: new Date().toISOString(),
-        expiresAt: null,
+        expiresAt: new Date(
+          Date.now() + (input.expiresInDays ?? 90) * 86_400_000,
+        ).toISOString(),
         revokedAt: null,
         lastUsedAt: null,
-      });
+      };
+      tokens.unshift(created);
+      return json(route, { ...created, token: `hmst_${randomUUID()}` });
+    }
+    const tokenMatch = path.match(/\/service-tokens\/([^/]+)(?:\/(rotate))?$/);
+    if (tokenMatch) {
+      const [, tokenId, action] = tokenMatch;
+      const current = tokens.find((token) => token.id === tokenId);
+      if (!current) return route.fulfill({ status: 404 });
+
+      if (request.method() === "PATCH") {
+        const input = request.postDataJSON() as { name: string };
+        current.name = input.name;
+        return json(route, current);
+      }
+      if (request.method() === "DELETE") {
+        current.revokedAt = new Date().toISOString();
+        return json(route, { success: true });
+      }
+      if (request.method() === "POST" && action === "rotate") {
+        current.revokedAt = new Date().toISOString();
+        const input = request.postDataJSON() as { expiresInDays?: number };
+        const replacement: MockServiceToken = {
+          ...current,
+          id: randomUUID(),
+          tokenPrefix: "hmst_rotated",
+          createdAt: new Date().toISOString(),
+          expiresAt: new Date(
+            Date.now() + (input.expiresInDays ?? 90) * 86_400_000,
+          ).toISOString(),
+          revokedAt: null,
+        };
+        tokens.unshift(replacement);
+        return json(route, { ...replacement, token: `hmst_${randomUUID()}` });
+      }
+    }
     return json(route, { success: true });
   });
 }
