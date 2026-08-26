@@ -934,13 +934,12 @@ export default function DashboardPage() {
     id?: Section;
     label: string;
     disabled?: boolean;
-    soon?: boolean;
   }> = [
     { id: "overview", label: "Обзор" },
     { id: "connections", label: "Подключения" },
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
-    { id: "analysis", label: "Анализ сайта", soon: true },
+    { label: "Анализ сайта", disabled: true },
     { label: "SEO", disabled: true },
     { label: "Тарифы", disabled: true },
   ];
@@ -1000,11 +999,6 @@ export default function DashboardPage() {
               onClick={() => item.id && setSection(item.id)}
             >
               <span>{item.label}</span>
-              {item.soon && (
-                <span className="nav-soon" aria-hidden="true">
-                  Скоро
-                </span>
-              )}
               {item.disabled && <small>Скоро</small>}
             </button>
           ))}

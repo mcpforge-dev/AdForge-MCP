@@ -83,6 +83,29 @@ test.describe("axe accessibility", () => {
   test("keeps the shared public shell localized and accessible", async ({
     page,
   }) => {
+    await page.goto("/");
+    const landingHeader = page.locator(".site-header");
+    await expect(landingHeader).not.toHaveClass(/is-scrolled/);
+    await page.evaluate(() => window.scrollTo(0, 240));
+    await expect(landingHeader).toHaveClass(/is-scrolled/);
+    expect(
+      await landingHeader.evaluate(
+        (element) => getComputedStyle(element).borderBottomWidth,
+      ),
+    ).toBe("0px");
+
+    const footer = page.locator(".footer.footer--landing");
+    const footerLeft = footer.locator(".footer__left");
+    const footerLinks = footer.locator(".footer__links");
+    await expect(footerLeft.locator(".footer__partner")).toBeVisible();
+    await expect(footerLinks).toHaveCount(1);
+    expect(
+      await footerLeft.evaluate((element) => element.getBoundingClientRect().x),
+    ).toBeCloseTo(
+      await footer.evaluate((element) => element.getBoundingClientRect().x),
+      0,
+    );
+
     await page.goto("/privacy");
     const header = page.locator(".legal-header");
     await expect(header).toBeVisible();
@@ -91,12 +114,12 @@ test.describe("axe accessibility", () => {
       await header.evaluate((element) => element.getBoundingClientRect().top),
     ).toBeLessThanOrEqual(1);
 
-    const footer = page.locator("footer");
-    await expect(footer.getByRole("button", { name: "English" })).toHaveCount(
-      0,
-    );
+    const legalFooter = page.locator("footer");
     await expect(
-      footer.locator('a[href="https://astanahub.com/"] img'),
+      legalFooter.getByRole("button", { name: "English" }),
+    ).toHaveCount(0);
+    await expect(
+      legalFooter.locator('a[href="https://astanahub.com/"] img'),
     ).toHaveAttribute("src", "/assets/astana-hub-logo.svg");
 
     await page.getByRole("button", { name: "English" }).click();
@@ -106,20 +129,26 @@ test.describe("axe accessibility", () => {
     ).toBeVisible();
     expect(await page.locator("main").innerText()).not.toMatch(/[А-Яа-яЁё]/);
     await expectAccessible(page, "privacy in English");
+
+    await page.goto("/terms");
+    await page.getByRole("button", { name: "English" }).click();
+    await expect(page.locator("html")).toHaveAttribute("lang", "en");
+    expect(await page.locator("main").innerText()).not.toMatch(/[А-Яа-яЁё]/);
+    await expectAccessible(page, "terms in English");
   });
 
   test("private customer sections", async ({ page }) => {
     await installMockApi(page);
     await login(page);
     await expectAccessible(page, "overview");
-    for (const label of [
-      "Подключения",
-      "AI-клиент",
-      "Отчёты",
-      "Анализ сайта",
-    ]) {
+    for (const label of ["Подключения", "AI-клиент", "Отчёты"]) {
       await page.getByRole("button", { name: label, exact: true }).click();
       await expectAccessible(page, label);
+    }
+    for (const label of ["Анализ сайта", "SEO", "Тарифы"]) {
+      const item = page.getByRole("button", { name: new RegExp(label) });
+      await expect(item).toBeDisabled();
+      await expect(item.locator("small")).toHaveText("Скоро");
     }
     await page.getByRole("button", { name: /Открыть профиль/ }).click();
     await expectAccessible(page, "profile");

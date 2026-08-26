@@ -1,6 +1,6 @@
 import Link from "next/link";
+import { LandingHeader } from "../components/landing-header";
 import { SiteFooter } from "../components/site-footer";
-import { LanguageSwitcher } from "../components/language-switcher";
 
 const baseUrl =
   process.env.NEXT_PUBLIC_PUBLIC_BASE_URL ?? "https://mcp.holymedia.kz";
@@ -29,25 +29,7 @@ export default function PublicHomePage() {
           __html: JSON.stringify(structuredData).replace(/</g, "\\u003c"),
         }}
       />
-      <header className="site-header">
-        <Link className="site-brand" href="/" aria-label="HolyMedia MCP">
-          <span className="logo-dot" aria-hidden="true" />
-          HolyMedia MCP
-        </Link>
-        <nav className="site-nav" aria-label="Навигация">
-          <a href="#steps">Как это работает</a>
-          <LanguageSwitcher compact />
-          <Link className="btn btn--secondary btn--small" href="/auth">
-            Войти
-          </Link>
-          <Link
-            className="btn btn--primary btn--small"
-            href="/auth?mode=signup"
-          >
-            Создать аккаунт
-          </Link>
-        </nav>
-      </header>
+      <LandingHeader />
 
       <div className="landing-main">
         <section className="hero">

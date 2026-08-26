@@ -27,8 +27,8 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
       className={compact ? "footer footer--app" : "footer footer--landing"}
       data-language-static
     >
-      <span className="footer__product">{copy.product}</span>
-      <div className="footer__right">
+      <div className="footer__left">
+        <span className="footer__product">{copy.product}</span>
         <a
           className="footer__partner"
           href="https://astanahub.com/"
@@ -38,11 +38,11 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         >
           <img src="/assets/astana-hub-logo.svg" alt="Astana Hub" />
         </a>
-        <nav className="footer__links" aria-label={copy.legal}>
-          <Link href="/privacy">{copy.privacy}</Link>
-          <Link href="/terms">{copy.terms}</Link>
-        </nav>
       </div>
+      <nav className="footer__links" aria-label={copy.legal}>
+        <Link href="/privacy">{copy.privacy}</Link>
+        <Link href="/terms">{copy.terms}</Link>
+      </nav>
     </footer>
   );
 }
