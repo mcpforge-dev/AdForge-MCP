@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { BrandLockup } from "./brand-lockup";
 import { LanguageSwitcher } from "./language-switcher";
 
 export function LandingHeader() {
@@ -17,11 +18,7 @@ export function LandingHeader() {
   return (
     <header className={scrolled ? "site-header is-scrolled" : "site-header"}>
       <Link className="site-brand" href="/" aria-label="HolyMedia MCP">
-        <img
-          className="brand-logo"
-          src="/assets/brand/holymedia-mcp-horizontal.svg"
-          alt=""
-        />
+        <BrandLockup />
       </Link>
       <nav className="site-nav" aria-label="Навигация">
         <a href="#steps">Как это работает</a>

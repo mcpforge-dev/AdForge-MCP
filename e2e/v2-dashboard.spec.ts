@@ -85,6 +85,95 @@ test.describe("restored HolyMedia client UX", () => {
     expect(failures, failures.join("\n")).toEqual([]);
   });
 
+  test("shows live overview counts and routes to the useful next step", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await login(page);
+
+    const accessKeys = page
+      .locator(".stat-card--link")
+      .filter({ hasText: "Ключи доступа" });
+    await expect(accessKeys).toContainText("1");
+    await expect(accessKeys).toContainText("активных ключей");
+    await accessKeys.click();
+    await expect(
+      page.getByRole("heading", { name: "Подключите HolyMedia MCP" }),
+    ).toBeVisible();
+
+    await page.getByRole("button", { name: "Обзор", exact: true }).click();
+    const attention = page
+      .locator(".stat-card--link")
+      .filter({ hasText: "Требуют внимания" });
+    await expect(attention).toContainText("0");
+    await attention.click();
+    await expect(
+      page.getByRole("heading", { name: "Подключения" }),
+    ).toBeVisible();
+  });
+
+  test("keeps account selection controls clear and releases OAuth navigation on Back", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await login(page);
+    await page
+      .getByRole("button", { name: "Подключения", exact: true })
+      .click();
+
+    const metaCard = page
+      .locator(".connection-card")
+      .filter({ hasText: "Meta Ads" });
+    await metaCard.getByRole("button", { name: "Посмотреть кабинеты" }).click();
+    const selector = page.getByRole("dialog", { name: "Выберите кабинеты" });
+    const close = selector.getByRole("button", {
+      name: "Закрыть выбор кабинетов",
+    });
+    const bulkActions = selector.locator(".bulk-actions");
+    await expect(close).toBeVisible();
+    await expect(bulkActions).toBeVisible();
+
+    const [closeBox, bulkBox, scrollbarColor] = await Promise.all([
+      close.boundingBox(),
+      bulkActions.boundingBox(),
+      selector.evaluate((element) => getComputedStyle(element).scrollbarColor),
+    ]);
+    expect(closeBox).not.toBeNull();
+    expect(bulkBox).not.toBeNull();
+    expect(scrollbarColor).not.toBe("auto");
+    expect(bulkBox!.y).toBeGreaterThanOrEqual(closeBox!.y + closeBox!.height);
+
+    const selectedBeforeClose = await selector
+      .locator('input[type="checkbox"]:checked')
+      .count();
+    await close.click();
+    await expect(selector).toHaveCount(0);
+    await metaCard.getByRole("button", { name: "Посмотреть кабинеты" }).click();
+    await expect(
+      page
+        .getByRole("dialog", { name: "Выберите кабинеты" })
+        .locator('input[type="checkbox"]:checked'),
+    ).toHaveCount(selectedBeforeClose);
+    await page.getByRole("button", { name: "Отмена" }).first().click();
+
+    await page.route("https://oauth.example.test/**", (route) =>
+      route.fulfill({
+        contentType: "text/html",
+        body: "<title>Provider authorization</title><main>Provider authorization</main>",
+      }),
+    );
+    const googleCard = page
+      .locator(".connection-card")
+      .filter({ hasText: "Google Ads" });
+    const connect = googleCard.getByRole("button", {
+      name: "Подключить Google Ads",
+    });
+    await connect.click();
+    await expect(page).toHaveURL(/oauth\.example\.test/);
+    await page.goBack({ waitUntil: "domcontentloaded" });
+    await expect(connect).toBeEnabled();
+  });
+
   test("connections, account selection, MCP, reports and profile form a complete flow", async ({
     page,
   }, testInfo) => {

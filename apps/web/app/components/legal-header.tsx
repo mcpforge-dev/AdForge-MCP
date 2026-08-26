@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
+import { BrandLockup } from "./brand-lockup";
 import { LanguageSwitcher } from "./language-switcher";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
@@ -50,11 +51,7 @@ export function LegalHeader() {
           });
         }}
       >
-        <img
-          className="brand-logo"
-          src="/assets/brand/holymedia-mcp-horizontal.svg"
-          alt=""
-        />
+        <BrandLockup />
       </Link>
       <div className="legal-language">
         <LanguageSwitcher compact />

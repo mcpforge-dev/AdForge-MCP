@@ -8,14 +8,12 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
   const copy =
     language === "ru"
       ? {
-          contact: "Напишите нам:",
           legal: "Юридическая информация",
           privacy: "Политика конфиденциальности",
           terms: "Условия использования",
           astanaHub: "Astana Hub",
         }
       : {
-          contact: "Email us:",
           legal: "Legal information",
           privacy: "Privacy policy",
           terms: "Terms of use",
@@ -34,10 +32,6 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
             src="/assets/brand/holymedia-mcp-horizontal.svg"
             alt="HolyMedia MCP"
           />
-          <span className="footer__contact">
-            {copy.contact}{" "}
-            <a href="mailto:mcp@holymedia.kz">mcp@holymedia.kz</a>
-          </span>
         </div>
         <a
           className="footer__partner"

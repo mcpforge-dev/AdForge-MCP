@@ -215,6 +215,10 @@ export async function installMockApi(page: Page) {
           oauth: true,
         })),
       );
+    if (path.endsWith("/oauth/start") && request.method() === "POST")
+      return json(route, {
+        authorizationUrl: "https://oauth.example.test/authorize",
+      });
     if (path === `/api/v1/workspaces/${workspace.id}/connections`)
       return json(route, [
         {

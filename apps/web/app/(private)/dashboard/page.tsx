@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { BrandLockup } from "../../components/brand-lockup";
 import { SiteFooter } from "../../components/site-footer";
 import {
   LanguageSwitcher,
@@ -348,6 +349,9 @@ export default function DashboardPage() {
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [oauthPendingProvider, setOauthPendingProvider] = useState<
+    string | null
+  >(null);
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
 
   const canManage = Boolean(active && ["OWNER", "ADMIN"].includes(active.role));
@@ -388,6 +392,25 @@ export default function DashboardPage() {
   const connectedCount = connections.filter((connection) =>
     ["CONNECTED", "DEGRADED", "REAUTH_REQUIRED"].includes(connection.status),
   ).length;
+  const activeTokenCount = useMemo(
+    () =>
+      tokens.filter(
+        (token) =>
+          !token.revokedAt &&
+          (!token.expiresAt ||
+            new Date(token.expiresAt).getTime() > Date.now()),
+      ).length,
+    [tokens],
+  );
+  const attentionConnectionCount = useMemo(
+    () =>
+      connections.filter((connection) =>
+        ["PENDING", "DEGRADED", "REAUTH_REQUIRED", "ERROR"].includes(
+          connection.status,
+        ),
+      ).length,
+    [connections],
+  );
   const selectorConnection =
     connections.find((connection) => connection.id === openAccountsId) ?? null;
   const selectorSelected = new Set(
@@ -569,6 +592,24 @@ export default function DashboardPage() {
   }, [connections, highlightedProvider]);
 
   useEffect(() => {
+    // Browser Back can restore this page from BFCache with its React state.
+    // OAuth navigation is no longer in progress once the page is visible again.
+    const releaseOAuthPending = () => setOauthPendingProvider(null);
+    const releaseWhenVisible = () => {
+      if (document.visibilityState === "visible") releaseOAuthPending();
+    };
+
+    window.addEventListener("pageshow", releaseOAuthPending);
+    window.addEventListener("popstate", releaseOAuthPending);
+    document.addEventListener("visibilitychange", releaseWhenVisible);
+    return () => {
+      window.removeEventListener("pageshow", releaseOAuthPending);
+      window.removeEventListener("popstate", releaseOAuthPending);
+      document.removeEventListener("visibilitychange", releaseWhenVisible);
+    };
+  }, []);
+
+  useEffect(() => {
     if (!confirm) return;
     const close = (event: KeyboardEvent) => {
       if (event.key === "Escape") setConfirm(null);
@@ -603,8 +644,9 @@ export default function DashboardPage() {
   }
 
   async function startProvider(provider: string) {
-    if (!active || provider === "GOOGLE_SEARCH_CONSOLE") return;
-    setBusy(true);
+    if (!active || provider === "GOOGLE_SEARCH_CONSOLE" || oauthPendingProvider)
+      return;
+    setOauthPendingProvider(provider);
     try {
       const response = await fetch(
         `${API}/api/v1/workspaces/${active.id}/connections/${provider}/oauth/start`,
@@ -616,12 +658,13 @@ export default function DashboardPage() {
       );
       if (!response.ok) throw new Error();
       const data = (await response.json()) as { authorizationUrl: string };
+      window.history.replaceState({}, "", "/dashboard?section=connections");
       window.location.assign(data.authorizationUrl);
     } catch {
       fail(
         "Не удалось открыть вход в рекламную платформу. Попробуйте ещё раз.",
       );
-      setBusy(false);
+      setOauthPendingProvider(null);
     }
   }
 
@@ -1129,11 +1172,7 @@ export default function DashboardPage() {
             href="/dashboard"
             aria-label="HolyMedia MCP — обзор"
           >
-            <img
-              className="brand-logo"
-              src="/assets/brand/holymedia-mcp-horizontal.svg"
-              alt=""
-            />
+            <BrandLockup />
           </a>
           <div className="dashboard-actions">
             <LanguageSwitcher compact />
@@ -1238,18 +1277,24 @@ export default function DashboardPage() {
                   <strong>{enabledAccounts.length}</strong>
                   <small>выбрано</small>
                 </div>
-                <div className="stat-card">
-                  <span>AI-клиент</span>
-                  <strong>
-                    {tokens.some((token) => !token.revokedAt) ? "Готов" : "—"}
-                  </strong>
-                  <small>ключ доступа</small>
-                </div>
-                <div className="stat-card">
-                  <span>Отчёты</span>
-                  <strong>DOCX</strong>
-                  <small>за выбранный период</small>
-                </div>
+                <button
+                  className="stat-card stat-card--link"
+                  type="button"
+                  onClick={() => setSection("mcp")}
+                >
+                  <span>Ключи доступа</span>
+                  <strong>{activeTokenCount}</strong>
+                  <small>активных ключей</small>
+                </button>
+                <button
+                  className="stat-card stat-card--link"
+                  type="button"
+                  onClick={() => setSection("connections")}
+                >
+                  <span>Требуют внимания</span>
+                  <strong>{attentionConnectionCount}</strong>
+                  <small>подключений</small>
+                </button>
               </div>
             </div>
             <ol className="onboarding-steps" aria-label="Как начать">
@@ -1365,6 +1410,7 @@ export default function DashboardPage() {
                             <button
                               className="ghost-button btn--small"
                               type="button"
+                              disabled={Boolean(oauthPendingProvider)}
                               onClick={() => void startProvider(providerId)}
                             >
                               Подключить заново
@@ -1393,7 +1439,10 @@ export default function DashboardPage() {
                         <button
                           className="primary-button"
                           type="button"
-                          disabled={busy || definition?.status === "DISABLED"}
+                          disabled={
+                            Boolean(oauthPendingProvider) ||
+                            definition?.status === "DISABLED"
+                          }
                           onClick={() => void startProvider(providerId)}
                         >
                           Подключить {copyText.name}
@@ -2368,14 +2417,6 @@ export default function DashboardPage() {
             aria-modal="true"
             aria-labelledby="account-selector-title"
           >
-            <button
-              className="modal__close"
-              type="button"
-              aria-label="Закрыть выбор кабинетов"
-              onClick={closeAccountSelector}
-            >
-              ×
-            </button>
             <div className="account-selector__head">
               <div>
                 <h2 id="account-selector-title">Выберите кабинеты</h2>
@@ -2413,6 +2454,14 @@ export default function DashboardPage() {
                   </button>
                 </div>
               )}
+              <button
+                className="modal__close account-selector__close"
+                type="button"
+                aria-label="Закрыть выбор кабинетов"
+                onClick={closeAccountSelector}
+              >
+                ×
+              </button>
             </div>
             {selectorConnection.accounts.length ? (
               <>

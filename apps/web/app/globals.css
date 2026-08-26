@@ -122,6 +122,31 @@ pre {
   filter: brightness(0) saturate(100%) invert(69%) sepia(61%) saturate(632%)
     hue-rotate(193deg) brightness(101%) contrast(102%);
 }
+.brand-logo--light {
+  filter: none;
+}
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: 24px;
+  height: 36px;
+}
+.brand-lockup__mark,
+.brand-lockup__wordmark {
+  display: block;
+  height: 36px;
+  background-image: url("/assets/brand/holymedia-mcp-horizontal-dark.svg");
+  background-repeat: no-repeat;
+  background-size: auto 36px;
+}
+.brand-lockup__mark {
+  width: 37px;
+  background-position: left center;
+}
+.brand-lockup__wordmark {
+  width: 83px;
+  background-position: right center;
+}
 .btn,
 .primary-button,
 .secondary-button,
@@ -830,6 +855,26 @@ form {
   position: relative;
   max-height: calc(100vh - 40px);
   overflow: auto;
+  scrollbar-color: #6f7fa8 #0c1018;
+  scrollbar-width: thin;
+}
+.modal__panel::-webkit-scrollbar,
+.account-list::-webkit-scrollbar {
+  width: 10px;
+}
+.modal__panel::-webkit-scrollbar-track,
+.account-list::-webkit-scrollbar-track {
+  background: #0c1018;
+}
+.modal__panel::-webkit-scrollbar-thumb,
+.account-list::-webkit-scrollbar-thumb {
+  border: 3px solid #0c1018;
+  border-radius: 999px;
+  background: #66718a;
+}
+.modal__panel::-webkit-scrollbar-thumb:hover,
+.account-list::-webkit-scrollbar-thumb:hover {
+  background: #8190b0;
 }
 .modal__panel--wide {
   width: min(100%, 720px);
@@ -1002,6 +1047,18 @@ form {
   border: 1px solid var(--border);
   border-radius: var(--radius-small);
   background: var(--surface-inset);
+}
+.stat-card--link {
+  width: 100%;
+  min-height: 0;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.stat-card--link:hover,
+.stat-card--link:focus-visible {
+  border-color: var(--accent);
+  background: rgba(124, 154, 255, 0.08);
 }
 .stat-card span {
   color: var(--text-faint);
@@ -1657,10 +1714,10 @@ pre {
   gap: 14px;
 }
 .account-selector__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 40px;
+  align-items: start;
+  gap: 8px 12px;
   margin-bottom: 8px;
 }
 .account-selector__head h2 {
@@ -1672,6 +1729,9 @@ pre {
 }
 .bulk-actions {
   display: flex;
+  align-items: center;
+  grid-column: 1 / -1;
+  width: 100%;
   gap: 4px;
 }
 .bulk-actions button {
@@ -1681,6 +1741,21 @@ pre {
   color: var(--accent-strong);
   font-size: 12px;
   font-weight: 650;
+}
+.modal__close.account-selector__close {
+  position: static;
+  display: grid;
+  grid-column: 2;
+  grid-row: 1;
+  width: 40px;
+  min-height: 36px;
+  place-items: center;
+  border-radius: var(--radius-small);
+}
+.modal__close.account-selector__close:hover,
+.modal__close.account-selector__close:focus-visible {
+  background: var(--surface-inset);
+  color: var(--text);
 }
 .account-selector__search {
   display: grid;
@@ -2201,6 +2276,9 @@ pre {
   .account-list {
     grid-template-columns: 1fr;
   }
+  .bulk-actions button {
+    flex: 1;
+  }
 }
 
 @media (max-width: 620px) {
@@ -2243,16 +2321,6 @@ pre {
   .connection-actions > button,
   .connection-empty > button {
     width: 100%;
-  }
-  .account-selector__head {
-    align-items: flex-start;
-    flex-direction: column;
-  }
-  .bulk-actions {
-    width: 100%;
-  }
-  .bulk-actions button {
-    flex: 1;
   }
   .account-list .account-row {
     display: grid;
@@ -2587,6 +2655,20 @@ pre {
 
   .brand-logo {
     width: 118px;
+  }
+  .brand-lockup {
+    height: 30px;
+  }
+  .brand-lockup__mark,
+  .brand-lockup__wordmark {
+    height: 30px;
+    background-size: auto 30px;
+  }
+  .brand-lockup__mark {
+    width: 31px;
+  }
+  .brand-lockup__wordmark {
+    width: 69px;
   }
 
   .footer__brand-logo {
