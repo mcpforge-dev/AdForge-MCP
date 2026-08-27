@@ -110,11 +110,17 @@ test.describe("visual system", () => {
   test("renders light and dark public/private surfaces without axe violations", async ({
     page,
   }, testInfo) => {
-    await page.addInitScript(() =>
-      localStorage.setItem("holymedia-theme", "light"),
-    );
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("holymedia-theme")) {
+        localStorage.setItem("holymedia-theme", "light");
+      }
+    });
     await page.goto("/");
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator(".app-loader")).toHaveAttribute(
+      "data-loader-visible",
+      "false",
+    );
     await expectNoAxeViolations(page, "light landing");
     await page.screenshot({
       path: testInfo.outputPath("light-landing.png"),
@@ -162,6 +168,10 @@ test.describe("visual system", () => {
       fullPage: true,
     });
     await page.goto("/");
+    await expect(page.locator(".app-loader")).toHaveAttribute(
+      "data-loader-visible",
+      "false",
+    );
     await page.screenshot({
       path: testInfo.outputPath("dark-landing.png"),
       fullPage: true,
