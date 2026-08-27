@@ -8,6 +8,11 @@ import {
   UnauthorizedException,
 } from "@nestjs/common";
 import { loadConfig, type AppConfig } from "@holymedia/config";
+import {
+  TARIFF_PLANS,
+  TARIFF_TRIAL_DAYS,
+  tariffPlanByKey,
+} from "@holymedia/contracts";
 import { AuditService } from "../audit/audit.service.js";
 import {
   ADMIN_SESSION_COOKIE,
@@ -31,6 +36,7 @@ import type {
   AdminLoginDto,
   AdminPlanDto,
   AdminSupportStatusDto,
+  AdminTrialExtensionDto,
   AdminUserStatusDto,
 } from "./admin.dto.js";
 
@@ -241,7 +247,7 @@ export class AdminService {
             where: { status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] } },
             orderBy: { createdAt: "desc" },
             take: 1,
-            select: { plan: { select: { key: true, name: true } } },
+            select: { status: true, trialEndsAt: true, currentPeriodEnd: true, plan: { select: { key: true, name: true } } },
           },
         },
       }),
@@ -316,6 +322,7 @@ export class AdminService {
             status: true,
             startsAt: true,
             currentPeriodEnd: true,
+            trialEndsAt: true,
             plan: { select: { key: true, name: true } },
           },
         },
@@ -456,7 +463,7 @@ export class AdminService {
   public async plans() {
     return {
       plans: await this.database.client.plan.findMany({
-        where: { active: true },
+        where: { active: true, key: { in: TARIFF_PLANS.flatMap((item) => Object.values(item.dbKey)) } },
         orderBy: { key: "asc" },
         select: { key: true, name: true, description: true, features: true },
       }),
@@ -468,9 +475,17 @@ export class AdminService {
     input: AdminPlanDto,
     request: RequestWithAuth,
   ) {
+    if (!tariffPlanByKey(input.planKey))
+      throw new BadRequestException("Plan is not available.");
     const plan = await this.database.client.plan.findUnique({
       where: { key: input.planKey },
-      select: { id: true, key: true, name: true, active: true },
+      select: {
+        id: true,
+        key: true,
+        name: true,
+        active: true,
+        prices: { where: { active: true, currency: "KZT", interval: "month" }, take: 1, select: { id: true } },
+      },
     });
     if (!plan?.active) throw new BadRequestException("Plan is not available.");
     const company = await this.database.client.workspace.findUnique({
@@ -479,6 +494,11 @@ export class AdminService {
     });
     if (!company) throw new NotFoundException("Company not found.");
     const now = new Date();
+    const mode = input.mode ?? "TRIAL";
+    const trialEndsAt =
+      mode === "TRIAL"
+        ? new Date(now.getTime() + TARIFF_TRIAL_DAYS * 86_400_000)
+        : null;
     await this.database.client.$transaction(async (transaction) => {
       await transaction.workspaceSubscription.updateMany({
         where: {
@@ -491,11 +511,13 @@ export class AdminService {
         data: {
           workspaceId: id,
           planId: plan.id,
-          status: "ACTIVE",
+          ...(plan.prices[0] ? { priceId: plan.prices[0].id } : {}),
+          status: mode === "TRIAL" ? "TRIALING" : "ACTIVE",
           startsAt: now,
           currentPeriodStart: now,
-          currentPeriodEnd: new Date(now.getTime() + 365 * 86_400_000),
-          metadata: { source: "admin_manual" },
+          currentPeriodEnd: trialEndsAt ?? new Date(now.getTime() + 365 * 86_400_000),
+          ...(trialEndsAt ? { trialEndsAt } : {}),
+          metadata: { source: "admin_manual", assignmentMode: mode },
         },
       });
     });
@@ -503,12 +525,35 @@ export class AdminService {
       "admin_plan_assigned",
       request,
       true,
-      { plan: plan.key },
+      { plan: plan.key, mode, ...(mode === "TRIAL" ? { trialDays: TARIFF_TRIAL_DAYS } : {}) },
       id,
       "plan",
       plan.id,
     );
-    return { plan: { key: plan.key, name: plan.name } };
+    return { plan: { key: plan.key, name: plan.name }, mode, trialEndsAt };
+  }
+
+  public async extendTrial(
+    id: string,
+    input: AdminTrialExtensionDto,
+    request: RequestWithAuth,
+  ) {
+    if (input.days > 90) throw new BadRequestException("Trial extension is too long.");
+    const subscription = await this.database.client.workspaceSubscription.findFirst({
+      where: { workspaceId: id, status: "TRIALING" },
+      orderBy: { createdAt: "desc" },
+      select: { id: true, trialEndsAt: true },
+    });
+    if (!subscription?.trialEndsAt)
+      throw new NotFoundException("Active trial was not found.");
+    const base = Math.max(subscription.trialEndsAt.getTime(), Date.now());
+    const trialEndsAt = new Date(base + input.days * 86_400_000);
+    await this.database.client.workspaceSubscription.update({
+      where: { id: subscription.id },
+      data: { trialEndsAt, currentPeriodEnd: trialEndsAt },
+    });
+    await this.record("admin_trial_extended", request, true, { days: input.days, trialEndsAt: trialEndsAt.toISOString() }, id, "subscription", subscription.id);
+    return { trialEndsAt };
   }
 
   public async setEntitlement(

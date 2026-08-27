@@ -25,10 +25,7 @@ export class BillingService {
 
   public currentSubscription(workspaceId: string): Promise<unknown> {
     return this.database.client.workspaceSubscription.findFirst({
-      where: {
-        workspaceId,
-        status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] },
-      },
+      where: { workspaceId },
       include: { plan: true, price: true },
       orderBy: { createdAt: "desc" },
     });
@@ -263,7 +260,7 @@ export class BillingService {
     workspaceId: string,
     featureKey: string,
   ): Promise<unknown> {
-    const [entitlements, subscription] = await Promise.all([
+    const [entitlements, subscription, expiredTrial] = await Promise.all([
       this.database.client.entitlement.findMany({
         where: {
           workspaceId,
@@ -275,10 +272,18 @@ export class BillingService {
       this.database.client.workspaceSubscription.findFirst({
         where: {
           workspaceId,
-          status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] },
+          OR: [
+            { status: { in: ["ACTIVE", "PAST_DUE"] } },
+            { status: "TRIALING", trialEndsAt: { gt: new Date() } },
+          ],
         },
         include: { plan: { select: { features: true } } },
         orderBy: { createdAt: "desc" },
+      }),
+      this.database.client.workspaceSubscription.findFirst({
+        where: { workspaceId, status: "TRIALING", trialEndsAt: { lte: new Date() } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
       }),
     ]);
     const legacy = entitlements.find(
@@ -293,6 +298,8 @@ export class BillingService {
       (item) => item.featureKey === featureKey,
     );
     if (override) return override.value;
+    if (!subscription && expiredTrial)
+      return featureKey.includes("requests") || featureKey.includes("accounts") ? 0 : false;
     const plan =
       subscription?.plan ??
       (await this.database.client.plan.findUnique({

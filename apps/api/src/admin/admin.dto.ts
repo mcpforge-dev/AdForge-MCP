@@ -48,6 +48,16 @@ export class AdminPlanDto {
   @IsString()
   @MaxLength(80)
   public planKey!: string;
+
+  @IsOptional()
+  @IsIn(["TRIAL", "ACTIVE"])
+  public mode?: "TRIAL" | "ACTIVE";
+}
+
+export class AdminTrialExtensionDto {
+  @IsInt()
+  @Min(1)
+  public days!: number;
 }
 
 export class AdminEntitlementDto {

@@ -9,6 +9,7 @@ import {
   useLanguage,
 } from "../../components/language-switcher";
 import { FeedbackBlock } from "../../components/feedback-block";
+import { TariffCatalog } from "../../components/tariff-catalog";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const MCP_URL = "https://mcp.holymedia.kz/mcp";
@@ -52,8 +53,13 @@ type ServiceToken = {
   lastUsedAt: string | null;
 };
 type Profile = { name: string; email: string };
+type BillingSubscription = {
+  status?: string;
+  trialEndsAt?: string | null;
+  plan?: { key?: string } | null;
+};
 type Section =
-  "overview" | "connections" | "mcp" | "reports" | "analysis" | "profile";
+  "overview" | "connections" | "mcp" | "reports" | "analysis" | "tariffs" | "profile";
 type Client = "codex" | "claude" | "chatgpt";
 type ReportFormat = "docx" | "pptx";
 type ReportableAccount = { account: ProviderAccount; connection: Connection };
@@ -350,6 +356,7 @@ export default function DashboardPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [tokens, setTokens] = useState<ServiceToken[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
   const [profileName, setProfileName] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [section, setSection] = useState<Section>("overview");
@@ -633,6 +640,11 @@ export default function DashboardPage() {
     if (response.ok) setTokens((await response.json()) as ServiceToken[]);
   }
 
+  async function loadSubscription(workspace: Workspace) {
+    const response = await fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/subscription`, { credentials: "include", cache: "no-store" });
+    if (response.ok) setSubscription((await response.json()) as BillingSubscription | null);
+  }
+
   useEffect(() => {
     void loadWorkspaces();
     void loadProfile();
@@ -642,6 +654,7 @@ export default function DashboardPage() {
       requestedSection === "connections" ||
       requestedSection === "mcp" ||
       requestedSection === "reports" ||
+      requestedSection === "tariffs" ||
       requestedSection === "analysis" ||
       requestedSection === "profile"
     )
@@ -673,6 +686,7 @@ export default function DashboardPage() {
     if (!active) return;
     void loadConnections(active);
     void loadTokens(active);
+    void loadSubscription(active);
   }, [active]);
 
   useEffect(() => {
@@ -1286,7 +1300,7 @@ export default function DashboardPage() {
     { id: "reports", label: "Отчёты" },
     { label: "Анализ сайта", disabled: true },
     { label: "SEO", disabled: true },
-    { label: "Тарифы", disabled: true },
+    { id: "tariffs", label: "Тарифы" },
   ];
   const allProviderIds = [
     "GOOGLE_ADS",
@@ -1472,6 +1486,12 @@ export default function DashboardPage() {
                 <p>Скопируйте MCP URL и следуйте инструкции.</p>
               </li>
             </ol>
+          </section>
+        )}
+
+        {section === "tariffs" && (
+          <section className="section" aria-label="Тарифы">
+            <TariffCatalog subscription={subscription} />
           </section>
         )}
 

@@ -22,6 +22,7 @@ export function LandingHeader() {
       </Link>
       <nav className="site-nav" aria-label="Навигация">
         <a href="#steps">Как это работает</a>
+        <a href="#tariffs">Тарифы</a>
         <LanguageSwitcher compact />
         <Link className="btn btn--secondary btn--small" href="/auth">
           Войти

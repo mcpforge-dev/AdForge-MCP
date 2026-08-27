@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ThemeSwitcher } from "./theme-switcher";
 
 export type Language = "en" | "ru";
 
@@ -571,6 +572,7 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   }
 
   return (
+    <div className="header-preferences" data-language-static>
     <div
       className={
         compact
@@ -595,6 +597,8 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
       >
         RU
       </button>
+    </div>
+    <ThemeSwitcher compact={compact} />
     </div>
   );
 }

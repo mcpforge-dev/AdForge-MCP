@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLockup } from "../components/brand-lockup";
+import { ThemeSwitcher } from "../components/theme-switcher";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 type Section =
@@ -163,6 +164,7 @@ export default function AdminPage() {
           <strong>Операционная панель</strong>
           <small>Защищённый доступ владельца</small>
         </div>
+        <ThemeSwitcher compact />
         <button
           className="text-button"
           onClick={() =>
@@ -281,15 +283,15 @@ export default function AdminPage() {
                 ),
             })
           }
-          onPlan={(id, planKey) =>
+          onPlan={(id, planKey, mode) =>
             setConfirmation({
-              title: "Назначить тариф?",
-              body: "Это ручное entitlement-решение без создания платежа.",
+              title: mode === "TRIAL" ? "Начать пробный период?" : "Активировать тариф?",
+              body: mode === "TRIAL" ? "Компания получит 14 дней бесплатного доступа. Платёж не создаётся." : "Тариф будет активирован вручную без создания платежа.",
               action: () =>
                 mutate(
                   `/companies/${id}/plan`,
                   "PUT",
-                  { planKey },
+                  { planKey, mode },
                   () => void openCompany(id),
                 ),
             })
@@ -828,7 +830,7 @@ function CompanyDrawer({
   company: Json;
   onClose: () => void;
   onAccess: (id: string, status: "PENDING" | "ACTIVE" | "SUSPENDED") => void;
-  onPlan: (id: string, planKey: string) => void;
+  onPlan: (id: string, planKey: string, mode: "TRIAL" | "ACTIVE") => void;
   onEntitlement: (
     id: string,
     featureKey: string,
@@ -960,10 +962,20 @@ function CompanyDrawer({
               onClick={(event) => {
                 const select = event.currentTarget
                   .previousElementSibling as HTMLSelectElement | null;
-                if (select?.value) onPlan(id, select.value);
+                if (select?.value) onPlan(id, select.value, "TRIAL");
               }}
             >
-              Назначить
+              14 дней trial
+            </button>
+            <button
+              className="secondary-button"
+              onClick={(event) => {
+                const select = event.currentTarget
+                  .previousElementSibling?.previousElementSibling as HTMLSelectElement | null;
+                if (select?.value) onPlan(id, select.value, "ACTIVE");
+              }}
+            >
+              Активировать
             </button>
           </div>
           <ul className="admin-list">

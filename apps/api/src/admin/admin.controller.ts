@@ -25,6 +25,7 @@ import {
   AdminLoginDto,
   AdminPlanDto,
   AdminSupportStatusDto,
+  AdminTrialExtensionDto,
   AdminUserStatusDto,
 } from "./admin.dto.js";
 import { AdminService } from "./admin.service.js";
@@ -106,6 +107,16 @@ export class AdminController {
     @Req() request: RequestWithAuth,
   ) {
     return this.admin.setPlan(id, input, request);
+  }
+
+  @UseGuards(AdminAuthenticationGuard)
+  @Post("companies/:id/trial/extend")
+  public extendTrial(
+    @Param("id") id: string,
+    @Body() input: AdminTrialExtensionDto,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.admin.extendTrial(id, input, request);
   }
 
   @UseGuards(AdminAuthenticationGuard)

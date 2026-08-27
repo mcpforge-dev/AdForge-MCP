@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { LandingHeader } from "../components/landing-header";
 import { SiteFooter } from "../components/site-footer";
+import { TariffCatalog } from "../components/tariff-catalog";
 
 const baseUrl =
   process.env.NEXT_PUBLIC_PUBLIC_BASE_URL ?? "https://mcp.holymedia.kz";
@@ -173,6 +174,8 @@ export default function PublicHomePage() {
             </ul>
           </div>
         </section>
+
+        <TariffCatalog />
 
         <section className="cta-band">
           <h2>Подключите первый кабинет</h2>
