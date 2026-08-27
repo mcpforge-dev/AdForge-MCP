@@ -51,6 +51,7 @@ test.describe("visual system", () => {
       "data-loader-visible",
       "true",
     );
+    await page.waitForTimeout(420);
     await page.screenshot({ path: testInfo.outputPath("loader-light.png") });
     await expect(page.locator(".app-loader")).toHaveAttribute(
       "data-loader-visible",

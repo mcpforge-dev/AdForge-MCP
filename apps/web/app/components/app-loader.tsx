@@ -49,12 +49,12 @@ export function AppLoader() {
         <span className="app-loader__wordmark">
           <img
             className="app-loader__wordmark--dark"
-            src="/assets/brand/holymedia-mcp-horizontal.svg"
+            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
             alt=""
           />
           <img
             className="app-loader__wordmark--light"
-            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+            src="/assets/brand/holymedia-mcp-horizontal.svg"
             alt=""
           />
         </span>

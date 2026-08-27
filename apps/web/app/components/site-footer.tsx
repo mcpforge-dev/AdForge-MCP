@@ -29,12 +29,12 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
         <div className="footer__identity">
           <img
             className="footer__brand-logo footer__brand-logo--dark"
-            src="/assets/brand/holymedia-mcp-horizontal.svg"
+            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
             alt="HolyMedia MCP"
           />
           <img
             className="footer__brand-logo footer__brand-logo--light"
-            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+            src="/assets/brand/holymedia-mcp-horizontal.svg"
             alt="HolyMedia MCP"
           />
         </div>
