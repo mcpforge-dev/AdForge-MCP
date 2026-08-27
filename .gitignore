@@ -33,3 +33,5 @@ src/generated/
 .claude/
 .codex/
 .mcp.json
+
+test-results/
