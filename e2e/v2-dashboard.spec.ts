@@ -77,6 +77,9 @@ test.describe("restored HolyMedia client UX", () => {
     await page
       .locator('input[name="password"]')
       .fill("Playwright-password-123!");
+    await page
+      .locator('input[name="confirmPassword"]')
+      .fill("Playwright-password-123!");
     await page.getByRole("button", { name: "Зарегистрироваться" }).click();
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(
@@ -433,7 +436,9 @@ test.describe("restored HolyMedia client UX", () => {
         name: new RegExp(`Открыть профиль.*${legacyEmail}`),
       })
       .click();
-    await expect(page.getByRole("heading", { name: "Профиль" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Профиль", exact: true }),
+    ).toBeVisible();
     await expect(page.getByText("Подключено платформ")).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath("profile.png"),

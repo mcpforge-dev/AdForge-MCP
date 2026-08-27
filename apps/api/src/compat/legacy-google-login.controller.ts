@@ -66,7 +66,10 @@ export class LegacyGoogleLoginController {
     const result = await this.auth.loginWithGoogle(profile, request);
     this.cookies.setSession(reply, result.sessionToken);
     reply.clearCookie(GOOGLE_LOGIN_STATE_COOKIE, this.cookieOptions());
-    return { url: stateResult.nextPath, statusCode: 302 };
+    return {
+      url: result.onboardingRequired ? "/onboarding" : stateResult.nextPath,
+      statusCode: 302,
+    };
   }
 
   private cookieOptions() {

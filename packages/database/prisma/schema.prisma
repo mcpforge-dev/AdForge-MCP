@@ -15,6 +15,12 @@ enum WorkspaceRole {
   VIEWER
 }
 
+enum WorkspaceAccessStatus {
+  PENDING
+  ACTIVE
+  SUSPENDED
+}
+
 enum AuditActorType {
   HUMAN
   SERVICE
@@ -104,11 +110,20 @@ model User {
 }
 
 model Workspace {
-  id           String               @id @default(uuid()) @db.Uuid
-  name         String               @db.VarChar(160)
-  slug         String               @unique @db.VarChar(120)
-  createdAt    DateTime             @default(now()) @map("created_at")
-  updatedAt    DateTime             @updatedAt @map("updated_at")
+  id                    String                @id @default(uuid()) @db.Uuid
+  name                  String                @db.VarChar(160)
+  slug                  String                @unique @db.VarChar(120)
+  accessStatus          WorkspaceAccessStatus @default(PENDING) @map("access_status")
+  legalName             String?               @map("legal_name") @db.VarChar(255)
+  registrationNumber    String?               @map("registration_number") @db.VarChar(64)
+  registrationCountry   String                @default("KZ") @map("registration_country") @db.VarChar(2)
+  legalAddress          String?               @map("legal_address") @db.VarChar(500)
+  companyPhone          String?               @map("company_phone") @db.VarChar(64)
+  companyEmail          String?               @map("company_email") @db.VarChar(320)
+  websiteUrl            String?               @map("website_url") @db.VarChar(500)
+  onboardingCompletedAt DateTime?             @map("onboarding_completed_at")
+  createdAt             DateTime              @default(now()) @map("created_at")
+  updatedAt             DateTime              @updatedAt @map("updated_at")
   memberships  WorkspaceMembership[]
   invitations  WorkspaceInvitation[]
   auditEvents  AuditEvent[]

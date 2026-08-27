@@ -6,7 +6,32 @@ const workspace = {
   name: "HolyMedia",
   slug: "holymedia",
   role: "OWNER",
+  accessStatus: "ACTIVE",
 };
+const company = {
+  ...workspace,
+  legalName: "HolyMedia LLP",
+  registrationNumber: "123456789012",
+  registrationCountry: "KZ",
+  legalAddress: null,
+  companyPhone: null,
+  companyEmail: "phase-b-legacy-user@example.test",
+  websiteUrl: null,
+  onboardingCompletedAt: null,
+};
+const members = [
+  {
+    userId: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+    role: "OWNER",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    user: {
+      id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
+      name: "Анна",
+      email: "phase-b-legacy-user@example.test",
+      emailVerifiedAt: null,
+    },
+  },
+];
 const connectionId = "22222222-2222-4222-8222-222222222222";
 const accounts = [
   {
@@ -107,6 +132,12 @@ export async function installMockApi(page: Page) {
     )
       return json(route, { success: true });
     if (path === "/api/v1/workspaces") return json(route, [workspace]);
+    if (path === `/api/v1/workspaces/${workspace.id}`)
+      return json(route, company);
+    if (path === `/api/v1/workspaces/${workspace.id}/members`)
+      return json(route, members);
+    if (path === `/api/v1/workspaces/${workspace.id}/invitations`)
+      return json(route, []);
     if (path === "/api/profile" && request.method() === "GET")
       return json(route, {
         profile: { name: "Анна", email: "phase-b-legacy-user@example.test" },

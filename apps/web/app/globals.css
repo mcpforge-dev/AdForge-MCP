@@ -734,12 +734,29 @@ form {
   background: var(--surface);
   box-shadow: 0 24px 70px rgba(0, 0, 0, 0.32);
 }
-.onboarding-card .auth-language { margin: -12px -12px 0; }
-.onboarding-card .onboarding-steps { grid-template-columns: repeat(2, 1fr); }
-.onboarding-step.is-active { border-color: var(--accent); background: rgba(124, 154, 255, 0.08); }
-.onboarding-form { display: grid; gap: 15px; }
-.onboarding-form textarea { min-height: 88px; resize: vertical; }
-.onboarding-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.onboarding-card .auth-language {
+  margin: -12px -12px 0;
+}
+.onboarding-card .onboarding-steps {
+  grid-template-columns: repeat(2, 1fr);
+}
+.onboarding-step.is-active {
+  border-color: var(--accent);
+  background: rgba(124, 154, 255, 0.08);
+}
+.onboarding-form {
+  display: grid;
+  gap: 15px;
+}
+.onboarding-form textarea {
+  min-height: 88px;
+  resize: vertical;
+}
+.onboarding-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
 .auth-card,
 .modal__panel {
   width: min(100%, 480px);
@@ -833,6 +850,10 @@ form {
 .password-toggle:focus-visible {
   background: var(--surface-raised);
   color: var(--text);
+}
+.password-toggle svg {
+  display: block;
+  margin: 0 auto;
 }
 .auth-submit--signup {
   margin-top: 28px;
@@ -1056,9 +1077,14 @@ form {
   padding: 34px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: linear-gradient(135deg, rgba(124, 154, 255, 0.12), transparent 70%), var(--surface);
+  background:
+    linear-gradient(135deg, rgba(124, 154, 255, 0.12), transparent 70%),
+    var(--surface);
 }
-.company-access-gate p:not(.eyebrow) { max-width: 62ch; color: var(--text-muted); }
+.company-access-gate p:not(.eyebrow) {
+  max-width: 62ch;
+  color: var(--text-muted);
+}
 .overview-lead {
   display: grid;
   align-content: start;
@@ -1410,6 +1436,83 @@ pre {
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   align-items: start;
   gap: 18px;
+}
+.company-team {
+  display: grid;
+  gap: 18px;
+}
+.company-team__grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.company-team__grid h3 {
+  margin-bottom: 8px;
+  font-size: 16px;
+}
+.company-details {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+}
+.company-details > div {
+  display: grid;
+  gap: 4px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  background: var(--surface-inset);
+}
+.company-details dt,
+.company-details dd {
+  margin: 0;
+}
+.company-details dt {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.company-details dd {
+  overflow-wrap: anywhere;
+  font-size: 13px;
+}
+.company-status {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.company-status--active {
+  color: #9be8c0;
+  background: rgba(81, 214, 160, 0.12);
+}
+.company-status--pending {
+  color: #f7d48b;
+  background: rgba(246, 188, 85, 0.13);
+}
+.company-status--suspended {
+  color: #ffafb8;
+  background: rgba(242, 123, 134, 0.12);
+}
+.team-list {
+  display: grid;
+}
+.member-actions {
+  display: flex;
+  gap: 10px;
+}
+.company-team__status {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+@media (max-width: 680px) {
+  .onboarding-card {
+    padding: 22px;
+  }
+  .company-team__grid,
+  .company-details {
+    grid-template-columns: 1fr;
+  }
 }
 .profile-card {
   display: grid;

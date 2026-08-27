@@ -249,7 +249,12 @@ export class ServiceTokenService {
       where: { tokenDigest: hashServiceToken(rawToken) },
       include: {
         serviceIdentity: {
-          select: { id: true, workspaceId: true, revokedAt: true },
+          select: {
+            id: true,
+            workspaceId: true,
+            revokedAt: true,
+            workspace: { select: { accessStatus: true } },
+          },
         },
       },
     });
@@ -261,6 +266,7 @@ export class ServiceTokenService {
     ) {
       return null;
     }
+    if (token.serviceIdentity.workspace?.accessStatus !== "ACTIVE") return null;
     if (token.expiresAt && token.expiresAt <= new Date()) return null;
     await this.database.client.serviceToken.update({
       where: { id: token.id },

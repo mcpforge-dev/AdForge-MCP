@@ -79,6 +79,7 @@ describe.skipIf(!integrationEnabled)(
           name: "Provider Integration",
           email,
           password: "integration-password",
+          confirmPassword: "integration-password",
         },
         request,
       );
@@ -255,6 +256,7 @@ describe.skipIf(!integrationEnabled)(
           name: "Other Workspace",
           email: `other-${suffix}@example.test`,
           password: "integration-password",
+          confirmPassword: "integration-password",
         },
         request,
       );

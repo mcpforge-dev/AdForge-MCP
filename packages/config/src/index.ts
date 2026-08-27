@@ -112,6 +112,7 @@ const rawConfigSchema = z.object({
     .max(120000)
     .default(20000),
   COOKIE_DOMAIN: z.string().optional(),
+  AD_MCP_INITIAL_ADMIN_EMAIL: z.string().default(""),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
   EMAIL_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
   ARGON2_MEMORY_KIB: z.coerce
@@ -183,6 +184,7 @@ export type AppConfig = {
   providerYandexClientLogin: string | undefined;
   providerHttpTimeoutMs: number;
   cookieDomain: string | undefined;
+  companyAdminEmails: string[];
   sessionTtlDays: number;
   emailTokenTtlMinutes: number;
   argon2MemoryKib: number;
@@ -405,6 +407,9 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerYandexClientLogin: value.PROVIDER_YANDEX_CLIENT_LOGIN,
     providerHttpTimeoutMs: value.PROVIDER_HTTP_TIMEOUT_MS,
     cookieDomain: value.COOKIE_DOMAIN,
+    companyAdminEmails: value.AD_MCP_INITIAL_ADMIN_EMAIL.split(",")
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean),
     sessionTtlDays: value.SESSION_TTL_DAYS,
     emailTokenTtlMinutes: value.EMAIL_TOKEN_TTL_MINUTES,
     argon2MemoryKib: value.ARGON2_MEMORY_KIB,

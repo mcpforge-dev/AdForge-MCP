@@ -3,10 +3,76 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
-import { LanguageSwitcher } from "../../components/language-switcher";
+import {
+  LanguageSwitcher,
+  useLanguage,
+} from "../../components/language-switcher";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 type AuthMode = "login" | "signup" | "forgot";
+const copy = {
+  ru: {
+    back: "← Вернуться на главную",
+    login: "Войти",
+    signup: "Регистрация",
+    signInTitle: "Вход",
+    signupTitle: "Новый аккаунт",
+    forgotTitle: "Восстановление пароля",
+    signInLead: "Войдите, чтобы открыть рекламные кабинеты.",
+    signupLead: "Создайте аккаунт HolyMedia MCP.",
+    forgotLead: "Укажите email, который использовали при регистрации.",
+    google: "Войти через Google",
+    name: "Имя",
+    namePlaceholder: "Ваше имя",
+    email: "Email",
+    password: "Пароль",
+    confirmPassword: "Подтвердите пароль",
+    passwordPlaceholder: "Ваш пароль",
+    passwordMin: "Минимум 12 символов",
+    confirmPlaceholder: "Повторите пароль",
+    showPassword: "Показать пароль",
+    hidePassword: "Скрыть пароль",
+    forgot: "Забыли пароль?",
+    backToLogin: "← Назад ко входу",
+    wait: "Подождите…",
+    create: "Зарегистрироваться",
+    send: "Отправить ссылку",
+    passwordsMismatch: "Пароли не совпадают.",
+    requestFailed: "Не удалось выполнить запрос. Попробуйте ещё раз.",
+    resetSent:
+      "Если такой аккаунт есть, мы отправили письмо со ссылкой для сброса пароля.",
+  },
+  en: {
+    back: "← Back to home",
+    login: "Sign in",
+    signup: "Create account",
+    signInTitle: "Sign in",
+    signupTitle: "Create your account",
+    forgotTitle: "Reset your password",
+    signInLead: "Sign in to open your advertising accounts.",
+    signupLead: "Create your HolyMedia MCP account.",
+    forgotLead: "Enter the email you used to register.",
+    google: "Continue with Google",
+    name: "Name",
+    namePlaceholder: "Your name",
+    email: "Email",
+    password: "Password",
+    confirmPassword: "Confirm password",
+    passwordPlaceholder: "Your password",
+    passwordMin: "At least 12 characters",
+    confirmPlaceholder: "Repeat your password",
+    showPassword: "Show password",
+    hidePassword: "Hide password",
+    forgot: "Forgot password?",
+    backToLogin: "← Back to sign in",
+    wait: "Please wait…",
+    create: "Create account",
+    send: "Send link",
+    passwordsMismatch: "Passwords do not match.",
+    requestFailed: "We could not complete the request. Please try again.",
+    resetSent: "If an account exists, we sent an email with a reset link.",
+  },
+};
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -17,20 +83,41 @@ async function csrf(): Promise<string> {
 }
 
 export default function AuthPage() {
+  const language = useLanguage();
+  const t = copy[language];
   const [mode, setMode] = useState<AuthMode>("login");
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
   useEffect(() => {
     const requested = new URLSearchParams(window.location.search).get("mode");
     if (requested === "signup" || requested === "forgot") setMode(requested);
   }, []);
 
+  useEffect(() => {
+    document.title =
+      mode === "signup"
+        ? language === "ru"
+          ? "Регистрация — HolyMedia MCP"
+          : "Create account — HolyMedia MCP"
+        : mode === "login"
+          ? language === "ru"
+            ? "Вход — HolyMedia MCP"
+            : "Sign in — HolyMedia MCP"
+          : language === "ru"
+            ? "Восстановление пароля — HolyMedia MCP"
+            : "Reset password — HolyMedia MCP";
+  }, [language, mode]);
+
   function changeMode(next: AuthMode) {
     setMode(next);
     setMessage("");
     setError("");
+    setShowPassword(false);
+    setShowConfirmPassword(false);
     const url = next === "login" ? "/auth" : `/auth?mode=${next}`;
     window.history.replaceState({}, "", url);
   }
@@ -38,23 +125,27 @@ export default function AuthPage() {
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy) return;
+    const form = new FormData(event.currentTarget);
+    const password = String(form.get("password") ?? "");
+    const confirmPassword = String(form.get("confirmPassword") ?? "");
+    if (mode === "signup" && password !== confirmPassword) {
+      setError(t.passwordsMismatch);
+      return;
+    }
     setBusy(true);
     setMessage("");
     setError("");
     let navigating = false;
-    const form = new FormData(event.currentTarget);
     const body =
       mode === "forgot"
         ? { email: String(form.get("email") ?? "") }
         : mode === "login"
-          ? {
-              email: String(form.get("email") ?? ""),
-              password: String(form.get("password") ?? ""),
-            }
+          ? { email: String(form.get("email") ?? ""), password }
           : {
               name: String(form.get("name") ?? ""),
               email: String(form.get("email") ?? ""),
-              password: String(form.get("password") ?? ""),
+              password,
+              confirmPassword,
             };
     try {
       const response = await fetch(
@@ -69,27 +160,17 @@ export default function AuthPage() {
           body: JSON.stringify(body),
         },
       );
-      const data = (await response.json()) as { error?: { message?: string } };
-      if (!response.ok) {
-        throw new Error(
-          data.error?.message ??
-            "Не удалось выполнить запрос. Попробуйте ещё раз.",
-        );
-      }
+      if (!response.ok) throw new Error("request_failed");
       if (mode === "forgot") {
-        setMessage(
-          "Если такой аккаунт есть, мы отправили письмо со ссылкой для сброса пароля.",
-        );
+        setMessage(t.resetSent);
       } else {
         navigating = true;
-        window.location.assign("/dashboard");
+        window.location.assign(
+          mode === "signup" ? "/onboarding" : "/dashboard",
+        );
       }
-    } catch (requestError) {
-      setError(
-        requestError instanceof Error
-          ? requestError.message
-          : "Не удалось выполнить запрос. Попробуйте ещё раз.",
-      );
+    } catch {
+      setError(t.requestFailed);
     } finally {
       if (!navigating) setBusy(false);
     }
@@ -102,14 +183,14 @@ export default function AuthPage() {
           <LanguageSwitcher compact />
         </div>
         <Link className="back-link" href="/">
-          ← Вернуться на главную
+          {t.back}
         </Link>
 
         {mode !== "forgot" ? (
           <div
             className="tabs"
             role="tablist"
-            aria-label="Вход или регистрация"
+            aria-label={`${t.login} / ${t.signup}`}
           >
             <button
               className={mode === "login" ? "tab active" : "tab"}
@@ -119,7 +200,7 @@ export default function AuthPage() {
               aria-selected={mode === "login"}
               aria-controls="auth-panel"
             >
-              Войти
+              {t.login}
             </button>
             <button
               className={mode === "signup" ? "tab active" : "tab"}
@@ -129,7 +210,7 @@ export default function AuthPage() {
               aria-selected={mode === "signup"}
               aria-controls="auth-panel"
             >
-              Регистрация
+              {t.signup}
             </button>
           </div>
         ) : (
@@ -138,54 +219,52 @@ export default function AuthPage() {
             type="button"
             onClick={() => changeMode("login")}
           >
-            ← Назад ко входу
+            {t.backToLogin}
           </button>
         )}
 
         <div id="auth-panel" role={mode === "forgot" ? undefined : "tabpanel"}>
           <h1 id="auth-title">
             {mode === "login"
-              ? "Вход"
+              ? t.signInTitle
               : mode === "signup"
-                ? "Новый аккаунт"
-                : "Восстановление пароля"}
+                ? t.signupTitle
+                : t.forgotTitle}
           </h1>
           <p className="muted">
             {mode === "login"
-              ? "Войдите, чтобы открыть рекламные кабинеты."
+              ? t.signInLead
               : mode === "signup"
-                ? "Создайте аккаунт HolyMedia MCP."
-                : "Укажите email, который использовали при регистрации."}
+                ? t.signupLead
+                : t.forgotLead}
           </p>
 
           {mode !== "forgot" && (
-            <>
-              <a
-                className="secondary-button google-login-button"
-                href={`${API}/auth/google/start`}
-              >
-                <GoogleIcon />
-                Войти через Google
-              </a>
-            </>
+            <a
+              className="secondary-button google-login-button"
+              href={`${API}/auth/google/start`}
+            >
+              <GoogleIcon />
+              {t.google}
+            </a>
           )}
 
-          <form onSubmit={submit}>
+          <form onSubmit={submit} noValidate>
             {mode === "signup" && (
               <label>
-                Имя
+                {t.name}
                 <input
                   name="name"
                   required
                   minLength={2}
                   maxLength={160}
                   autoComplete="name"
-                  placeholder="Ваше имя"
+                  placeholder={t.namePlaceholder}
                 />
               </label>
             )}
             <label>
-              Email
+              {t.email}
               <input
                 name="email"
                 required
@@ -196,22 +275,34 @@ export default function AuthPage() {
               />
             </label>
             {mode !== "forgot" && (
-              <label>
-                Пароль
-                <input
-                  name="password"
-                  required
-                  minLength={mode === "signup" ? 12 : 1}
-                  maxLength={128}
-                  type="password"
-                  autoComplete={
-                    mode === "login" ? "current-password" : "new-password"
-                  }
-                  placeholder={
-                    mode === "signup" ? "Минимум 12 символов" : "Ваш пароль"
-                  }
-                />
-              </label>
+              <PasswordField
+                label={t.password}
+                name="password"
+                autoComplete={
+                  mode === "login" ? "current-password" : "new-password"
+                }
+                minLength={mode === "signup" ? 12 : 1}
+                placeholder={
+                  mode === "signup" ? t.passwordMin : t.passwordPlaceholder
+                }
+                shown={showPassword}
+                onToggle={() => setShowPassword((value) => !value)}
+                showLabel={t.showPassword}
+                hideLabel={t.hidePassword}
+              />
+            )}
+            {mode === "signup" && (
+              <PasswordField
+                label={t.confirmPassword}
+                name="confirmPassword"
+                autoComplete="new-password"
+                minLength={12}
+                placeholder={t.confirmPlaceholder}
+                shown={showConfirmPassword}
+                onToggle={() => setShowConfirmPassword((value) => !value)}
+                showLabel={t.showPassword}
+                hideLabel={t.hidePassword}
+              />
             )}
             {mode === "login" && (
               <button
@@ -219,17 +310,21 @@ export default function AuthPage() {
                 type="button"
                 onClick={() => changeMode("forgot")}
               >
-                Забыли пароль?
+                {t.forgot}
               </button>
             )}
-            <button className="primary-button" type="submit" disabled={busy}>
+            <button
+              className={`primary-button auth-submit ${mode === "signup" ? "auth-submit--signup" : ""}`}
+              type="submit"
+              disabled={busy}
+            >
               {busy
-                ? "Подождите…"
+                ? t.wait
                 : mode === "login"
-                  ? "Войти"
+                  ? t.login
                   : mode === "signup"
-                    ? "Зарегистрироваться"
-                    : "Отправить ссылку"}
+                    ? t.create
+                    : t.send}
             </button>
           </form>
         </div>
@@ -246,6 +341,76 @@ export default function AuthPage() {
         )}
       </section>
     </main>
+  );
+}
+
+function PasswordField({
+  label,
+  name,
+  autoComplete,
+  minLength,
+  placeholder,
+  shown,
+  onToggle,
+  showLabel,
+  hideLabel,
+}: {
+  label: string;
+  name: string;
+  autoComplete: string;
+  minLength: number;
+  placeholder: string;
+  shown: boolean;
+  onToggle: () => void;
+  showLabel: string;
+  hideLabel: string;
+}) {
+  return (
+    <label>
+      {label}
+      <span className="password-input">
+        <input
+          name={name}
+          required
+          minLength={minLength}
+          maxLength={128}
+          type={shown ? "text" : "password"}
+          autoComplete={autoComplete}
+          placeholder={placeholder}
+        />
+        <button
+          type="button"
+          className="password-toggle"
+          aria-label={shown ? hideLabel : showLabel}
+          aria-pressed={shown}
+          onClick={onToggle}
+        >
+          <svg
+            aria-hidden="true"
+            viewBox="0 0 24 24"
+            width="18"
+            height="18"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            {shown ? (
+              <>
+                <path d="m3 3 18 18" />
+                <path d="M10.6 10.6a2 2 0 0 0 2.8 2.8" />
+                <path d="M9.9 4.2A10.5 10.5 0 0 1 12 4c5.2 0 9.4 4.1 10 8-0.2 1.3-0.9 2.7-1.8 3.8" />
+                <path d="M6.1 6.1C4.2 7.5 2.7 9.5 2 12c0.7 4 4.8 8 10 8 1 0 2-.2 2.9-.6" />
+              </>
+            ) : (
+              <>
+                <path d="M2 12s3.6-8 10-8 10 8 10 8-3.6 8-10 8S2 12 2 12Z" />
+                <circle cx="12" cy="12" r="3" />
+              </>
+            )}
+          </svg>
+        </button>
+      </span>
+    </label>
   );
 }
 

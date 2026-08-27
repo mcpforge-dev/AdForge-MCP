@@ -28,7 +28,9 @@ export class WorkspaceAuthorizationGuard implements CanActivate {
         where: { workspaceId_userId: { workspaceId, userId: user.userId } },
         select: {
           role: true,
-          workspace: { select: { id: true, name: true, slug: true } },
+          workspace: {
+            select: { id: true, name: true, slug: true, accessStatus: true },
+          },
         },
       });
     if (!membership) throw new ForbiddenException("Workspace access denied.");
@@ -39,6 +41,22 @@ export class WorkspaceAuthorizationGuard implements CanActivate {
     const permissions = new Set(links.map((link) => link.permission.key));
     if (required.some((permission) => !permissions.has(permission))) {
       throw new ForbiddenException("Permission denied.");
+    }
+    const pendingSafePermissions = new Set([
+      "workspace.read",
+      "workspace.manage",
+      "members.read",
+      "members.manage",
+    ]);
+    if (
+      membership.workspace.accessStatus !== "ACTIVE" &&
+      required.some((permission) => !pendingSafePermissions.has(permission))
+    ) {
+      throw new ForbiddenException(
+        membership.workspace.accessStatus === "SUSPENDED"
+          ? "Company access is suspended."
+          : "Company access is pending approval.",
+      );
     }
     return true;
   }

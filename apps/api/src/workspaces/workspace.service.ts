@@ -22,6 +22,8 @@ import type {
   CreateInvitationDto,
   CreateWorkspaceDto,
   UpdateMemberRoleDto,
+  UpdateCompanyProfileDto,
+  UpdateCompanyAccessStatusDto,
   UpdateWorkspaceDto,
 } from "../auth/auth.dto.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
@@ -35,6 +37,7 @@ export type WorkspaceSummary = {
   name: string;
   slug: string;
   role: "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+  accessStatus: "PENDING" | "ACTIVE" | "SUSPENDED";
   createdAt?: Date;
 };
 export type WorkspaceView = {
@@ -43,6 +46,15 @@ export type WorkspaceView = {
   slug: string;
   createdAt: Date;
   updatedAt: Date;
+  accessStatus: "PENDING" | "ACTIVE" | "SUSPENDED";
+  legalName: string | null;
+  registrationNumber: string | null;
+  registrationCountry: string;
+  legalAddress: string | null;
+  companyPhone: string | null;
+  companyEmail: string | null;
+  websiteUrl: string | null;
+  onboardingCompletedAt: Date | null;
 };
 export type WorkspaceMember = {
   userId: string;
@@ -61,6 +73,7 @@ export type InvitationView = {
   email: string;
   role: "ADMIN" | "MEMBER" | "VIEWER";
   expiresAt: Date;
+  status?: "PENDING" | "ACCEPTED" | "REVOKED" | "EXPIRED";
 };
 
 @Injectable()
@@ -85,7 +98,13 @@ export class WorkspaceService {
         select: {
           role: true,
           workspace: {
-            select: { id: true, name: true, slug: true, createdAt: true },
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              accessStatus: true,
+              createdAt: true,
+            },
           },
         },
       },
@@ -128,6 +147,7 @@ export class WorkspaceService {
       name: workspace.name,
       slug: workspace.slug,
       role: "OWNER",
+      accessStatus: workspace.accessStatus,
     };
   }
 
@@ -140,6 +160,15 @@ export class WorkspaceService {
         slug: true,
         createdAt: true,
         updatedAt: true,
+        accessStatus: true,
+        legalName: true,
+        registrationNumber: true,
+        registrationCountry: true,
+        legalAddress: true,
+        companyPhone: true,
+        companyEmail: true,
+        websiteUrl: true,
+        onboardingCompletedAt: true,
       },
     });
     if (!workspace) throw new NotFoundException("Workspace not found.");
@@ -162,6 +191,15 @@ export class WorkspaceService {
         slug: true,
         createdAt: true,
         updatedAt: true,
+        accessStatus: true,
+        legalName: true,
+        registrationNumber: true,
+        registrationCountry: true,
+        legalAddress: true,
+        companyPhone: true,
+        companyEmail: true,
+        websiteUrl: true,
+        onboardingCompletedAt: true,
       },
     });
     await this.record({
@@ -169,6 +207,107 @@ export class WorkspaceService {
       request,
       actorUserId: principal.userId,
       workspaceId: workspace.id,
+    });
+    return workspace;
+  }
+
+  public async updateCompanyProfile(
+    workspaceId: string,
+    input: UpdateCompanyProfileDto,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ): Promise<WorkspaceView> {
+    const registrationCountry = input.registrationCountry.trim().toUpperCase();
+    const registrationNumber = input.registrationNumber?.trim() || null;
+    if (registrationCountry === "KZ" && !registrationNumber) {
+      throw new BadRequestException(
+        "Registration number is required for Kazakhstan.",
+      );
+    }
+    const workspace = await this.database.client.workspace.update({
+      where: { id: workspaceId },
+      data: {
+        name: input.name.trim(),
+        legalName: input.legalName.trim(),
+        registrationCountry,
+        registrationNumber,
+        legalAddress: input.legalAddress?.trim() || null,
+        companyPhone: input.companyPhone?.trim() || null,
+        companyEmail: normalizeEmail(input.companyEmail),
+        websiteUrl: input.websiteUrl?.trim() || null,
+        onboardingCompletedAt: new Date(),
+      },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        createdAt: true,
+        updatedAt: true,
+        accessStatus: true,
+        legalName: true,
+        registrationNumber: true,
+        registrationCountry: true,
+        legalAddress: true,
+        companyPhone: true,
+        companyEmail: true,
+        websiteUrl: true,
+        onboardingCompletedAt: true,
+      },
+    });
+    await this.record({
+      eventType: "company_profile_updated",
+      request,
+      actorUserId: principal.userId,
+      workspaceId,
+    });
+    return workspace;
+  }
+
+  public async updateCompanyAccessStatus(
+    workspaceId: string,
+    input: UpdateCompanyAccessStatusDto,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ): Promise<WorkspaceView> {
+    const status = input.status?.trim().toUpperCase();
+    if (!status || !["PENDING", "ACTIVE", "SUSPENDED"].includes(status)) {
+      throw new BadRequestException("Invalid company access status.");
+    }
+    const actor = await this.database.client.user.findUnique({
+      where: { id: principal.userId },
+      select: { email: true },
+    });
+    if (!actor || !this.config.companyAdminEmails.includes(actor.email)) {
+      throw new ForbiddenException("Company admin access required.");
+    }
+    const workspace = await this.database.client.workspace.update({
+      where: { id: workspaceId },
+      data: { accessStatus: status as "PENDING" | "ACTIVE" | "SUSPENDED" },
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        createdAt: true,
+        updatedAt: true,
+        accessStatus: true,
+        legalName: true,
+        registrationNumber: true,
+        registrationCountry: true,
+        legalAddress: true,
+        companyPhone: true,
+        companyEmail: true,
+        websiteUrl: true,
+        onboardingCompletedAt: true,
+      },
+    });
+    await this.record({
+      eventType: "company_access_status_changed",
+      request,
+      actorUserId: principal.userId,
+      workspaceId,
+      targetType: "company_access",
+      targetId: workspaceId,
+      metadata: { status },
     });
     return workspace;
   }
@@ -316,7 +455,76 @@ export class WorkspaceService {
       email: invitation.email,
       role: invitation.role as EditableRole,
       expiresAt: invitation.expiresAt,
+      status: "PENDING",
     };
+  }
+
+  public async invitations(workspaceId: string): Promise<InvitationView[]> {
+    const now = new Date();
+    const invitations = await this.database.client.workspaceInvitation.findMany(
+      {
+        where: { workspaceId },
+        orderBy: { createdAt: "desc" },
+        select: {
+          id: true,
+          email: true,
+          role: true,
+          expiresAt: true,
+          acceptedAt: true,
+          revokedAt: true,
+        },
+      },
+    );
+    return invitations.map((invitation) => ({
+      id: invitation.id,
+      email: invitation.email,
+      role: invitation.role as EditableRole,
+      expiresAt: invitation.expiresAt,
+      status: invitation.acceptedAt
+        ? "ACCEPTED"
+        : invitation.revokedAt
+          ? "REVOKED"
+          : invitation.expiresAt <= now
+            ? "EXPIRED"
+            : "PENDING",
+    }));
+  }
+
+  public async resendInvitation(
+    workspaceId: string,
+    invitationId: string,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ): Promise<InvitationView> {
+    const previous = await this.database.client.workspaceInvitation.findFirst({
+      where: {
+        id: invitationId,
+        workspaceId,
+        acceptedAt: null,
+        revokedAt: null,
+      },
+      select: { id: true, email: true, role: true },
+    });
+    if (!previous) throw new NotFoundException("Invitation not found.");
+    await this.database.client.workspaceInvitation.update({
+      where: { id: previous.id },
+      data: { revokedAt: new Date() },
+    });
+    const invitation = await this.createInvitation(
+      workspaceId,
+      { email: previous.email, role: previous.role as EditableRole },
+      principal,
+      request,
+    );
+    await this.record({
+      eventType: "invitation_resent",
+      request,
+      actorUserId: principal.userId,
+      workspaceId,
+      targetType: "invitation",
+      targetId: invitation.id,
+    });
+    return invitation;
   }
 
   public async revokeInvitation(

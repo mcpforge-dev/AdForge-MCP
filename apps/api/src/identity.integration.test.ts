@@ -77,15 +77,30 @@ describe.skipIf(!integrationEnabled)("v2 identity integration", () => {
   beforeAll(async () => {
     await database.client.$queryRaw`SELECT 1`;
     userA = await auth.signup(
-      { name: "Phase 2 A", email: emailA, password: "integration-password-a" },
+      {
+        name: "Phase 2 A",
+        email: emailA,
+        password: "integration-password-a",
+        confirmPassword: "integration-password-a",
+      },
       request,
     );
     userB = await auth.signup(
-      { name: "Phase 2 B", email: emailB, password: "integration-password-b" },
+      {
+        name: "Phase 2 B",
+        email: emailB,
+        password: "integration-password-b",
+        confirmPassword: "integration-password-b",
+      },
       request,
     );
     userC = await auth.signup(
-      { name: "Phase 2 C", email: emailC, password: "integration-password-c" },
+      {
+        name: "Phase 2 C",
+        email: emailC,
+        password: "integration-password-c",
+        confirmPassword: "integration-password-c",
+      },
       request,
     );
   });

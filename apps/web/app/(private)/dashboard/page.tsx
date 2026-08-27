@@ -528,10 +528,11 @@ export default function DashboardPage() {
       return;
     }
     const data = (await response.json()) as Workspace[];
-    setActive((current) =>
-      current && data.some((item) => item.id === current.id)
-        ? current
-        : (data[0] ?? null),
+    setActive(
+      (current) =>
+        (current && data.find((item) => item.id === current.id)) ??
+        data[0] ??
+        null,
     );
   }
 
@@ -1339,7 +1340,33 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {section === "overview" && (
+        {accessBlocked && active && section !== "profile" && (
+          <section
+            className="company-access-gate"
+            aria-labelledby="company-access-title"
+          >
+            <p className="eyebrow">HOLYMEDIA MCP</p>
+            <h1 id="company-access-title">
+              {active.accessStatus === "SUSPENDED"
+                ? "Доступ компании приостановлен"
+                : "Компания на проверке"}
+            </h1>
+            <p>
+              {active.accessStatus === "SUSPENDED"
+                ? "Рабочие функции временно недоступны. Обратитесь к администратору HolyMedia."
+                : "Профиль компании и команда уже доступны. Рекламные подключения, AI-клиент и отчёты откроются после одобрения администратором."}
+            </p>
+            <button
+              className="primary-button"
+              type="button"
+              onClick={() => setSection("profile")}
+            >
+              Открыть профиль компании
+            </button>
+          </section>
+        )}
+
+        {!accessBlocked && section === "overview" && (
           <section className="section" aria-labelledby="overview-title">
             <div className="overview-hero">
               <div className="overview-lead">
@@ -2975,5 +3002,268 @@ function ClientInstructions({ client }: { client: Client }) {
         <li>Войдите в HolyMedia MCP и подтвердите подключение.</li>
       </ol>
     </div>
+  );
+}
+
+type CompanyProfile = {
+  name: string;
+  legalName: string | null;
+  registrationNumber: string | null;
+  registrationCountry: string;
+  legalAddress: string | null;
+  companyPhone: string | null;
+  companyEmail: string | null;
+  websiteUrl: string | null;
+  accessStatus: "PENDING" | "ACTIVE" | "SUSPENDED";
+};
+type TeamMember = {
+  userId: string;
+  role: string;
+  user: { name: string; email: string };
+};
+type TeamInvitation = {
+  id: string;
+  email: string;
+  role: string;
+  status: "PENDING" | "ACCEPTED" | "REVOKED" | "EXPIRED";
+};
+
+function CompanyTeam({
+  workspace,
+  canManage,
+}: {
+  workspace: Workspace;
+  canManage: boolean;
+}) {
+  const [company, setCompany] = useState<CompanyProfile | null>(null);
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
+  const [email, setEmail] = useState("");
+  const [status, setStatus] = useState("");
+
+  const load = async () => {
+    const requests = [
+      fetch(`${API}/api/v1/workspaces/${workspace.id}`, {
+        credentials: "include",
+      }),
+      fetch(`${API}/api/v1/workspaces/${workspace.id}/members`, {
+        credentials: "include",
+      }),
+      ...(canManage
+        ? [
+            fetch(`${API}/api/v1/workspaces/${workspace.id}/invitations`, {
+              credentials: "include",
+            }),
+          ]
+        : []),
+    ];
+    const responses = await Promise.all(requests);
+    const companyResponse = responses[0]!;
+    const memberResponse = responses[1]!;
+    const invitationResponse = responses[2];
+    if (companyResponse.ok)
+      setCompany((await companyResponse.json()) as CompanyProfile);
+    if (memberResponse.ok)
+      setMembers((await memberResponse.json()) as TeamMember[]);
+    if (invitationResponse?.ok)
+      setInvitations((await invitationResponse.json()) as TeamInvitation[]);
+  };
+
+  useEffect(() => {
+    void load();
+  }, [workspace.id, canManage]);
+
+  async function invite(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!email.trim()) return;
+    setStatus("");
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${workspace.id}/invitations`,
+      {
+        method: "POST",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({ email: email.trim(), role: "MEMBER" }),
+      },
+    );
+    if (!response.ok) return setStatus("Не удалось отправить приглашение.");
+    setEmail("");
+    setStatus("Приглашение отправлено.");
+    await load();
+  }
+
+  async function invitationAction(
+    invitation: TeamInvitation,
+    action: "resend" | "revoke",
+  ) {
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${workspace.id}/invitations/${invitation.id}${action === "resend" ? "/resend" : ""}`,
+      {
+        method: action === "resend" ? "POST" : "DELETE",
+        credentials: "include",
+        headers: { "x-csrf-token": await csrf() },
+      },
+    );
+    setStatus(
+      response.ok
+        ? action === "resend"
+          ? "Приглашение отправлено повторно."
+          : "Приглашение отозвано."
+        : "Не удалось обновить приглашение.",
+    );
+    await load();
+  }
+
+  async function remove(member: TeamMember) {
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${workspace.id}/members/${member.userId}`,
+      {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "x-csrf-token": await csrf() },
+      },
+    );
+    setStatus(
+      response.ok
+        ? "Участник удалён из компании."
+        : "Не удалось удалить участника.",
+    );
+    await load();
+  }
+
+  return (
+    <section
+      className="panel company-team"
+      aria-labelledby="company-team-title"
+    >
+      <div className="section-heading">
+        <div>
+          <p className="eyebrow">КОМПАНИЯ</p>
+          <h2 id="company-team-title">Профиль компании и команда</h2>
+          <p className="section-head__sub">
+            {company?.accessStatus === "ACTIVE"
+              ? "Доступ компании активен."
+              : company?.accessStatus === "SUSPENDED"
+                ? "Доступ компании приостановлен."
+                : "Компания на проверке. Рабочие функции станут доступны после одобрения администратора."}
+          </p>
+        </div>
+        {company && (
+          <span
+            className={`company-status company-status--${company.accessStatus.toLowerCase()}`}
+          >
+            {company.accessStatus === "ACTIVE"
+              ? "Активна"
+              : company.accessStatus === "SUSPENDED"
+                ? "Приостановлена"
+                : "На проверке"}
+          </span>
+        )}
+      </div>
+      {company && (
+        <dl className="company-details">
+          <div>
+            <dt>Компания</dt>
+            <dd>{company.name}</dd>
+          </div>
+          <div>
+            <dt>Юридическое наименование</dt>
+            <dd>{company.legalName || "—"}</dd>
+          </div>
+          <div>
+            <dt>БИН / рег. номер</dt>
+            <dd>{company.registrationNumber || "—"}</dd>
+          </div>
+          <div>
+            <dt>Рабочий email</dt>
+            <dd>{company.companyEmail || "—"}</dd>
+          </div>
+        </dl>
+      )}
+      <div className="company-team__grid">
+        <section>
+          <h3>Участники</h3>
+          <div className="team-list">
+            {members.map((member) => (
+              <div className="member-row" key={member.userId}>
+                <span>
+                  <strong>{member.user.name}</strong>
+                  <small>
+                    {member.user.email} · {member.role}
+                  </small>
+                </span>
+                {canManage && member.role !== "OWNER" && (
+                  <button
+                    className="text-button"
+                    type="button"
+                    onClick={() => void remove(member)}
+                  >
+                    Удалить
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
+        </section>
+        {canManage && (
+          <section>
+            <h3>Приглашения</h3>
+            <form className="invite-form" onSubmit={invite}>
+              <input
+                type="email"
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                placeholder="name@company.com"
+                aria-label="Email коллеги"
+                required
+              />
+              <button className="secondary-button btn--small" type="submit">
+                Пригласить
+              </button>
+            </form>
+            <div className="team-list">
+              {invitations
+                .filter((item) => item.status === "PENDING")
+                .map((invitation) => (
+                  <div className="member-row" key={invitation.id}>
+                    <span>
+                      <strong>{invitation.email}</strong>
+                      <small>Ожидает принятия</small>
+                    </span>
+                    <div className="member-actions">
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() =>
+                          void invitationAction(invitation, "resend")
+                        }
+                      >
+                        Повторить
+                      </button>
+                      <button
+                        className="text-button"
+                        type="button"
+                        onClick={() =>
+                          void invitationAction(invitation, "revoke")
+                        }
+                      >
+                        Отозвать
+                      </button>
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </section>
+        )}
+      </div>
+      {status && (
+        <p className="company-team__status" role="status">
+          {status}
+        </p>
+      )}
+    </section>
   );
 }

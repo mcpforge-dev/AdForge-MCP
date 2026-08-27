@@ -17,6 +17,7 @@ import { ReadinessService } from "./readiness.service.js";
 import { InvitationController } from "./workspaces/invitation.controller.js";
 import { WorkspaceAuthorizationGuard } from "./auth/workspace-authorization.guard.js";
 import { WorkspaceController } from "./workspaces/workspace.controller.js";
+import { CompanyAdminController } from "./workspaces/company-admin.controller.js";
 import { WorkspaceService } from "./workspaces/workspace.service.js";
 import { ProviderController } from "./providers/provider.controller.js";
 import { CredentialVaultService } from "./providers/credential-vault.service.js";
@@ -68,6 +69,7 @@ import { ProductAnalyticsService } from "./analytics/product-analytics.service.j
     AuthController,
     MeController,
     WorkspaceController,
+    CompanyAdminController,
     InvitationController,
     ProviderController,
     ServiceTokenController,

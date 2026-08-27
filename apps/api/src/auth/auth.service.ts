@@ -41,7 +41,13 @@ export type AuthResult = {
   user: PublicUser;
   sessionToken: string;
   sessionId: string;
-  workspace?: { id: string; name: string; slug: string };
+  workspace?: {
+    id: string;
+    name: string;
+    slug: string;
+    accessStatus: "PENDING" | "ACTIVE" | "SUSPENDED";
+  };
+  onboardingRequired?: boolean;
 };
 
 const GENERIC_RESET_MESSAGE =
@@ -65,6 +71,9 @@ export class AuthService {
     input: SignupDto,
     request: RequestWithAuth,
   ): Promise<AuthResult> {
+    if (input.password !== input.confirmPassword) {
+      throw new BadRequestException("Passwords do not match.");
+    }
     const email = normalizeEmail(input.email);
     await this.limit("signup", request, email, 5, 900);
     const passwordHash = await this.passwords.hash(input.password);
@@ -127,7 +136,9 @@ export class AuthService {
         id: result.workspace.id,
         name: result.workspace.name,
         slug: result.workspace.slug,
+        accessStatus: result.workspace.accessStatus,
       },
+      onboardingRequired: true,
     };
   }
 
@@ -169,7 +180,17 @@ export class AuthService {
       {
         where: { userId: user.id },
         orderBy: { createdAt: "asc" },
-        select: { workspace: { select: { id: true, name: true, slug: true } } },
+        select: {
+          workspace: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              accessStatus: true,
+              onboardingCompletedAt: true,
+            },
+          },
+        },
       },
     );
     return {
@@ -177,6 +198,10 @@ export class AuthService {
       sessionToken: session.token,
       sessionId: session.session.id,
       ...(membership ? { workspace: membership.workspace } : {}),
+      ...(membership?.workspace.accessStatus === "PENDING" &&
+      !membership.workspace.onboardingCompletedAt
+        ? { onboardingRequired: true }
+        : {}),
     };
   }
 
@@ -231,7 +256,17 @@ export class AuthService {
       {
         where: { userId: user.id },
         orderBy: { createdAt: "asc" },
-        select: { workspace: { select: { id: true, name: true, slug: true } } },
+        select: {
+          workspace: {
+            select: {
+              id: true,
+              name: true,
+              slug: true,
+              accessStatus: true,
+              onboardingCompletedAt: true,
+            },
+          },
+        },
       },
     );
     await this.record({
@@ -245,6 +280,10 @@ export class AuthService {
       sessionToken: session.token,
       sessionId: session.session.id,
       ...(membership ? { workspace: membership.workspace } : {}),
+      ...(membership?.workspace.accessStatus === "PENDING" &&
+      !membership.workspace.onboardingCompletedAt
+        ? { onboardingRequired: true }
+        : {}),
     };
   }
 
