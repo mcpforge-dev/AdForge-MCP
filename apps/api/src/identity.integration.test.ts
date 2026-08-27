@@ -132,6 +132,16 @@ describe.skipIf(!integrationEnabled)("v2 identity integration", () => {
         sessionId: userA.sessionId,
       }),
     ).toHaveLength(1);
+    await expect(
+      database.client.providerConnection.count({
+        where: { workspaceId: userA.workspace!.id },
+      }),
+    ).resolves.toBe(0);
+    await expect(
+      database.client.providerAccount.count({
+        where: { workspaceId: userA.workspace!.id },
+      }),
+    ).resolves.toBe(0);
 
     const session = await sessions.validate(userA.sessionToken);
     expect(session?.userId).toBe(userA.user.id);
@@ -234,6 +244,15 @@ describe.skipIf(!integrationEnabled)("v2 identity integration", () => {
         request,
       ),
     ).resolves.toEqual({ success: true, workspaceId });
+    const colleagueWorkspaces = await workspaces.listForUser({
+      kind: "human",
+      userId: userC.user.id,
+      sessionId: userC.sessionId,
+    });
+    expect(colleagueWorkspaces.map((item) => item.id)).toContain(workspaceId);
+    expect(colleagueWorkspaces.map((item) => item.id)).not.toContain(
+      userB.workspace!.id,
+    );
     await expect(
       workspaces.acceptInvitation(
         { token: acceptedMessage!.token },

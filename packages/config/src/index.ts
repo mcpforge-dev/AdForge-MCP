@@ -112,9 +112,7 @@ const rawConfigSchema = z.object({
     .max(120000)
     .default(20000),
   COOKIE_DOMAIN: z.string().optional(),
-  AD_MCP_INITIAL_ADMIN_EMAIL: z.string().default(""),
   HOLYMEDIA_ADMIN_ENABLED: booleanFromEnv.default(true),
-  HOLYMEDIA_ADMIN_LOGIN: z.string().trim().min(1).max(80).default("admin"),
   HOLYMEDIA_ADMIN_PASSWORD: z.string().min(16).max(256).optional(),
   HOLYMEDIA_ADMIN_SESSION_TTL_HOURS: z.coerce
     .number()
@@ -193,7 +191,6 @@ export type AppConfig = {
   providerYandexClientLogin: string | undefined;
   providerHttpTimeoutMs: number;
   cookieDomain: string | undefined;
-  companyAdminEmails: string[];
   adminEnabled: boolean;
   adminLogin: string;
   adminPassword: string | undefined;
@@ -420,12 +417,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerYandexClientLogin: value.PROVIDER_YANDEX_CLIENT_LOGIN,
     providerHttpTimeoutMs: value.PROVIDER_HTTP_TIMEOUT_MS,
     cookieDomain: value.COOKIE_DOMAIN,
-    companyAdminEmails: value.AD_MCP_INITIAL_ADMIN_EMAIL.split(",")
-      .map((email) => email.trim().toLowerCase())
-      .filter(Boolean),
     adminEnabled:
       value.HOLYMEDIA_ADMIN_ENABLED && Boolean(value.HOLYMEDIA_ADMIN_PASSWORD),
-    adminLogin: value.HOLYMEDIA_ADMIN_LOGIN,
+    // This identity is deliberately not configurable. Customer and workspace
+    // roles must never become alternate system-admin logins.
+    adminLogin: "Admin",
     adminPassword: value.HOLYMEDIA_ADMIN_PASSWORD,
     adminSessionTtlHours: value.HOLYMEDIA_ADMIN_SESSION_TTL_HOURS,
     sessionTtlDays: value.SESSION_TTL_DAYS,

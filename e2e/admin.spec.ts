@@ -29,7 +29,7 @@ test.describe("owner admin console", () => {
     const clientFailures = failures(page);
     await page.goto("/admin");
     await openLogin(page);
-    await page.locator('input[name="login"]').fill("admin");
+    await page.locator('input[name="login"]').fill("Admin");
     await page.locator('input[name="password"]').fill(adminPassword);
     await page.getByRole("button", { name: "Войти" }).click();
     await expect(page.getByRole("heading", { name: "Обзор" })).toBeVisible();
@@ -59,7 +59,7 @@ test.describe("owner admin console", () => {
     await installMockApi(page, { adminPassword });
     await page.goto("/admin");
     await openLogin(page);
-    await page.locator('input[name="login"]').fill("admin");
+    await page.locator('input[name="login"]').fill("Admin");
     await page.locator('input[name="password"]').fill(adminPassword);
     await page.getByRole("button", { name: "Войти" }).click();
     await page.getByRole("button", { name: "Диагностика" }).click();
@@ -79,7 +79,7 @@ test.describe("owner admin console", () => {
     await installMockApi(page, { adminPassword });
     await page.goto("/admin");
     await openLogin(page);
-    await page.locator('input[name="login"]').fill("admin");
+    await page.locator('input[name="login"]').fill("Admin");
     await page.locator('input[name="password"]').fill(adminPassword);
     await page.getByRole("button", { name: "Войти" }).click();
     const results = await new AxeBuilder({ page }).analyze();

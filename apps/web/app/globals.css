@@ -810,12 +810,12 @@ form {
   margin-bottom: 10px;
   font-size: 28px;
 }
-.auth-card > .muted {
-  margin-bottom: 22px;
+.auth-card #auth-panel > .muted {
+  margin-bottom: 10px;
 }
 .google-login-button {
   width: 100%;
-  margin-bottom: 12px;
+  margin-bottom: 0;
 }
 .auth-divider {
   color: var(--text-faint);
@@ -823,21 +823,21 @@ form {
   font-size: 13px;
 }
 .auth-card form {
-  margin-top: 26px;
+  margin-top: 24px;
 }
 .password-input {
   position: relative;
   display: block;
 }
 .password-input input {
-  padding-right: 76px;
+  padding-right: 60px;
 }
 .password-toggle {
   position: absolute;
   top: 50%;
-  right: 8px;
-  min-width: 56px;
-  min-height: 36px;
+  right: 4px;
+  min-width: 44px;
+  min-height: 44px;
   transform: translateY(-50%);
   border: 0;
   border-radius: 6px;
@@ -873,6 +873,13 @@ form {
   padding: 0;
   color: #c6d0de;
   font-size: 13px;
+}
+.auth-recovery-back {
+  align-items: center;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  padding: 0;
 }
 .forgot-link:hover,
 .forgot-link:focus-visible {
@@ -1181,6 +1188,10 @@ form {
 .inline-form input,
 .invite-form input {
   flex: 1;
+}
+.invite-form__submit {
+  min-height: 44px;
+  flex: 0 0 auto;
 }
 .member-row,
 .provider-row,
@@ -1585,7 +1596,7 @@ pre {
     padding: 22px;
   }
   .auth-card form {
-    margin-top: 18px;
+    margin-top: 24px;
   }
   .site-header,
   .landing-main,
@@ -1654,6 +1665,9 @@ pre {
   .mcp-url-row {
     align-items: stretch;
     flex-direction: column;
+  }
+  .invite-form__submit {
+    width: 100%;
   }
   .provider-row,
   .member-row,

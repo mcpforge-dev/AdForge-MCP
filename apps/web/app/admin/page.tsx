@@ -369,7 +369,7 @@ function AdminLogin({ onAuthenticated }: { onAuthenticated: () => void }) {
     <main className="admin-login">
       <section className="admin-login__card">
         <BrandLockup />
-        <p className="eyebrow">HOLYMEDIA MCP · OWNER ACCESS</p>
+        <p className="eyebrow">HOLYMEDIA MCP · SYSTEM ACCESS</p>
         <h1>Вход в админ-панель</h1>
         <p className="muted">
           Отдельная защищённая сессия. Обычный клиентский вход здесь не
@@ -381,7 +381,7 @@ function AdminLogin({ onAuthenticated }: { onAuthenticated: () => void }) {
             <input
               name="login"
               autoComplete="username"
-              defaultValue="admin"
+              defaultValue="Admin"
               required
             />
           </label>

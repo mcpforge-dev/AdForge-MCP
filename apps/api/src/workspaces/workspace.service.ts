@@ -23,7 +23,6 @@ import type {
   CreateWorkspaceDto,
   UpdateMemberRoleDto,
   UpdateCompanyProfileDto,
-  UpdateCompanyAccessStatusDto,
   UpdateWorkspaceDto,
 } from "../auth/auth.dto.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
@@ -259,55 +258,6 @@ export class WorkspaceService {
       request,
       actorUserId: principal.userId,
       workspaceId,
-    });
-    return workspace;
-  }
-
-  public async updateCompanyAccessStatus(
-    workspaceId: string,
-    input: UpdateCompanyAccessStatusDto,
-    principal: HumanPrincipal,
-    request: RequestWithAuth,
-  ): Promise<WorkspaceView> {
-    const status = input.status?.trim().toUpperCase();
-    if (!status || !["PENDING", "ACTIVE", "SUSPENDED"].includes(status)) {
-      throw new BadRequestException("Invalid company access status.");
-    }
-    const actor = await this.database.client.user.findUnique({
-      where: { id: principal.userId },
-      select: { email: true },
-    });
-    if (!actor || !this.config.companyAdminEmails.includes(actor.email)) {
-      throw new ForbiddenException("Company admin access required.");
-    }
-    const workspace = await this.database.client.workspace.update({
-      where: { id: workspaceId },
-      data: { accessStatus: status as "PENDING" | "ACTIVE" | "SUSPENDED" },
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        createdAt: true,
-        updatedAt: true,
-        accessStatus: true,
-        legalName: true,
-        registrationNumber: true,
-        registrationCountry: true,
-        legalAddress: true,
-        companyPhone: true,
-        companyEmail: true,
-        websiteUrl: true,
-        onboardingCompletedAt: true,
-      },
-    });
-    await this.record({
-      eventType: "company_access_status_changed",
-      request,
-      actorUserId: principal.userId,
-      workspaceId,
-      targetType: "company_access",
-      targetId: workspaceId,
-      metadata: { status },
     });
     return workspace;
   }

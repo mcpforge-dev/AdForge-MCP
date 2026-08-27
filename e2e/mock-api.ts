@@ -144,7 +144,7 @@ export async function installMockApi(
         login?: string;
         password?: string;
       };
-      if (body.login !== "admin" || body.password !== adminPassword)
+      if (body.login !== "Admin" || body.password !== adminPassword)
         return route.fulfill({ status: 401, headers: cors });
       adminAuthenticated = true;
       return json(route, { authenticated: true });

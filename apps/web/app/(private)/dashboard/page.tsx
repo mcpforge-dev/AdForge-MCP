@@ -3052,6 +3052,7 @@ type CompanyProfile = {
   companyEmail: string | null;
   websiteUrl: string | null;
   accessStatus: "PENDING" | "ACTIVE" | "SUSPENDED";
+  onboardingCompletedAt: string | null;
 };
 type TeamMember = {
   userId: string;
@@ -3077,6 +3078,9 @@ function CompanyTeam({
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState("");
+  const companyName = company?.onboardingCompletedAt
+    ? company.name
+    : "Название компании не указано";
 
   const load = async () => {
     const requests = [
@@ -3179,7 +3183,7 @@ function CompanyTeam({
       <div className="section-heading">
         <div>
           <p className="eyebrow">КОМПАНИЯ</p>
-          <h2 id="company-team-title">Профиль компании и команда</h2>
+          <h2 id="company-team-title">Профиль компании</h2>
           <p className="section-head__sub">
             {company?.accessStatus === "ACTIVE"
               ? "Доступ компании активен."
@@ -3204,7 +3208,7 @@ function CompanyTeam({
         <dl className="company-details">
           <div>
             <dt>Компания</dt>
-            <dd>{company.name}</dd>
+            <dd>{companyName}</dd>
           </div>
           <div>
             <dt>Юридическое наименование</dt>
@@ -3222,14 +3226,16 @@ function CompanyTeam({
       )}
       <div className="company-team__grid">
         <section>
-          <h3>Участники</h3>
+          <h3>Команда</h3>
           <div className="team-list">
             {members.map((member) => (
               <div className="member-row" key={member.userId}>
                 <span>
                   <strong>{member.user.name}</strong>
                   <small>
-                    {member.user.email} · {member.role}
+                    {member.user.email}
+                    {member.role !== "OWNER" &&
+                      ` · ${memberRoleLabel(member.role)}`}
                   </small>
                 </span>
                 {canManage && member.role !== "OWNER" && (
@@ -3257,7 +3263,10 @@ function CompanyTeam({
                 aria-label="Email коллеги"
                 required
               />
-              <button className="secondary-button btn--small" type="submit">
+              <button
+                className="secondary-button invite-form__submit"
+                type="submit"
+              >
                 Пригласить
               </button>
             </form>
@@ -3303,4 +3312,14 @@ function CompanyTeam({
       )}
     </section>
   );
+}
+
+function memberRoleLabel(role: string): string {
+  const labels: Record<string, string> = {
+    OWNER: "Владелец",
+    ADMIN: "Администратор",
+    MEMBER: "Участник",
+    VIEWER: "Только просмотр",
+  };
+  return labels[role] ?? "Участник";
 }

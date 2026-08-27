@@ -1,3 +1,4 @@
+import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
 import { installMockApi } from "./mock-api";
 
@@ -66,10 +67,52 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(
       page.getByRole("tab", { name: "Регистрация" }),
     ).toHaveAttribute("aria-selected", "true");
+    const [leadBox, googleBox, formBox] = await Promise.all([
+      page.locator("#auth-panel > .muted").boundingBox(),
+      page.locator(".google-login-button").boundingBox(),
+      page.locator("#auth-panel > form").boundingBox(),
+    ]);
+    expect(leadBox).not.toBeNull();
+    expect(googleBox).not.toBeNull();
+    expect(formBox).not.toBeNull();
+    expect(
+      googleBox!.y - (leadBox!.y + leadBox!.height),
+    ).toBeGreaterThanOrEqual(8);
+    expect(googleBox!.y - (leadBox!.y + leadBox!.height)).toBeLessThanOrEqual(
+      12,
+    );
+    expect(
+      formBox!.y - (googleBox!.y + googleBox!.height),
+    ).toBeGreaterThanOrEqual(23);
+    await expect(
+      page
+        .locator('input[name="confirmPassword"]')
+        .evaluate((input) => (input as HTMLInputElement).required),
+    ).resolves.toBe(true);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.getByRole("button", { name: "English" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Create your account" }),
+    ).toBeVisible();
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.getByRole("button", { name: "Русский" }).click();
+    const password = page.locator('input[name="password"]');
+    await page.locator(".password-toggle").first().click();
+    await expect(password).toHaveAttribute("type", "text");
     await page.screenshot({
       path: testInfo.outputPath("registration.png"),
       fullPage: true,
     });
+
+    await page.goto("/auth?mode=forgot");
+    await expect(page.locator(".auth-recovery-back")).toHaveCount(1);
+    await expect(page.locator("a.back-link")).toHaveCount(0);
+    await page.locator(".auth-recovery-back").click();
+    await expect(page.getByRole("tab", { name: "Войти" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await page.getByRole("tab", { name: "Регистрация" }).click();
 
     const email = `playwright-${Date.now()}-${test.info().project.name}@example.test`;
     await page.locator('input[name="name"]').fill("Playwright User");
@@ -440,6 +483,19 @@ test.describe("restored HolyMedia client UX", () => {
       page.getByRole("heading", { name: "Профиль", exact: true }),
     ).toBeVisible();
     await expect(page.getByText("Подключено платформ")).toBeVisible();
+    const companyTeam = page.locator(".company-team");
+    await expect(companyTeam).toContainText("Название компании не указано");
+    await expect(companyTeam.getByText("OWNER", { exact: true })).toHaveCount(
+      0,
+    );
+    const [inviteInput, inviteButton] = await Promise.all([
+      companyTeam.locator(".invite-form input").boundingBox(),
+      companyTeam.locator(".invite-form__submit").boundingBox(),
+    ]);
+    expect(inviteInput).not.toBeNull();
+    expect(inviteButton).not.toBeNull();
+    expect(inviteInput!.height).toBeGreaterThanOrEqual(44);
+    expect(inviteButton!.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({
       path: testInfo.outputPath("profile.png"),
       fullPage: true,

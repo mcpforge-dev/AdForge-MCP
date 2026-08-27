@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 const tracked = execFileSync(
   "git",
@@ -16,7 +16,9 @@ const ignoredPrefixes = [
   "packages/database/src/generated/",
 ];
 const files = tracked.filter(
-  (file) => !ignoredPrefixes.some((prefix) => file.startsWith(prefix)),
+  (file) =>
+    existsSync(file) &&
+    !ignoredPrefixes.some((prefix) => file.startsWith(prefix)),
 );
 const forbiddenPath =
   /(^|\/)(\.env$|\.env\.(?!example$|v2\.example$)[^/]+$|connections\.json|.*\.backup|.*\.bak|.*\.log)$/i;

@@ -182,11 +182,21 @@ export default function AuthPage() {
         <div className="auth-language">
           <LanguageSwitcher compact />
         </div>
-        <Link className="back-link" href="/">
-          {t.back}
-        </Link>
+        {mode === "forgot" ? (
+          <button
+            className="back-link auth-recovery-back"
+            type="button"
+            onClick={() => changeMode("login")}
+          >
+            {t.backToLogin}
+          </button>
+        ) : (
+          <Link className="back-link" href="/">
+            {t.back}
+          </Link>
+        )}
 
-        {mode !== "forgot" ? (
+        {mode !== "forgot" && (
           <div
             className="tabs"
             role="tablist"
@@ -213,14 +223,6 @@ export default function AuthPage() {
               {t.signup}
             </button>
           </div>
-        ) : (
-          <button
-            className="text-button auth-back-button"
-            type="button"
-            onClick={() => changeMode("login")}
-          >
-            {t.backToLogin}
-          </button>
         )}
 
         <div id="auth-panel" role={mode === "forgot" ? undefined : "tabpanel"}>

@@ -17,7 +17,6 @@ import { ReadinessService } from "./readiness.service.js";
 import { InvitationController } from "./workspaces/invitation.controller.js";
 import { WorkspaceAuthorizationGuard } from "./auth/workspace-authorization.guard.js";
 import { WorkspaceController } from "./workspaces/workspace.controller.js";
-import { CompanyAdminController } from "./workspaces/company-admin.controller.js";
 import { WorkspaceService } from "./workspaces/workspace.service.js";
 import { ProviderController } from "./providers/provider.controller.js";
 import { CredentialVaultService } from "./providers/credential-vault.service.js";
@@ -45,10 +44,7 @@ import { SiteAnalysisController } from "./site-analysis/site-analysis.controller
 import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
 import { BillingController } from "./billing/billing.controller.js";
 import { BillingService } from "./billing/billing.service.js";
-import {
-  AdminManualConnectionRequestController,
-  ManualConnectionRequestController,
-} from "./compat/manual-connection-request.controller.js";
+import { ManualConnectionRequestController } from "./compat/manual-connection-request.controller.js";
 import { ManualConnectionRequestService } from "./compat/manual-connection-request.service.js";
 import { LegacyDiagnosticsController } from "./compat/legacy-diagnostics.controller.js";
 import { SearchConsoleController } from "./seo/search-console.controller.js";
@@ -58,7 +54,6 @@ import { McpOAuthClientService } from "./mcp/mcp-oauth-client.service.js";
 import { OAuthMetadataController } from "./compat/oauth-metadata.controller.js";
 import { LegacyGoogleLoginController } from "./compat/legacy-google-login.controller.js";
 import { GoogleLoginService } from "./auth/google-login.service.js";
-import { LegacyAdminController } from "./compat/legacy-admin.controller.js";
 import { LegacyMetaSkillsController } from "./compat/legacy-meta-skills.controller.js";
 import { ProductAnalyticsController } from "./analytics/product-analytics.controller.js";
 import { ProductAnalyticsService } from "./analytics/product-analytics.service.js";
@@ -72,7 +67,6 @@ import { AdminService } from "./admin/admin.service.js";
     AuthController,
     MeController,
     WorkspaceController,
-    CompanyAdminController,
     InvitationController,
     ProviderController,
     ServiceTokenController,
@@ -88,13 +82,11 @@ import { AdminService } from "./admin/admin.service.js";
     SiteAnalysisController,
     BillingController,
     ManualConnectionRequestController,
-    AdminManualConnectionRequestController,
     LegacyDiagnosticsController,
     SearchConsoleController,
     LegacyMcpOAuthController,
     OAuthMetadataController,
     LegacyGoogleLoginController,
-    LegacyAdminController,
     LegacyMetaSkillsController,
     ProductAnalyticsController,
     AdminController,

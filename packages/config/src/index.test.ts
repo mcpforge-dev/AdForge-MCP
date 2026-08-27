@@ -18,7 +18,7 @@ describe("v2 configuration", () => {
       HOLYMEDIA_ADMIN_PASSWORD: randomUUID(),
     });
     expect(configured.adminEnabled).toBe(true);
-    expect(configured.adminLogin).toBe("admin");
+    expect(configured.adminLogin).toBe("Admin");
   });
 
   it("parses the string false as boolean false", () => {
