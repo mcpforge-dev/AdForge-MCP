@@ -4262,3 +4262,178 @@ pre {
     margin-top: 54px;
   }
 }
+
+/* Reports picker: compact, scan-friendly provider and account cards. */
+.report-provider-option {
+  grid-template-areas:
+    "summary status"
+    "action action";
+  grid-template-columns: minmax(0, 1fr) auto;
+  min-height: 142px;
+  gap: 14px;
+  padding: 18px;
+  border-color: var(--border);
+}
+
+.report-provider-option__summary {
+  grid-area: summary;
+  display: flex;
+  align-items: flex-start;
+  min-width: 0;
+  gap: 12px;
+}
+
+.report-provider-option .provider-mark {
+  display: grid;
+  flex: 0 0 44px;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 8px;
+  border-color: var(--border);
+  border-radius: 9px;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.report-provider-option__copy {
+  display: grid;
+  min-width: 0;
+  gap: 5px;
+}
+
+.report-provider-option__copy strong {
+  overflow: visible;
+  color: var(--text);
+  font-size: 15px;
+  line-height: 1.3;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.report-provider-option__copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+  text-overflow: clip;
+  white-space: normal;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.report-provider-option > .status-badge {
+  grid-area: status;
+  align-self: start;
+  min-height: 26px;
+  padding: 4px 8px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 650;
+  letter-spacing: 0;
+  line-height: 1.3;
+}
+
+.report-provider-option > .status-badge.ok {
+  border-color: rgba(81, 214, 160, 0.22);
+  background: rgba(81, 214, 160, 0.1);
+}
+
+.report-provider-option > .status-badge.warn {
+  border-color: rgba(244, 188, 102, 0.22);
+  background: rgba(244, 188, 102, 0.1);
+}
+
+.report-provider-option > .status-badge.info {
+  border-color: rgba(124, 154, 255, 0.2);
+  background: rgba(124, 154, 255, 0.08);
+}
+
+.report-provider-option .secondary-button,
+.report-provider-option__note {
+  grid-area: action;
+  min-height: 38px;
+  padding: 8px 13px;
+  border-radius: 7px;
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.2;
+}
+
+.report-provider-option__note {
+  display: flex;
+  align-items: center;
+  padding-inline: 0;
+  color: var(--text-faint);
+}
+
+.report-account-list {
+  gap: 10px;
+}
+
+.report-account-option {
+  min-height: 66px;
+  gap: 12px;
+  padding: 13px 14px;
+  border-color: var(--border);
+}
+
+.report-account-option.is-inactive {
+  opacity: 0.72;
+}
+
+.report-account-status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  min-height: 24px;
+  padding: 3px 7px;
+  border: 1px solid transparent;
+  border-radius: 7px;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 650;
+  line-height: 1.25;
+  white-space: nowrap;
+}
+
+.report-account-status.active {
+  border-color: rgba(81, 214, 160, 0.2);
+  background: rgba(81, 214, 160, 0.1);
+  color: var(--ok);
+}
+
+.report-account-status.inactive {
+  border-color: rgba(187, 196, 211, 0.14);
+  background: rgba(187, 196, 211, 0.07);
+  color: var(--text-muted);
+}
+
+.report-account-status.neutral {
+  border-color: rgba(124, 154, 255, 0.16);
+  background: rgba(124, 154, 255, 0.07);
+  color: var(--text-muted);
+}
+
+@media (max-width: 620px) {
+  .report-provider-option {
+    grid-template-areas:
+      "summary"
+      "status"
+      "action";
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 0;
+    gap: 12px;
+    padding: 16px;
+  }
+
+  .report-provider-option > .status-badge {
+    justify-self: start;
+  }
+
+  .report-account-list {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

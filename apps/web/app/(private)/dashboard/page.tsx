@@ -257,6 +257,30 @@ function isInactiveProviderAccount(status: string | null) {
   );
 }
 
+function reportAccountStatus(status: string | null) {
+  switch ((status ?? "").trim().toUpperCase()) {
+    case "ACTIVE":
+    case "ENABLED":
+    case "OPEN":
+    case "LIVE":
+      return { label: "Активен", tone: "active", inactive: false };
+    case "CANCELED":
+    case "CANCELLED":
+    case "INACTIVE":
+    case "DISABLED":
+    case "CLOSED":
+    case "SUSPENDED":
+    case "ARCHIVED":
+      return { label: "Не используется", tone: "inactive", inactive: true };
+    case "PAUSED":
+      return { label: "Приостановлен", tone: "neutral", inactive: false };
+    case "PENDING":
+      return { label: "Ожидает запуска", tone: "neutral", inactive: false };
+    default:
+      return { label: "Статус неизвестен", tone: "neutral", inactive: false };
+  }
+}
+
 function tokenDisplayName(token: ServiceToken, language: "ru" | "en") {
   const name = token.name.trim();
   if (!name || /^personal mcp token$/i.test(name))
@@ -2653,25 +2677,32 @@ export default function DashboardPage() {
                   />
                 </label>
                 <div className="report-account-list" aria-live="polite">
-                  {reportPickerAccounts.map((account) => (
-                    <button
-                      className="report-account-option"
-                      type="button"
-                      key={account.id}
-                      onClick={() =>
-                        selectReportAccount({
-                          account,
-                          connection: reportPickerConnection,
-                        })
-                      }
-                    >
-                      <span>
-                        <strong>{account.displayName}</strong>
-                        <small>{account.externalAccountId}</small>
-                      </span>
-                      {account.status && <em>{account.status}</em>}
-                    </button>
-                  ))}
+                  {reportPickerAccounts.map((account) => {
+                    const status = reportAccountStatus(account.status);
+                    return (
+                      <button
+                        className={`report-account-option ${
+                          status.inactive ? "is-inactive" : ""
+                        }`}
+                        type="button"
+                        key={account.id}
+                        onClick={() =>
+                          selectReportAccount({
+                            account,
+                            connection: reportPickerConnection,
+                          })
+                        }
+                      >
+                        <span>
+                          <strong>{account.displayName}</strong>
+                          <small>{account.externalAccountId}</small>
+                        </span>
+                        <em className={`report-account-status ${status.tone}`}>
+                          {status.label}
+                        </em>
+                      </button>
+                    );
+                  })}
                 </div>
                 {!reportPickerAccounts.length && (
                   <div className="empty-state report-picker__empty">
@@ -2699,9 +2730,6 @@ export default function DashboardPage() {
                   );
                   const selectable =
                     connection.status === "CONNECTED" && supported;
-                  const enabledCount = connection.accounts.filter(
-                    (account) => account.enabled,
-                  ).length;
                   return (
                     <article
                       className={`report-provider-option ${
@@ -2709,18 +2737,19 @@ export default function DashboardPage() {
                       }`}
                       key={connection.id}
                     >
-                      <div>
-                        <span className="provider-mark">
+                      <div className="report-provider-option__summary">
+                        <span
+                          className={`provider-mark provider-mark--${connection.provider.toLowerCase()}`}
+                          aria-hidden="true"
+                        >
                           {providerCopy(connection.provider).short}
                         </span>
-                        <span>
+                        <span className="report-provider-option__copy">
                           <strong>
                             {providerCopy(connection.provider).name}
                           </strong>
                           <small>
-                            {supported
-                              ? `${enabledCount} включённых кабинетов`
-                              : "Отчёты для этой платформы пока не поддерживаются"}
+                            {providerCopy(connection.provider).description}
                           </small>
                         </span>
                       </div>

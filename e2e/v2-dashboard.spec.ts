@@ -447,6 +447,123 @@ test.describe("restored HolyMedia client UX", () => {
     expect(failures, failures.join("\n")).toEqual([]);
   });
 
+  test("reports picker keeps provider and account statuses customer-facing", async ({
+    page,
+  }, testInfo) => {
+    await installMockApi(page);
+    await page.route("**/api/v1/workspaces/**/connections", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        headers: {
+          "access-control-allow-origin": "http://localhost:3000",
+          "access-control-allow-credentials": "true",
+        },
+        body: JSON.stringify([
+          {
+            id: "10000000-0000-4000-8000-000000000001",
+            provider: "META_ADS",
+            displayName: "Meta connection",
+            status: "CONNECTED",
+            accounts: [
+              {
+                id: "10000000-0000-4000-8000-000000000011",
+                externalAccountId: "meta-active",
+                displayName: "Meta active account",
+                enabled: true,
+                status: "active",
+              },
+              {
+                id: "10000000-0000-4000-8000-000000000012",
+                externalAccountId: "meta-canceled",
+                displayName: "Meta previous account",
+                enabled: true,
+                status: "canceled",
+              },
+              {
+                id: "10000000-0000-4000-8000-000000000013",
+                externalAccountId: "meta-unknown",
+                displayName: "Meta review account",
+                enabled: true,
+                status: "provider_state_pending_review",
+              },
+            ],
+          },
+          {
+            id: "10000000-0000-4000-8000-000000000002",
+            provider: "GOOGLE_ADS",
+            displayName: "Google connection",
+            status: "CONNECTED",
+            accounts: [],
+          },
+          {
+            id: "10000000-0000-4000-8000-000000000003",
+            provider: "YANDEX_DIRECT",
+            displayName: "Yandex connection",
+            status: "DISCONNECTED",
+            accounts: [],
+          },
+          {
+            id: "10000000-0000-4000-8000-000000000004",
+            provider: "TIKTOK_ADS",
+            displayName: "TikTok connection",
+            status: "REAUTH_REQUIRED",
+            accounts: [],
+          },
+        ]),
+      }),
+    );
+    await login(page);
+    await page.goto("/dashboard?section=reports");
+    await page.locator(".report-account-trigger").click();
+    const picker = page.getByRole("dialog", {
+      name: "Выберите рекламную платформу",
+    });
+    await expect(picker).toBeVisible();
+    for (const provider of [
+      "Google Ads",
+      "Meta Ads",
+      "Яндекс Директ",
+      "TikTok Ads",
+    ]) {
+      await expect(picker.getByText(provider, { exact: true })).toBeVisible();
+    }
+    await expect(picker.getByText("Подключено").first()).toHaveClass(
+      /status-badge/,
+    );
+    await picker.screenshot({
+      path: testInfo.outputPath("reports-platform-modal.png"),
+    });
+
+    await picker
+      .locator(".report-provider-option")
+      .filter({ hasText: "Meta Ads" })
+      .getByRole("button", { name: "Показать кабинеты" })
+      .click();
+    const accounts = page.getByRole("dialog", { name: /Кабинеты Meta Ads/ });
+    await expect(accounts.getByText("Активен", { exact: true })).toBeVisible();
+    await expect(
+      accounts.getByText("Не используется", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      accounts.getByText("Статус неизвестен", { exact: true }),
+    ).toBeVisible();
+    await expect(accounts.getByText("active", { exact: true })).toHaveCount(0);
+    await expect(accounts.getByText("canceled", { exact: true })).toHaveCount(
+      0,
+    );
+    await expect(
+      accounts.locator(".report-account-option.is-inactive"),
+    ).toHaveCount(1);
+    await accounts.screenshot({
+      path: testInfo.outputPath("reports-account-modal.png"),
+    });
+    const overflow = await accounts.evaluate(
+      (element) => element.scrollWidth > element.clientWidth,
+    );
+    expect(overflow).toBe(false);
+  });
+
   test("reports explain an unsupported account instead of showing a generic error", async ({
     page,
   }) => {
