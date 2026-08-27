@@ -1503,6 +1503,9 @@ export default function DashboardPage() {
 
         {section === "tariffs" && (
           <section className="section" aria-label="Тарифы">
+            <h1 className="sr-only">
+              {"\u0422\u0430\u0440\u0438\u0444\u044b HolyMedia MCP"}
+            </h1>
             <TariffCatalog subscription={subscription} />
           </section>
         )}

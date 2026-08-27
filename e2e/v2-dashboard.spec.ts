@@ -230,7 +230,9 @@ test.describe("restored HolyMedia client UX", () => {
 
     await expect(page.getByText("Workspace", { exact: true })).toHaveCount(0);
     await expect(page.getByText("OWNER", { exact: true })).toHaveCount(0);
-    await expect(page.getByRole("button", { name: /Тарифы/ })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: "Тарифы", exact: true }),
+    ).toBeEnabled();
     await expect(page.getByRole("button", { name: /SEO/ })).toBeDisabled();
     await page.screenshot({
       path: testInfo.outputPath("dashboard.png"),

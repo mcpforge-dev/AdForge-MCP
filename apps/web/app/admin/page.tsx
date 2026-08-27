@@ -981,7 +981,7 @@ function CompanyDrawer({
                 if (select?.value) onPlan(id, select.value, "ACTIVE");
               }}
             >
-              Активировать
+              Назначить тариф
             </button>
           </div>
           <ul className="admin-list">

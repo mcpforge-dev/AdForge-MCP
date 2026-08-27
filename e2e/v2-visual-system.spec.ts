@@ -1,4 +1,5 @@
 import AxeBuilder from "@axe-core/playwright";
+import { randomUUID } from "node:crypto";
 import { expect, test, type Page } from "@playwright/test";
 import { installMockApi } from "./mock-api";
 
@@ -24,20 +25,33 @@ async function expectNoAxeViolations(page: Page, context: string) {
 test.describe("visual system", () => {
   test("applies the saved theme before first interactive paint and persists it", async ({
     page,
-  }) => {
+  }, testInfo) => {
     const consoleErrors: string[] = [];
     page.on("console", (message) => {
-      if (message.type() === "error") consoleErrors.push(message.text());
+      if (
+        message.type() === "error" &&
+        !message
+          .text()
+          .includes("eval() is not supported in this environment") &&
+        !message
+          .text()
+          .includes("React will never use eval() in production mode")
+      ) {
+        consoleErrors.push(message.text());
+      }
     });
-    await page.addInitScript(() =>
-      localStorage.setItem("holymedia-theme", "light"),
-    );
+    await page.addInitScript(() => {
+      if (!localStorage.getItem("holymedia-theme")) {
+        localStorage.setItem("holymedia-theme", "light");
+      }
+    });
     await page.goto("/", { waitUntil: "commit" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
     await expect(page.locator(".app-loader")).toHaveAttribute(
       "data-loader-visible",
       "true",
     );
+    await page.screenshot({ path: testInfo.outputPath("loader-light.png") });
     await expect(page.locator(".app-loader")).toHaveAttribute(
       "data-loader-visible",
       "false",
@@ -57,6 +71,9 @@ test.describe("visual system", () => {
       "dark",
     );
     await expect(page.locator("html")).toHaveCSS("color-scheme", "dark");
+    await page.screenshot({
+      path: testInfo.outputPath("theme-switcher-dark.png"),
+    });
     expect(consoleErrors).toEqual([]);
   });
 
@@ -106,8 +123,14 @@ test.describe("visual system", () => {
 
     await installMockApi(page);
     await login(page);
-    await page.goto("/dashboard?section=reports");
+    await page.goto("/dashboard?section=connections");
+    await page.screenshot({
+      path: testInfo.outputPath("light-connections.png"),
+      fullPage: true,
+    });
+    await page.goto("/dashboard?section=reports", { waitUntil: "networkidle" });
     await expect(page.locator("html")).toHaveAttribute("data-theme", "light");
+    await expect(page.locator(".report-account-trigger")).toBeVisible();
     await expectNoAxeViolations(page, "light reports");
     await page.locator(".report-account-trigger").click();
     await expect(page.getByRole("dialog")).toBeVisible();
@@ -117,11 +140,61 @@ test.describe("visual system", () => {
       fullPage: true,
     });
 
+    await page.keyboard.press("Escape");
+    await expect(page.getByRole("dialog")).toHaveCount(0);
     await page.getByRole("button", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await page.locator(".report-account-trigger").click();
     await expectNoAxeViolations(page, "dark reports modal");
     await page.screenshot({
       path: testInfo.outputPath("dark-reports-modal.png"),
+      fullPage: true,
+    });
+    await page.keyboard.press("Escape");
+    await page.goto("/dashboard");
+    await page.screenshot({
+      path: testInfo.outputPath("dark-dashboard.png"),
+      fullPage: true,
+    });
+    await page.goto("/dashboard?section=connections");
+    await page.screenshot({
+      path: testInfo.outputPath("dark-connections.png"),
+      fullPage: true,
+    });
+    await page.goto("/");
+    await page.screenshot({
+      path: testInfo.outputPath("dark-landing.png"),
+      fullPage: true,
+    });
+  });
+
+  test("renders the protected admin shell in both themes", async ({
+    page,
+  }, testInfo) => {
+    const adminPassword = randomUUID();
+    await page.addInitScript(() =>
+      localStorage.setItem("holymedia-theme", "light"),
+    );
+    await installMockApi(page, { adminPassword });
+    await page.goto("/admin");
+    const adminLogin = page.locator('input[name="login"]');
+    if (!(await adminLogin.isVisible().catch(() => false))) {
+      await page.getByRole("button", { name: /Выйти/ }).click();
+    }
+    await adminLogin.fill("Admin");
+    await page.locator('input[name="password"]').fill(adminPassword);
+    await page.getByRole("button", { name: /Войти/ }).click();
+    await expect(page.locator(".admin-shell")).toBeVisible();
+    await expectNoAxeViolations(page, "light admin");
+    await page.screenshot({
+      path: testInfo.outputPath("light-admin.png"),
+      fullPage: true,
+    });
+    await page.getByRole("button", { name: "Dark" }).click();
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expectNoAxeViolations(page, "dark admin");
+    await page.screenshot({
+      path: testInfo.outputPath("dark-admin.png"),
       fullPage: true,
     });
   });

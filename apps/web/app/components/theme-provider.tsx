@@ -58,7 +58,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   }, []);
 
   useEffect(() => {
-    if (preference !== "system") return;
+    if (preference !== "system" || getSavedPreference() !== "system") return;
     const media = window.matchMedia("(prefers-color-scheme: light)");
     const onChange = () => {
       const nextSystemTheme = getSystemTheme();

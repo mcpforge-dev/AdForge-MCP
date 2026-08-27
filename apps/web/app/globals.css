@@ -4630,6 +4630,18 @@ html[data-theme="light"] .token-action--danger {
 html[data-theme="light"] .token-action--danger:hover:not(:disabled) {
   background: color-mix(in srgb, var(--err) 8%, transparent);
 }
+html[data-theme="light"] .company-status--active {
+  color: var(--ok);
+  background: color-mix(in srgb, var(--ok) 9%, transparent);
+}
+html[data-theme="light"] .company-status--pending {
+  color: var(--warn);
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+}
+html[data-theme="light"] .company-status--suspended {
+  color: var(--err);
+  background: color-mix(in srgb, var(--err) 9%, transparent);
+}
 
 @media (prefers-reduced-motion: reduce) {
   *,
