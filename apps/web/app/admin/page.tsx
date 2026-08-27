@@ -4,10 +4,17 @@ import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLockup } from "../components/brand-lockup";
 import { ThemeSwitcher } from "../components/theme-switcher";
+import { ProjectSelect } from "../components/project-select";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 type Section =
-  "overview" | "companies" | "users" | "diagnostics" | "support" | "audit";
+  | "overview"
+  | "companies"
+  | "users"
+  | "diagnostics"
+  | "support"
+  | "tariff-requests"
+  | "audit";
 type Json = Record<string, unknown>;
 
 const labels: Record<Section, string> = {
@@ -16,6 +23,7 @@ const labels: Record<Section, string> = {
   users: "Пользователи",
   diagnostics: "Диагностика",
   support: "Поддержка",
+  "tariff-requests": "Заявки на тарифы",
   audit: "Audit log",
 };
 
@@ -251,6 +259,19 @@ export default function AdminPage() {
                   title: "Обновить статус запроса?",
                   body: "Изменяется только карточка обращения. Данные подключений и провайдеров не затрагиваются.",
                   action: () => mutate(`/support/${id}`, "PATCH", { status }),
+                })
+              }
+            />
+          )}
+          {section === "tariff-requests" && (
+            <TariffRequests
+              data={data}
+              onChange={(id, status) =>
+                setConfirmation({
+                  title: "Обновить статус заявки?",
+                  body: "Изменяется только статус заявки. Тариф и доступ компании меняются отдельно через карточку компании.",
+                  action: () =>
+                    mutate(`/tariff-requests/${id}`, "PATCH", { status }),
                 })
               }
             />
@@ -509,16 +530,17 @@ function Companies({
           placeholder="Компания, email или БИН"
           aria-label="Поиск компании"
         />
-        <select
+        <ProjectSelect
+          ariaLabel="Статус компании"
           value={status}
-          onChange={(event) => onStatus(event.target.value)}
-          aria-label="Статус компании"
-        >
-          <option value="">Все статусы</option>
-          <option value="PENDING">На проверке</option>
-          <option value="ACTIVE">Активные</option>
-          <option value="SUSPENDED">Приостановленные</option>
-        </select>
+          onChange={onStatus}
+          options={[
+            { value: "", label: "Все статусы" },
+            { value: "PENDING", label: "На проверке" },
+            { value: "ACTIVE", label: "Активные" },
+            { value: "SUSPENDED", label: "Приостановленные" },
+          ]}
+        />
       </div>
       <section className="admin-card admin-table-wrap">
         <p className="muted">Найдено: {value(data, "total")}</p>
@@ -761,20 +783,22 @@ function Support({
                 <td>{value(row, "provider")}</td>
                 <td className="admin-cell-text">{value(row, "clientNote")}</td>
                 <td>
-                  <select
+                  <ProjectSelect
+                    ariaLabel="Статус запроса"
                     value={value(row, "status")}
-                    onChange={(event) =>
-                      onChange(String(row.id), event.target.value)
-                    }
-                    aria-label="Статус запроса"
-                  >
-                    <option>NEW</option>
-                    <option>IN_PROGRESS</option>
-                    <option>WAITING_FOR_CLIENT</option>
-                    <option>READY_FOR_CONNECTION</option>
-                    <option>COMPLETED</option>
-                    <option>CANCELED</option>
-                  </select>
+                    onChange={(status) => onChange(String(row.id), status)}
+                    options={[
+                      { value: "NEW", label: "Новый" },
+                      { value: "IN_PROGRESS", label: "В работе" },
+                      { value: "WAITING_FOR_CLIENT", label: "Ждём клиента" },
+                      {
+                        value: "READY_FOR_CONNECTION",
+                        label: "Готов к подключению",
+                      },
+                      { value: "COMPLETED", label: "Завершён" },
+                      { value: "CANCELED", label: "Отменён" },
+                    ]}
+                  />
                 </td>
                 <td>{formatDate(row.updatedAt)}</td>
               </tr>
@@ -783,6 +807,79 @@ function Support({
         </tbody>
       </table>
       {rows.length === 0 && <Empty text="Открытых обращений нет." />}
+    </section>
+  );
+}
+
+function TariffRequests({
+  data,
+  onChange,
+}: {
+  data: Json;
+  onChange: (id: string, status: string) => void;
+}) {
+  const rows = Array.isArray(data.requests) ? (data.requests as Json[]) : [];
+  return (
+    <section className="admin-card admin-table-wrap">
+      <h2>Заявки пользователей на тариф</h2>
+      <p className="muted">
+        Одобрение заявки не меняет доступ автоматически: назначение тарифа
+        остаётся отдельным действием администратора.
+      </p>
+      <table className="admin-table">
+        <thead>
+          <tr>
+            <th>Компания / пользователь</th>
+            <th>Текущий тариф</th>
+            <th>Запрошенный тариф</th>
+            <th>Режим</th>
+            <th>Дата</th>
+            <th>Статус</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row) => {
+            const workspace = row.workspace as Json;
+            const user = row.user as Json;
+            const current = Array.isArray(workspace?.subscriptions)
+              ? (workspace.subscriptions[0] as Json)
+              : undefined;
+            const currentPlan = current?.plan as Json;
+            const requestedPlan = row.requestedPlan as Json;
+            return (
+              <tr key={String(row.id)}>
+                <td>
+                  <strong>{value(workspace, "name")}</strong>
+                  <small>{value(user, "email")}</small>
+                </td>
+                <td>{currentPlan ? value(currentPlan, "name") : "—"}</td>
+                <td>{value(requestedPlan, "name")}</td>
+                <td>
+                  {value(row, "requestedServiceLevel") === "HOLYMEDIA_SUPPORT"
+                    ? "Расширенная поддержка"
+                    : "Самостоятельно"}
+                </td>
+                <td>{formatDate(row.createdAt)}</td>
+                <td>
+                  <ProjectSelect
+                    ariaLabel="Статус заявки на тариф"
+                    value={value(row, "status")}
+                    onChange={(status) => onChange(String(row.id), status)}
+                    options={[
+                      { value: "PENDING", label: "Новая" },
+                      { value: "IN_REVIEW", label: "На рассмотрении" },
+                      { value: "APPROVED", label: "Одобрена" },
+                      { value: "DECLINED", label: "Отклонена" },
+                      { value: "CANCELED", label: "Отменена" },
+                    ]}
+                  />
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+      {rows.length === 0 && <Empty text="Заявок на тарифы пока нет." />}
     </section>
   );
 }
@@ -853,6 +950,7 @@ function CompanyDrawer({
     ? (company.invitations as Json[])
     : [];
   const [plans, setPlans] = useState<Json[]>([]);
+  const [selectedPlanKey, setSelectedPlanKey] = useState("");
   useEffect(() => {
     void adminFetch("/plans")
       .then(async (response) =>
@@ -953,33 +1051,31 @@ function CompanyDrawer({
             {activePlan ? value(activePlan, "name") : "не назначен"}
           </p>
           <div className="admin-inline">
-            <select aria-label="Тариф компании" defaultValue="">
-              <option value="" disabled>
-                Выберите тариф
-              </option>
-              {plans.map((plan) => (
-                <option key={value(plan, "key")} value={value(plan, "key")}>
-                  {value(plan, "name")}
-                </option>
-              ))}
-            </select>
+            <ProjectSelect
+              ariaLabel="Тариф компании"
+              value={selectedPlanKey}
+              placeholder="Выберите тариф"
+              onChange={setSelectedPlanKey}
+              options={plans.map((plan) => ({
+                value: value(plan, "key"),
+                label: value(plan, "name"),
+              }))}
+            />
             <button
               className="secondary-button"
-              onClick={(event) => {
-                const select = event.currentTarget
-                  .previousElementSibling as HTMLSelectElement | null;
-                if (select?.value) onPlan(id, select.value, "TRIAL");
-              }}
+              disabled={!selectedPlanKey}
+              onClick={() =>
+                selectedPlanKey && onPlan(id, selectedPlanKey, "TRIAL")
+              }
             >
               14 дней trial
             </button>
             <button
               className="secondary-button"
-              onClick={(event) => {
-                const select = event.currentTarget.previousElementSibling
-                  ?.previousElementSibling as HTMLSelectElement | null;
-                if (select?.value) onPlan(id, select.value, "ACTIVE");
-              }}
+              disabled={!selectedPlanKey}
+              onClick={() =>
+                selectedPlanKey && onPlan(id, selectedPlanKey, "ACTIVE")
+              }
             >
               Назначить тариф
             </button>

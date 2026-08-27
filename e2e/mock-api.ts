@@ -124,6 +124,7 @@ export async function installMockApi(
       lastUsedAt: null,
     },
   ];
+  const tariffRequests: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -286,6 +287,8 @@ export async function installMockApi(
         reports: [],
       });
     if (path === "/api/v1/admin/support") return json(route, { requests: [] });
+    if (path === "/api/v1/admin/tariff-requests")
+      return json(route, { requests: tariffRequests });
     if (path === "/api/v1/admin/audit")
       return json(route, { events: [], total: 0, page: 1, pageSize: 25 });
     if (["/api/v1/auth/login", "/api/v1/auth/signup"].includes(path))
@@ -304,6 +307,27 @@ export async function installMockApi(
       return json(route, members);
     if (path === `/api/v1/workspaces/${workspace.id}/invitations`)
       return json(route, []);
+    if (path === `/api/v1/workspaces/${workspace.id}/billing/subscription`)
+      return json(route, null);
+    if (
+      path === `/api/v1/workspaces/${workspace.id}/billing/tariff-requests` &&
+      request.method() === "POST"
+    ) {
+      const body = request.postDataJSON() as { planKey?: string };
+      const existing = tariffRequests.find(
+        (item) =>
+          item.requestedPlanKey === body.planKey && item.status === "PENDING",
+      );
+      if (existing) return json(route, { request: existing, created: false });
+      const item = {
+        id: `tariff-request-${tariffRequests.length + 1}`,
+        requestedPlanKey: body.planKey,
+        status: "PENDING",
+        createdAt: new Date().toISOString(),
+      };
+      tariffRequests.push(item);
+      return json(route, { request: item, created: true });
+    }
     if (path === "/api/profile" && request.method() === "GET")
       return json(route, {
         profile: { name: "Анна", email: "phase-b-legacy-user@example.test" },

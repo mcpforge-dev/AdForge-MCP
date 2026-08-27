@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 
-const MINIMUM_LOADER_DURATION = 560;
+const MINIMUM_LOADER_DURATION = 1_050;
 
 export function AppLoader() {
   const [visible, setVisible] = useState(true);
@@ -27,7 +27,10 @@ export function AppLoader() {
       aria-hidden="true"
       data-loader-visible={visible ? "true" : "false"}
     >
-      <div className="app-loader__mark">
+      <span className="app-loader__node app-loader__node--one" />
+      <span className="app-loader__node app-loader__node--two" />
+      <span className="app-loader__node app-loader__node--three" />
+      <div className="app-loader__mark" aria-hidden="true">
         <svg viewBox="0 0 108 112" aria-hidden="true">
           <path
             className="app-loader__stream app-loader__stream--left"
@@ -59,6 +62,10 @@ export function AppLoader() {
           />
         </span>
       </div>
+      <p className="app-loader__caption">Готовим рабочее пространство</p>
+      <span className="app-loader__progress" aria-hidden="true">
+        <i />
+      </span>
     </div>
   );
 }

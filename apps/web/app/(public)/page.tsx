@@ -7,20 +7,30 @@ const baseUrl =
   process.env.NEXT_PUBLIC_PUBLIC_BASE_URL ?? "https://mcp.holymedia.kz";
 
 export default function PublicHomePage() {
-  const structuredData = {
-    "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "HolyMedia MCP",
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Web",
-    url: baseUrl,
-    description: "Подключайте рекламные кабинеты к Claude, ChatGPT или Codex.",
-    publisher: {
-      "@type": "Organization",
-      name: "HolyMedia",
-      url: "https://holymedia.kz",
+  const structuredData = [
+    {
+      "@context": "https://schema.org",
+      "@type": "WebSite",
+      name: "HolyMedia MCP",
+      url: baseUrl,
+      inLanguage: "ru-KZ",
     },
-  };
+    {
+      "@context": "https://schema.org",
+      "@type": "SoftwareApplication",
+      name: "HolyMedia MCP",
+      applicationCategory: "BusinessApplication",
+      operatingSystem: "Web",
+      url: baseUrl,
+      description:
+        "AI-доступ к подключённым рекламным кабинетам для аналитики и отчётов.",
+      publisher: {
+        "@type": "Organization",
+        name: "HolyMedia",
+        url: "https://holymedia.kz",
+      },
+    },
+  ];
 
   return (
     <main className="landing">

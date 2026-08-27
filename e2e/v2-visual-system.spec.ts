@@ -51,15 +51,16 @@ test.describe("visual system", () => {
       "data-loader-visible",
       "true",
     );
-    await page.waitForTimeout(420);
+    await page.waitForTimeout(720);
     await page.screenshot({ path: testInfo.outputPath("loader-light.png") });
+    await page.waitForTimeout(440);
     await expect(page.locator(".app-loader")).toHaveAttribute(
       "data-loader-visible",
       "false",
     );
 
-    const themeControl = page.getByRole("group", { name: "Theme" });
-    await themeControl.getByRole("button", { name: "Dark" }).click();
+    const themeControl = page.getByRole("radiogroup", { name: "Theme" });
+    await themeControl.getByRole("radio", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expect(page.locator("html")).toHaveAttribute(
       "data-theme-preference",
@@ -149,7 +150,7 @@ test.describe("visual system", () => {
 
     await page.keyboard.press("Escape");
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await page.getByRole("button", { name: "Dark" }).click();
+    await page.getByRole("radio", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await page.locator(".report-account-trigger").click();
     await expectNoAxeViolations(page, "dark reports modal");
@@ -201,7 +202,7 @@ test.describe("visual system", () => {
       path: testInfo.outputPath("light-admin.png"),
       fullPage: true,
     });
-    await page.getByRole("button", { name: "Dark" }).click();
+    await page.getByRole("radio", { name: "Dark" }).click();
     await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
     await expectNoAxeViolations(page, "dark admin");
     await page.screenshot({
@@ -229,5 +230,25 @@ test.describe("visual system", () => {
     );
     if (isCoarsePointer)
       await expect(page.locator(".brand-cursor")).toHaveCount(0);
+  });
+
+  test("uses an accessible project listbox and requests a tariff without self-assigning", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await login(page);
+    await page.getByRole("button", { name: "Тарифы", exact: true }).click();
+    const support = page.getByRole("radio", { name: "Расширенная поддержка" });
+    await support.click();
+    await expect(support).toHaveAttribute("aria-checked", "true");
+    await page.getByRole("button", { name: "Выбрать тариф" }).first().click();
+    const confirmation = page.getByRole("dialog", {
+      name: "Подтвердить запрос",
+    });
+    await expect(confirmation).toBeVisible();
+    await confirmation
+      .getByRole("button", { name: "Отправить запрос" })
+      .click();
+    await expect(page.getByRole("status")).toContainText("Запрос отправлен");
   });
 });

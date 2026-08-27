@@ -4,7 +4,9 @@ import { LegalHeader } from "../../components/legal-header";
 import { SiteFooter } from "../../components/site-footer";
 
 export const metadata: Metadata = {
-  title: "Политика конфиденциальности | HolyMedia MCP",
+  title: "Политика конфиденциальности",
+  description: "Политика конфиденциальности HolyMedia MCP.",
+  alternates: { canonical: "/privacy" },
   robots: { index: true, follow: true },
 };
 

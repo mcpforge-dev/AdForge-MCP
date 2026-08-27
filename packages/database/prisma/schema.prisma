@@ -76,6 +76,14 @@ enum ManualConnectionRequestStatus {
   CANCELED
 }
 
+enum TariffRequestStatus {
+  PENDING
+  IN_REVIEW
+  APPROVED
+  DECLINED
+  CANCELED
+}
+
 model User {
   id                String               @id @default(uuid()) @db.Uuid
   email             String               @unique @db.VarChar(320)
@@ -97,6 +105,7 @@ model User {
   oauthStates       OAuthState[]
   siteAnalysisRecords SiteAnalysisRecord[]
   manualConnectionRequests ManualConnectionRequest[]
+  tariffRequests TariffRequest[]
   mcpOAuthClients McpOAuthClient[]
   mcpOAuthCodes McpOAuthAuthorizationCode[]
   serviceIdentities ServiceIdentity[]
@@ -152,6 +161,7 @@ model Workspace {
   usageRecords UsageRecord[]
   entitlements Entitlement[]
   manualConnectionRequests ManualConnectionRequest[]
+  tariffRequests TariffRequest[]
   mcpPreviews  McpPreview[]
   mcpOAuthClients McpOAuthClient[]
   mcpOAuthCodes McpOAuthAuthorizationCode[]
@@ -487,6 +497,7 @@ model Plan {
   prices        Price[]
   subscriptions WorkspaceSubscription[]
   orders        BillingOrder[]
+  tariffRequests TariffRequest[]
   @@index([active])
   @@map("plans")
 }
@@ -508,6 +519,25 @@ model Price {
   @@unique([planId, currency, interval])
   @@index([active, currency])
   @@map("prices")
+}
+
+model TariffRequest {
+  id                    String              @id @default(uuid()) @db.Uuid
+  workspaceId           String              @map("workspace_id") @db.Uuid
+  userId                String              @map("user_id") @db.Uuid
+  requestedPlanId       String              @map("requested_plan_id") @db.Uuid
+  requestedServiceLevel String              @map("requested_service_level") @db.VarChar(32)
+  status                TariffRequestStatus @default(PENDING)
+  createdAt             DateTime            @default(now()) @map("created_at")
+  updatedAt             DateTime            @updatedAt @map("updated_at")
+  resolvedAt            DateTime?           @map("resolved_at")
+  workspace             Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                  User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestedPlan         Plan                @relation(fields: [requestedPlanId], references: [id], onDelete: Restrict)
+
+  @@index([workspaceId, status, createdAt])
+  @@index([status, createdAt])
+  @@map("tariff_requests")
 }
 
 model WorkspaceSubscription {

@@ -2,6 +2,7 @@
 
 import { type FormEvent, useState } from "react";
 import { useLanguage } from "./language-switcher";
+import { ProjectSelect } from "./project-select";
 
 const supportEmail =
   process.env.NEXT_PUBLIC_SUPPORT_EMAIL ?? "mcp@holymedia.kz";
@@ -66,11 +67,15 @@ export function FeedbackBlock() {
       <form className="feedback-block__form" onSubmit={submit}>
         <label>
           {copy.category}
-          <select name="category" defaultValue={copy.categories[0]}>
-            {copy.categories.map((category) => (
-              <option key={category}>{category}</option>
-            ))}
-          </select>
+          <ProjectSelect
+            ariaLabel={copy.category}
+            name="category"
+            defaultValue={copy.categories[0]}
+            options={copy.categories.map((category) => ({
+              value: category,
+              label: category,
+            }))}
+          />
         </label>
         <label>
           {copy.message}

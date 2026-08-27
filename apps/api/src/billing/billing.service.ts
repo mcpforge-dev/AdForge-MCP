@@ -5,12 +5,16 @@ import {
   Inject,
   Injectable,
 } from "@nestjs/common";
+import { tariffPlanByKey, tariffServiceLevel } from "@holymedia/contracts";
+import { AuditService } from "../audit/audit.service.js";
+import type { RequestWithAuth } from "../auth/auth.types.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 
 @Injectable()
 export class BillingService {
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(AuditService) private readonly audit?: AuditService,
   ) {}
 
   public listPlans(): Promise<unknown> {
@@ -25,10 +29,58 @@ export class BillingService {
 
   public currentSubscription(workspaceId: string): Promise<unknown> {
     return this.database.client.workspaceSubscription.findFirst({
-      where: { workspaceId },
+      where: {
+        workspaceId,
+        status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] },
+      },
       include: { plan: true, price: true },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  public async createTariffRequest(
+    workspaceId: string,
+    planKey: string,
+    request: RequestWithAuth,
+  ): Promise<unknown> {
+    const userId = request.user?.userId;
+    if (!userId)
+      throw new ForbiddenException("Authenticated user is required.");
+    const catalogPlan = tariffPlanByKey(planKey);
+    const serviceLevel = tariffServiceLevel(planKey);
+    if (!catalogPlan || !serviceLevel)
+      throw new HttpException("Plan is not available.", HttpStatus.BAD_REQUEST);
+    const plan = await this.database.client.plan.findUnique({
+      where: { key: planKey },
+      select: { id: true, key: true, name: true, active: true },
+    });
+    if (!plan?.active)
+      throw new HttpException("Plan is not available.", HttpStatus.BAD_REQUEST);
+    const existing = await this.database.client.tariffRequest.findFirst({
+      where: { workspaceId, requestedPlanId: plan.id, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      include: { requestedPlan: { select: { key: true, name: true } } },
+    });
+    if (existing) return { request: existing, created: false };
+    const created = await this.database.client.tariffRequest.create({
+      data: {
+        workspaceId,
+        userId,
+        requestedPlanId: plan.id,
+        requestedServiceLevel: serviceLevel,
+      },
+      include: { requestedPlan: { select: { key: true, name: true } } },
+    });
+    await this.audit?.record({
+      eventType: "tariff_request_created",
+      actorUserId: userId,
+      workspaceId,
+      targetType: "tariff_request",
+      targetId: created.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: { plan: plan.key, serviceLevel },
+    });
+    return { request: created, created: true };
   }
 
   public usage(workspaceId: string): Promise<unknown> {

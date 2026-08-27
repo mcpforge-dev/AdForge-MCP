@@ -96,3 +96,9 @@ export class AdminSupportStatusDto {
   @MaxLength(2000)
   public note?: string;
 }
+
+export class AdminTariffRequestStatusDto {
+  @IsIn(["PENDING", "IN_REVIEW", "APPROVED", "DECLINED", "CANCELED"])
+  public status!:
+    "PENDING" | "IN_REVIEW" | "APPROVED" | "DECLINED" | "CANCELED";
+}

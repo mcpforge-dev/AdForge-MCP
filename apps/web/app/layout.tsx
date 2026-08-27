@@ -5,10 +5,15 @@ import { BrandCursor } from "./components/brand-cursor";
 import { ThemeProvider } from "./components/theme-provider";
 import "./globals.css";
 
+const publicBaseUrl =
+  process.env.NEXT_PUBLIC_PUBLIC_BASE_URL ?? "https://mcp.holymedia.kz";
+
 export const metadata: Metadata = {
-  title: "HolyMedia MCP",
-  description: "Управление рекламными кабинетами и аналитика HolyMedia MCP.",
-  icons: { icon: "/icon.svg" },
+  metadataBase: new URL(publicBaseUrl),
+  title: "HolyMedia MCP — AI-доступ к рекламным кабинетам",
+  description:
+    "Подключайте рекламные кабинеты к AI для аналитики и отчётов в HolyMedia MCP.",
+  icons: { icon: "/icon.svg", apple: "/icon.svg" },
 };
 
 export default function RootLayout({
@@ -17,9 +22,19 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
+        <meta
+          name="theme-color"
+          media="(prefers-color-scheme: dark)"
+          content="#0b0d11"
+        />
+        <meta
+          name="theme-color"
+          media="(prefers-color-scheme: light)"
+          content="#f4f6fa"
+        />
         <script
           dangerouslySetInnerHTML={{
-            __html: `(function(){try{var p=localStorage.getItem('holymedia-theme');var v=p==='light'||p==='dark'||p==='system'?p:'system';var t=v==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):v;document.documentElement.dataset.theme=t;document.documentElement.dataset.themePreference=v;document.documentElement.style.colorScheme=t;}catch(e){}})();`,
+            __html: `(function(){try{var p=localStorage.getItem('holymedia-theme');var t=p==='light'?'light':'dark';if(p==='system')localStorage.setItem('holymedia-theme','dark');document.documentElement.dataset.theme=t;document.documentElement.dataset.themePreference=t;document.documentElement.style.colorScheme=t;}catch(e){document.documentElement.dataset.theme='dark';document.documentElement.style.colorScheme='dark';}})();`,
           }}
         />
       </head>

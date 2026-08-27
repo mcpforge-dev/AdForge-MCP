@@ -1,8 +1,19 @@
-import { Controller, Get, Inject, Param, UseGuards } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Inject,
+  Param,
+  Post,
+  Req,
+  UseGuards,
+} from "@nestjs/common";
+import type { RequestWithAuth } from "../auth/auth.types.js";
 import { RequirePermissions } from "../auth/auth.decorators.js";
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
 import { BillingService } from "./billing.service.js";
+import type { CreateTariffRequestDto } from "./billing.dto.js";
 
 @Controller()
 export class BillingController {
@@ -20,6 +31,21 @@ export class BillingController {
   @RequirePermissions("billing.read")
   public subscription(@Param("id") workspaceId: string): Promise<unknown> {
     return this.billing.currentSubscription(workspaceId);
+  }
+
+  @Post("workspaces/:id/billing/tariff-requests")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("billing.read")
+  public createTariffRequest(
+    @Param("id") workspaceId: string,
+    @Body() input: CreateTariffRequestDto,
+    @Req() request: RequestWithAuth,
+  ): Promise<unknown> {
+    return this.billing.createTariffRequest(
+      workspaceId,
+      input.planKey,
+      request,
+    );
   }
 
   @Get("workspaces/:id/billing/usage")

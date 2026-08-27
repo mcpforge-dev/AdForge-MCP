@@ -25,6 +25,7 @@ import {
   AdminLoginDto,
   AdminPlanDto,
   AdminSupportStatusDto,
+  AdminTariffRequestStatusDto,
   AdminTrialExtensionDto,
   AdminUserStatusDto,
 } from "./admin.dto.js";
@@ -187,6 +188,22 @@ export class AdminController {
     @Req() request: RequestWithAuth,
   ): Promise<unknown> {
     return this.admin.updateSupport(id, input, request);
+  }
+
+  @UseGuards(AdminAuthenticationGuard)
+  @Get("tariff-requests")
+  public tariffRequests(): Promise<unknown> {
+    return this.admin.tariffRequests();
+  }
+
+  @UseGuards(AdminAuthenticationGuard)
+  @Patch("tariff-requests/:id")
+  public updateTariffRequest(
+    @Param("id") id: string,
+    @Body() input: AdminTariffRequestStatusDto,
+    @Req() request: RequestWithAuth,
+  ): Promise<unknown> {
+    return this.admin.updateTariffRequest(id, input, request);
   }
 
   @UseGuards(AdminAuthenticationGuard)

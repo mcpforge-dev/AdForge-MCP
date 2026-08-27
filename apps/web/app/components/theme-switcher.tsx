@@ -4,7 +4,6 @@ import { useTheme } from "./theme-provider";
 
 const options = [
   { value: "light", label: "Light", icon: "☀" },
-  { value: "system", label: "System", icon: "◐" },
   { value: "dark", label: "Dark", icon: "☾" },
 ] as const;
 
@@ -16,7 +15,7 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
         compact ? "theme-switcher theme-switcher--compact" : "theme-switcher"
       }
       aria-label="Theme"
-      role="group"
+      role="radiogroup"
       data-language-static
     >
       {options.map((option) => (
@@ -25,7 +24,8 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
           type="button"
           className={preference === option.value ? "is-active" : ""}
           aria-label={option.label}
-          aria-pressed={preference === option.value}
+          aria-checked={preference === option.value}
+          role="radio"
           title={option.label}
           onClick={() => setPreference(option.value)}
         >

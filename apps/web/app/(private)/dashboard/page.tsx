@@ -10,6 +10,8 @@ import {
 } from "../../components/language-switcher";
 import { FeedbackBlock } from "../../components/feedback-block";
 import { TariffCatalog } from "../../components/tariff-catalog";
+import { SubscriptionInfo } from "../../components/subscription-info";
+import { ProjectSelect } from "../../components/project-select";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const MCP_URL = "https://mcp.holymedia.kz/mcp";
@@ -55,8 +57,11 @@ type ServiceToken = {
 type Profile = { name: string; email: string };
 type BillingSubscription = {
   status?: string;
+  startsAt?: string | null;
+  currentPeriodEnd?: string | null;
   trialEndsAt?: string | null;
-  plan?: { key?: string } | null;
+  metadata?: Record<string, unknown> | null;
+  plan?: { key?: string; name?: string } | null;
 };
 type Section =
   | "overview"
@@ -528,15 +533,6 @@ export default function DashboardPage() {
             new Date(token.expiresAt).getTime() > Date.now()),
       ).length,
     [tokens],
-  );
-  const attentionConnectionCount = useMemo(
-    () =>
-      connections.filter((connection) =>
-        ["PENDING", "DEGRADED", "REAUTH_REQUIRED", "ERROR"].includes(
-          connection.status,
-        ),
-      ).length,
-    [connections],
   );
   const selectorConnection =
     connections.find((connection) => connection.id === openAccountsId) ?? null;
@@ -1307,12 +1303,12 @@ export default function DashboardPage() {
     disabled?: boolean;
   }> = [
     { id: "overview", label: "Обзор" },
+    { id: "tariffs", label: "Тарифы" },
     { id: "connections", label: "Подключения" },
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
     { label: "Анализ сайта", disabled: true },
     { label: "SEO", disabled: true },
-    { id: "tariffs", label: "Тарифы" },
   ];
   const allProviderIds = [
     "GOOGLE_ADS",
@@ -1473,11 +1469,23 @@ export default function DashboardPage() {
                 <button
                   className="stat-card stat-card--link"
                   type="button"
-                  onClick={() => setSection("connections")}
+                  onClick={() => setSection("tariffs")}
                 >
-                  <span>Требуют внимания</span>
-                  <strong>{attentionConnectionCount}</strong>
-                  <small>подключений</small>
+                  <span>Тариф</span>
+                  <strong>
+                    {subscription?.plan?.key === "legacy_internal"
+                      ? "Полный доступ"
+                      : (subscription?.plan?.name ?? "Не выбран")}
+                  </strong>
+                  <small>
+                    {subscription?.plan?.key === "legacy_internal"
+                      ? "Бессрочно"
+                      : subscription?.status === "TRIALING"
+                        ? "Пробный период"
+                        : subscription?.status === "ACTIVE"
+                          ? "Активен"
+                          : "Открыть тарифы"}
+                  </small>
                 </button>
               </div>
             </div>
@@ -1506,7 +1514,10 @@ export default function DashboardPage() {
             <h1 className="sr-only">
               {"\u0422\u0430\u0440\u0438\u0444\u044b HolyMedia MCP"}
             </h1>
-            <TariffCatalog subscription={subscription} />
+            <TariffCatalog
+              subscription={subscription}
+              workspaceId={active?.id}
+            />
           </section>
         )}
 
@@ -1705,11 +1716,16 @@ export default function DashboardPage() {
                         </label>
                         <label>
                           Срок действия
-                          <select name="expires_in_days" defaultValue="90">
-                            <option value="30">30 дней</option>
-                            <option value="90">90 дней</option>
-                            <option value="365">1 год</option>
-                          </select>
+                          <ProjectSelect
+                            ariaLabel="Срок действия"
+                            name="expires_in_days"
+                            defaultValue="90"
+                            options={[
+                              { value: "30", label: "30 дней" },
+                              { value: "90", label: "90 дней" },
+                              { value: "365", label: "1 год" },
+                            ]}
+                          />
                         </label>
                       </div>
                       <p className="scope-note">
@@ -1993,33 +2009,31 @@ export default function DashboardPage() {
                   </label>
                   <label>
                     Период
-                    <select
-                      name="period"
-                      value={reportDays}
-                      onChange={(event) =>
-                        setReportDays(Number(event.target.value))
-                      }
-                    >
-                      <option value="7">Последние 7 дней</option>
-                      <option value="14">Последние 14 дней</option>
-                      <option value="30">Последние 30 дней</option>
-                      <option value="90">Последние 90 дней</option>
-                    </select>
+                    <ProjectSelect
+                      ariaLabel="Период отчёта"
+                      value={String(reportDays)}
+                      onChange={(value) => setReportDays(Number(value))}
+                      options={[
+                        { value: "7", label: "Последние 7 дней" },
+                        { value: "14", label: "Последние 14 дней" },
+                        { value: "30", label: "Последние 30 дней" },
+                        { value: "90", label: "Последние 90 дней" },
+                      ]}
+                    />
                   </label>
                   <label>
                     Формат
-                    <select
-                      name="format"
+                    <ProjectSelect
+                      ariaLabel="Формат отчёта"
                       value={reportFormat}
-                      onChange={(event) =>
-                        setReportFormat(
-                          event.target.value === "pptx" ? "pptx" : "docx",
-                        )
+                      onChange={(value) =>
+                        setReportFormat(value === "pptx" ? "pptx" : "docx")
                       }
-                    >
-                      <option value="docx">Word (.docx)</option>
-                      <option value="pptx">PowerPoint (.pptx)</option>
-                    </select>
+                      options={[
+                        { value: "docx", label: "Word (.docx)" },
+                        { value: "pptx", label: "PowerPoint (.pptx)" },
+                      ]}
+                    />
                   </label>
                   <button
                     className="primary-button"
@@ -2638,6 +2652,10 @@ export default function DashboardPage() {
                   </button>
                 </form>
               </section>
+              <SubscriptionInfo
+                subscription={subscription}
+                onOpenTariffs={() => setSection("tariffs")}
+              />
             </div>
             {active && <CompanyTeam workspace={active} canManage={canManage} />}
           </section>

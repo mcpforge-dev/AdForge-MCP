@@ -6,40 +6,63 @@ import {
   SUPPORT_FEATURES,
   TARIFF_FEATURES,
   TARIFF_PLANS,
-  TARIFF_TRIAL_DAYS,
   type TariffServiceLevel,
 } from "@holymedia/contracts";
 import { useLanguage } from "./language-switcher";
+import {
+  SubscriptionInfo,
+  type SubscriptionInfoValue,
+} from "./subscription-info";
 
-type Subscription = {
-  status?: string;
-  trialEndsAt?: string | null;
-  plan?: { key?: string } | null;
-};
+const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
 function money(value: number) {
-  return new Intl.NumberFormat("ru-RU").format(value) + " ₸";
+  return `${new Intl.NumberFormat("ru-RU").format(value)} ₸`;
 }
 
 export function TariffCatalog({
   subscription,
+  workspaceId,
 }: {
-  subscription?: Subscription | null;
+  subscription?: SubscriptionInfoValue | null;
+  workspaceId?: string | undefined;
 }) {
   const language = useLanguage();
-  const [level, setLevel] = useState<TariffServiceLevel>("SELF_SERVICE");
   const ru = language === "ru";
+  const [level, setLevel] = useState<TariffServiceLevel>("SELF_SERVICE");
+  const [requestedPlan, setRequestedPlan] = useState<string | null>(null);
+  const [requestSent, setRequestSent] = useState(false);
+  const [pendingPlan, setPendingPlan] = useState<string | null>(null);
+  const [requestError, setRequestError] = useState<string | null>(null);
   const currentKey = subscription?.plan?.key;
-  const trialEnds = subscription?.trialEndsAt
-    ? new Date(subscription.trialEndsAt)
-    : null;
-  const days = trialEnds
-    ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86_400_000))
-    : null;
-  const status =
-    subscription?.status === "TRIALING" && days === 0
-      ? "EXPIRED"
-      : subscription?.status;
+
+  async function requestPlan(planKey: string) {
+    if (!workspaceId) return;
+    setPendingPlan(planKey);
+    setRequestError(null);
+    try {
+      const response = await fetch(
+        `${API}/api/v1/workspaces/${workspaceId}/billing/tariff-requests`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          credentials: "include",
+          body: JSON.stringify({ planKey }),
+        },
+      );
+      if (!response.ok) throw new Error("request_failed");
+      setRequestedPlan(null);
+      setRequestSent(true);
+    } catch {
+      setRequestError(
+        ru
+          ? "Не удалось отправить запрос. Попробуйте ещё раз."
+          : "The request could not be sent. Please try again.",
+      );
+    } finally {
+      setPendingPlan(null);
+    }
+  }
 
   return (
     <section className="tariffs" id="tariffs" aria-labelledby="tariffs-title">
@@ -51,71 +74,57 @@ export function TariffCatalog({
           <h2 id="tariffs-title">
             {ru ? "Выберите формат работы" : "Choose how you work"}
           </h2>
-          <p>
-            {ru
-              ? `Все тарифы начинаются с ${TARIFF_TRIAL_DAYS} дней бесплатно.`
-              : `Every plan starts with ${TARIFF_TRIAL_DAYS} days free.`}
-          </p>
+          <p>{ru ? "Пробный период — 14 дней." : "14-day trial period."}</p>
         </div>
         <div
           className="tariffs__switch"
-          role="group"
+          role="radiogroup"
           aria-label={ru ? "Уровень обслуживания" : "Service level"}
         >
-          <button
-            type="button"
-            className={level === "SELF_SERVICE" ? "is-active" : ""}
-            onClick={() => setLevel("SELF_SERVICE")}
-          >
-            {ru ? "Самостоятельно" : "Self-service"}
-          </button>
-          <button
-            type="button"
-            className={level === "HOLYMEDIA_SUPPORT" ? "is-active" : ""}
-            onClick={() => setLevel("HOLYMEDIA_SUPPORT")}
-          >
-            {ru ? "С поддержкой Holy Media" : "With Holy Media support"}
-          </button>
+          {(
+            [
+              [
+                "SELF_SERVICE",
+                ru ? "Самостоятельно" : "Self-service",
+                ru
+                  ? "Управляйте подключениями и работой сами."
+                  : "Manage connections and work independently.",
+              ],
+              [
+                "HOLYMEDIA_SUPPORT",
+                ru ? "Расширенная поддержка" : "Extended support",
+                ru
+                  ? "Команда Holy Media помогает с регулярной работой."
+                  : "Holy Media supports ongoing work.",
+              ],
+            ] as const
+          ).map(([value, label, hint]) => (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={level === value}
+              className={level === value ? "is-active" : ""}
+              onClick={() => setLevel(value)}
+            >
+              <span>{label}</span>
+              <small>{hint}</small>
+            </button>
+          ))}
         </div>
       </div>
 
-      {subscription && (
-        <div className="tariffs__current" role="status">
-          <strong>
-            {status === "TRIALING"
-              ? ru
-                ? "Пробный период"
-                : "Free trial"
-              : status === "EXPIRED"
-                ? ru
-                  ? "Пробный период завершён"
-                  : "Free trial ended"
-                : status === "ACTIVE"
-                  ? ru
-                    ? "Ваш тариф активен"
-                    : "Your plan is active"
-                  : ru
-                    ? "Текущий статус доступа"
-                    : "Current access status"}
-          </strong>
-          {currentKey && (
-            <span>
-              {TARIFF_PLANS.find((item) =>
-                Object.values(item.dbKey).includes(currentKey),
-              )?.name[language] ?? (ru ? "Сохранённый тариф" : "Saved plan")}
-            </span>
-          )}
-          {status === "TRIALING" && days !== null && (
-            <span>
-              {ru ? `Осталось дней: ${days}` : `${days} days remaining`}
-            </span>
-          )}
-        </div>
+      {subscription && <SubscriptionInfo subscription={subscription} compact />}
+      {requestError && (
+        <p className="tariffs__request-error" role="alert">
+          {requestError}
+        </p>
       )}
 
       <div className="tariffs__plans">
         {TARIFF_PLANS.map((plan) => {
-          const selected = currentKey === plan.dbKey[level];
+          const planKey = plan.dbKey[level];
+          const selected = currentKey === planKey;
           return (
             <article
               className={
@@ -139,12 +148,23 @@ export function TariffCatalog({
               </p>
               {selected ? (
                 <b>{ru ? "Ваш тариф" : "Your plan"}</b>
+              ) : workspaceId ? (
+                <button
+                  className="btn btn--secondary btn--small"
+                  type="button"
+                  onClick={() => {
+                    setRequestSent(false);
+                    setRequestedPlan(planKey);
+                  }}
+                >
+                  {ru ? "Выбрать тариф" : "Choose plan"}
+                </button>
               ) : (
                 <Link
                   className="btn btn--secondary btn--small"
                   href="/auth?mode=signup"
                 >
-                  {ru ? "Начать бесплатно" : "Start free"}
+                  {ru ? "Начать пробный период" : "Start trial"}
                 </Link>
               )}
             </article>
@@ -192,6 +212,56 @@ export function TariffCatalog({
           </tbody>
         </table>
       </details>
+
+      {requestedPlan && (
+        <div
+          className="tariffs__request-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="tariff-request-title"
+        >
+          <div>
+            <h3 id="tariff-request-title">
+              {ru ? "Подтвердить запрос" : "Confirm request"}
+            </h3>
+            <p>
+              {ru
+                ? "Запрос будет отправлен администратору Holy Media. Тариф не изменится до его подтверждения."
+                : "The request will be sent to a Holy Media administrator. Your plan will not change until it is approved."}
+            </p>
+            <div className="tariffs__request-actions">
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => setRequestedPlan(null)}
+              >
+                {ru ? "Отмена" : "Cancel"}
+              </button>
+              <button
+                type="button"
+                className="primary-button"
+                disabled={pendingPlan === requestedPlan}
+                onClick={() => void requestPlan(requestedPlan)}
+              >
+                {pendingPlan === requestedPlan
+                  ? ru
+                    ? "Отправляем…"
+                    : "Sending…"
+                  : ru
+                    ? "Отправить запрос"
+                    : "Send request"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {requestSent && (
+        <p className="tariffs__request-confirmation" role="status">
+          {ru
+            ? "Запрос отправлен администратору. Текущий тариф не изменён."
+            : "Your request has been sent. Your current plan has not changed."}
+        </p>
+      )}
     </section>
   );
 }

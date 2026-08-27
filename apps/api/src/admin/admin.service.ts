@@ -36,6 +36,7 @@ import type {
   AdminLoginDto,
   AdminPlanDto,
   AdminSupportStatusDto,
+  AdminTariffRequestStatusDto,
   AdminTrialExtensionDto,
   AdminUserStatusDto,
 } from "./admin.dto.js";
@@ -795,6 +796,67 @@ export class AdminService {
       id,
     );
     return { request: row };
+  }
+
+  public async tariffRequests(): Promise<unknown> {
+    return {
+      requests: await this.database.client.tariffRequest.findMany({
+        orderBy: { createdAt: "desc" },
+        take: 100,
+        include: {
+          workspace: {
+            select: {
+              id: true,
+              name: true,
+              subscriptions: {
+                where: { status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] } },
+                orderBy: { createdAt: "desc" },
+                take: 1,
+                select: {
+                  status: true,
+                  plan: { select: { key: true, name: true } },
+                },
+              },
+            },
+          },
+          user: { select: { id: true, name: true, email: true } },
+          requestedPlan: { select: { key: true, name: true } },
+        },
+      }),
+    };
+  }
+
+  public async updateTariffRequest(
+    id: string,
+    input: AdminTariffRequestStatusDto,
+    request: RequestWithAuth,
+  ): Promise<unknown> {
+    const tariffRequest = await this.database.client.tariffRequest.findUnique({
+      where: { id },
+      select: { id: true, workspaceId: true },
+    });
+    if (!tariffRequest)
+      throw new NotFoundException("Tariff request not found.");
+    const updated = await this.database.client.tariffRequest.update({
+      where: { id },
+      data: {
+        status: input.status,
+        resolvedAt: ["APPROVED", "DECLINED", "CANCELED"].includes(input.status)
+          ? new Date()
+          : null,
+      },
+      include: { requestedPlan: { select: { key: true, name: true } } },
+    });
+    await this.record(
+      "admin_tariff_request_updated",
+      request,
+      true,
+      { status: input.status },
+      tariffRequest.workspaceId,
+      "tariff_request",
+      id,
+    );
+    return { request: updated };
   }
 
   public async auditLog(page = 1): Promise<unknown> {
