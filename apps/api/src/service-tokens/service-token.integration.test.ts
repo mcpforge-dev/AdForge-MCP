@@ -41,6 +41,7 @@ describe.skipIf(!integrationEnabled)(
         data: {
           name: "Service token integration",
           slug: `service-token-${suffix}`,
+          accessStatus: "ACTIVE",
           memberships: { create: { userId: user.id, role: "OWNER" } },
         },
       });
