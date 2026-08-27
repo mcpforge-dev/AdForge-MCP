@@ -4487,14 +4487,29 @@ html[data-theme="light"] .footer__brand-logo--light {
 .app-loader__channel {
   animation-delay: 120ms;
 }
-.app-loader__mark img {
+.app-loader__wordmark {
+  position: relative;
+  display: block;
+  width: 164px;
+  height: 47px;
+}
+
+.app-loader__wordmark img {
+  position: absolute;
+  inset: 0;
   width: 164px;
   height: auto;
   opacity: 0;
   animation: loader-wordmark 220ms ease-out 350ms forwards;
 }
-html[data-theme="light"] .app-loader__mark img {
-  content: url("/assets/brand/holymedia-mcp-horizontal-dark.svg");
+.app-loader__wordmark--light {
+  display: none;
+}
+html[data-theme="light"] .app-loader__wordmark--dark {
+  display: none;
+}
+html[data-theme="light"] .app-loader__wordmark--light {
+  display: block;
 }
 @keyframes loader-draw {
   to {
@@ -4652,7 +4667,7 @@ html[data-theme="light"] .company-status--suspended {
     animation-iteration-count: 1 !important;
     transition-duration: 1ms !important;
   }
-  .app-loader__mark img {
+  .app-loader__wordmark img {
     opacity: 1;
     transform: none;
   }
@@ -4979,5 +4994,40 @@ html[data-theme="light"] .company-status--suspended {
 
   .report-account-list {
     grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 620px) {
+  .dashboard-topbar {
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .dashboard-header .tabs-bar {
+    max-width: 100%;
+    margin-inline: 0;
+    overscroll-behavior-x: contain;
+  }
+
+  .dashboard-topbar > .brand-link {
+    width: 100%;
+  }
+
+  .dashboard-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .dashboard-actions .profile-link {
+    margin-left: auto;
+  }
+
+  .dashboard-actions .profile-link strong {
+    display: none;
+  }
+
+  .dashboard-actions > .ghost-button {
+    min-height: 36px;
+    padding-inline: 10px;
   }
 }

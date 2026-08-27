@@ -46,7 +46,18 @@ export function AppLoader() {
             d="M36 47c-10 4-16 10-16 20v37m16-57c8 4 13 9 18 9s10-5 18-9m0 0c10 4 16 10 16 20v37M45 105V68c0-8 4-13 9-16 5 3 9 8 9 16v37"
           />
         </svg>
-        <img src="/assets/brand/holymedia-mcp-horizontal.svg" alt="" />
+        <span className="app-loader__wordmark">
+          <img
+            className="app-loader__wordmark--dark"
+            src="/assets/brand/holymedia-mcp-horizontal.svg"
+            alt=""
+          />
+          <img
+            className="app-loader__wordmark--light"
+            src="/assets/brand/holymedia-mcp-horizontal-dark.svg"
+            alt=""
+          />
+        </span>
       </div>
     </div>
   );

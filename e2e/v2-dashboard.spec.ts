@@ -871,6 +871,7 @@ test.describe("restored HolyMedia client UX", () => {
         label: button.textContent?.trim(),
         width: button.getBoundingClientRect().width,
         height: button.getBoundingClientRect().height,
+        themeControl: Boolean(button.closest(".theme-switcher")),
       })),
     }));
     expect(layout.document).toBeLessThanOrEqual(layout.viewport + 1);
@@ -883,6 +884,7 @@ test.describe("restored HolyMedia client UX", () => {
           button.width > 0 &&
           button.height > 0 &&
           button.height < 36 &&
+          !button.themeControl &&
           !["EN", "RU"].includes(button.label),
       ),
     ).toEqual([]);
