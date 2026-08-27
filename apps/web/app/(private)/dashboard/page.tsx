@@ -13,7 +13,13 @@ import { FeedbackBlock } from "../../components/feedback-block";
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const MCP_URL = "https://mcp.holymedia.kz/mcp";
 
-type Workspace = { id: string; name: string; slug: string; role: string };
+type Workspace = {
+  id: string;
+  name: string;
+  slug: string;
+  role: string;
+  accessStatus: "PENDING" | "ACTIVE" | "SUSPENDED";
+};
 type Provider = {
   id: string;
   displayName: string;
@@ -379,6 +385,7 @@ export default function DashboardPage() {
   const [confirm, setConfirm] = useState<ConfirmAction | null>(null);
 
   const canManage = Boolean(active && ["OWNER", "ADMIN"].includes(active.role));
+  const accessBlocked = Boolean(active && active.accessStatus !== "ACTIVE");
   const enabledAccounts = useMemo(
     () =>
       connections.flatMap((connection) =>
@@ -2573,6 +2580,7 @@ export default function DashboardPage() {
                 </form>
               </section>
             </div>
+            {active && <CompanyTeam workspace={active} canManage={canManage} />}
           </section>
         )}
       </div>
