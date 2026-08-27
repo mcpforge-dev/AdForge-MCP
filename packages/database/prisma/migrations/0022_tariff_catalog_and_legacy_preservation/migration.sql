@@ -31,10 +31,10 @@ ON CONFLICT ("plan_id", "currency", "interval") DO UPDATE SET "amount" = EXCLUDE
 -- Existing active workspaces remain on their approved legacy access. New
 -- companies receive a tariff only through the protected admin assignment flow.
 INSERT INTO "workspace_subscriptions" (
-  "id", "workspace_id", "plan_id", "status", "starts_at", "current_period_start", "current_period_end", "metadata"
+  "id", "workspace_id", "plan_id", "status", "starts_at", "current_period_start", "current_period_end", "metadata", "updated_at"
 )
 SELECT gen_random_uuid(), w."id", p."id", 'ACTIVE', w."created_at", CURRENT_TIMESTAMP, CURRENT_TIMESTAMP + INTERVAL '365 days',
-       '{"source":"tariff_catalog_legacy_preservation"}'::jsonb
+       '{"source":"tariff_catalog_legacy_preservation"}'::jsonb, CURRENT_TIMESTAMP
 FROM "workspaces" w
 JOIN "plans" p ON p."key" = 'legacy_internal'
 WHERE w."access_status" = 'ACTIVE'
