@@ -281,7 +281,11 @@ export class BillingService {
         orderBy: { createdAt: "desc" },
       }),
       this.database.client.workspaceSubscription.findFirst({
-        where: { workspaceId, status: "TRIALING", trialEndsAt: { lte: new Date() } },
+        where: {
+          workspaceId,
+          status: "TRIALING",
+          trialEndsAt: { lte: new Date() },
+        },
         orderBy: { createdAt: "desc" },
         select: { id: true },
       }),
@@ -299,7 +303,9 @@ export class BillingService {
     );
     if (override) return override.value;
     if (!subscription && expiredTrial)
-      return featureKey.includes("requests") || featureKey.includes("accounts") ? 0 : false;
+      return featureKey.includes("requests") || featureKey.includes("accounts")
+        ? 0
+        : false;
     const plan =
       subscription?.plan ??
       (await this.database.client.plan.findUnique({

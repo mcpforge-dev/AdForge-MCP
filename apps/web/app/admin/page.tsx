@@ -285,8 +285,14 @@ export default function AdminPage() {
           }
           onPlan={(id, planKey, mode) =>
             setConfirmation({
-              title: mode === "TRIAL" ? "Начать пробный период?" : "Активировать тариф?",
-              body: mode === "TRIAL" ? "Компания получит 14 дней бесплатного доступа. Платёж не создаётся." : "Тариф будет активирован вручную без создания платежа.",
+              title:
+                mode === "TRIAL"
+                  ? "Начать пробный период?"
+                  : "Активировать тариф?",
+              body:
+                mode === "TRIAL"
+                  ? "Компания получит 14 дней бесплатного доступа. Платёж не создаётся."
+                  : "Тариф будет активирован вручную без создания платежа.",
               action: () =>
                 mutate(
                   `/companies/${id}/plan`,
@@ -970,8 +976,8 @@ function CompanyDrawer({
             <button
               className="secondary-button"
               onClick={(event) => {
-                const select = event.currentTarget
-                  .previousElementSibling?.previousElementSibling as HTMLSelectElement | null;
+                const select = event.currentTarget.previousElementSibling
+                  ?.previousElementSibling as HTMLSelectElement | null;
                 if (select?.value) onPlan(id, select.value, "ACTIVE");
               }}
             >

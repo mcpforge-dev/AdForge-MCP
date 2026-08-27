@@ -12,7 +12,9 @@ export function ThemeSwitcher({ compact = false }: { compact?: boolean }) {
   const { preference, setPreference } = useTheme();
   return (
     <div
-      className={compact ? "theme-switcher theme-switcher--compact" : "theme-switcher"}
+      className={
+        compact ? "theme-switcher theme-switcher--compact" : "theme-switcher"
+      }
       aria-label="Theme"
       role="group"
       data-language-static

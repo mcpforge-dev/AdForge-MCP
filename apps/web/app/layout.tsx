@@ -17,7 +17,11 @@ export default function RootLayout({
   return (
     <html lang="ru" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: `(function(){try{var p=localStorage.getItem('holymedia-theme');var v=p==='light'||p==='dark'||p==='system'?p:'system';var t=v==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):v;document.documentElement.dataset.theme=t;document.documentElement.dataset.themePreference=v;document.documentElement.style.colorScheme=t;}catch(e){}})();` }} />
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var p=localStorage.getItem('holymedia-theme');var v=p==='light'||p==='dark'||p==='system'?p:'system';var t=v==='system'?(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark'):v;document.documentElement.dataset.theme=t;document.documentElement.dataset.themePreference=v;document.documentElement.style.colorScheme=t;}catch(e){}})();`,
+          }}
+        />
       </head>
       <body>
         <ThemeProvider>

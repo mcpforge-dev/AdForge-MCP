@@ -59,7 +59,13 @@ type BillingSubscription = {
   plan?: { key?: string } | null;
 };
 type Section =
-  "overview" | "connections" | "mcp" | "reports" | "analysis" | "tariffs" | "profile";
+  | "overview"
+  | "connections"
+  | "mcp"
+  | "reports"
+  | "analysis"
+  | "tariffs"
+  | "profile";
 type Client = "codex" | "claude" | "chatgpt";
 type ReportFormat = "docx" | "pptx";
 type ReportableAccount = { account: ProviderAccount; connection: Connection };
@@ -356,7 +362,9 @@ export default function DashboardPage() {
   const [connections, setConnections] = useState<Connection[]>([]);
   const [tokens, setTokens] = useState<ServiceToken[]>([]);
   const [profile, setProfile] = useState<Profile | null>(null);
-  const [subscription, setSubscription] = useState<BillingSubscription | null>(null);
+  const [subscription, setSubscription] = useState<BillingSubscription | null>(
+    null,
+  );
   const [profileName, setProfileName] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
   const [section, setSection] = useState<Section>("overview");
@@ -641,8 +649,12 @@ export default function DashboardPage() {
   }
 
   async function loadSubscription(workspace: Workspace) {
-    const response = await fetch(`${API}/api/v1/workspaces/${workspace.id}/billing/subscription`, { credentials: "include", cache: "no-store" });
-    if (response.ok) setSubscription((await response.json()) as BillingSubscription | null);
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${workspace.id}/billing/subscription`,
+      { credentials: "include", cache: "no-store" },
+    );
+    if (response.ok)
+      setSubscription((await response.json()) as BillingSubscription | null);
   }
 
   useEffect(() => {

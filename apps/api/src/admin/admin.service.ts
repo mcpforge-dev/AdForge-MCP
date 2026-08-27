@@ -247,7 +247,12 @@ export class AdminService {
             where: { status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] } },
             orderBy: { createdAt: "desc" },
             take: 1,
-            select: { status: true, trialEndsAt: true, currentPeriodEnd: true, plan: { select: { key: true, name: true } } },
+            select: {
+              status: true,
+              trialEndsAt: true,
+              currentPeriodEnd: true,
+              plan: { select: { key: true, name: true } },
+            },
           },
         },
       }),
@@ -463,7 +468,12 @@ export class AdminService {
   public async plans() {
     return {
       plans: await this.database.client.plan.findMany({
-        where: { active: true, key: { in: TARIFF_PLANS.flatMap((item) => Object.values(item.dbKey)) } },
+        where: {
+          active: true,
+          key: {
+            in: TARIFF_PLANS.flatMap((item) => Object.values(item.dbKey)),
+          },
+        },
         orderBy: { key: "asc" },
         select: { key: true, name: true, description: true, features: true },
       }),
@@ -484,7 +494,11 @@ export class AdminService {
         key: true,
         name: true,
         active: true,
-        prices: { where: { active: true, currency: "KZT", interval: "month" }, take: 1, select: { id: true } },
+        prices: {
+          where: { active: true, currency: "KZT", interval: "month" },
+          take: 1,
+          select: { id: true },
+        },
       },
     });
     if (!plan?.active) throw new BadRequestException("Plan is not available.");
@@ -515,7 +529,8 @@ export class AdminService {
           status: mode === "TRIAL" ? "TRIALING" : "ACTIVE",
           startsAt: now,
           currentPeriodStart: now,
-          currentPeriodEnd: trialEndsAt ?? new Date(now.getTime() + 365 * 86_400_000),
+          currentPeriodEnd:
+            trialEndsAt ?? new Date(now.getTime() + 365 * 86_400_000),
           ...(trialEndsAt ? { trialEndsAt } : {}),
           metadata: { source: "admin_manual", assignmentMode: mode },
         },
@@ -525,7 +540,11 @@ export class AdminService {
       "admin_plan_assigned",
       request,
       true,
-      { plan: plan.key, mode, ...(mode === "TRIAL" ? { trialDays: TARIFF_TRIAL_DAYS } : {}) },
+      {
+        plan: plan.key,
+        mode,
+        ...(mode === "TRIAL" ? { trialDays: TARIFF_TRIAL_DAYS } : {}),
+      },
       id,
       "plan",
       plan.id,
@@ -538,12 +557,14 @@ export class AdminService {
     input: AdminTrialExtensionDto,
     request: RequestWithAuth,
   ) {
-    if (input.days > 90) throw new BadRequestException("Trial extension is too long.");
-    const subscription = await this.database.client.workspaceSubscription.findFirst({
-      where: { workspaceId: id, status: "TRIALING" },
-      orderBy: { createdAt: "desc" },
-      select: { id: true, trialEndsAt: true },
-    });
+    if (input.days > 90)
+      throw new BadRequestException("Trial extension is too long.");
+    const subscription =
+      await this.database.client.workspaceSubscription.findFirst({
+        where: { workspaceId: id, status: "TRIALING" },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, trialEndsAt: true },
+      });
     if (!subscription?.trialEndsAt)
       throw new NotFoundException("Active trial was not found.");
     const base = Math.max(subscription.trialEndsAt.getTime(), Date.now());
@@ -552,7 +573,15 @@ export class AdminService {
       where: { id: subscription.id },
       data: { trialEndsAt, currentPeriodEnd: trialEndsAt },
     });
-    await this.record("admin_trial_extended", request, true, { days: input.days, trialEndsAt: trialEndsAt.toISOString() }, id, "subscription", subscription.id);
+    await this.record(
+      "admin_trial_extended",
+      request,
+      true,
+      { days: input.days, trialEndsAt: trialEndsAt.toISOString() },
+      id,
+      "subscription",
+      subscription.id,
+    );
     return { trialEndsAt };
   }
 

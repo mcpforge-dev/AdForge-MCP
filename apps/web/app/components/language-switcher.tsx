@@ -573,32 +573,32 @@ export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
 
   return (
     <div className="header-preferences" data-language-static>
-    <div
-      className={
-        compact
-          ? "language-switcher language-switcher--compact"
-          : "language-switcher"
-      }
-      data-language-switcher
-    >
-      <button
-        type="button"
-        data-language="en"
-        aria-label="English"
-        onClick={() => select("en")}
+      <div
+        className={
+          compact
+            ? "language-switcher language-switcher--compact"
+            : "language-switcher"
+        }
+        data-language-switcher
       >
-        EN
-      </button>
-      <button
-        type="button"
-        data-language="ru"
-        aria-label="Русский"
-        onClick={() => select("ru")}
-      >
-        RU
-      </button>
-    </div>
-    <ThemeSwitcher compact={compact} />
+        <button
+          type="button"
+          data-language="en"
+          aria-label="English"
+          onClick={() => select("en")}
+        >
+          EN
+        </button>
+        <button
+          type="button"
+          data-language="ru"
+          aria-label="Русский"
+          onClick={() => select("ru")}
+        >
+          RU
+        </button>
+      </div>
+      <ThemeSwitcher compact={compact} />
     </div>
   );
 }

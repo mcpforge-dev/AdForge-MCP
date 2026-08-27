@@ -55,7 +55,6 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setPreferenceState(nextPreference);
     setResolvedTheme(nextTheme);
     applyTheme(nextTheme, nextPreference);
-
   }, []);
 
   useEffect(() => {
@@ -83,7 +82,9 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     [preference, resolvedTheme, setPreference],
   );
 
-  return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;
+  return (
+    <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>
+  );
 }
 
 export function useTheme(): ThemeContextValue {
