@@ -361,6 +361,9 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(reportPicker).toBeVisible();
     await expect(reportPicker.getByText("Meta Ads")).toBeVisible();
     await expect(
+      reportPicker.getByRole("button", { name: "Скрыть кабинеты" }),
+    ).toHaveCount(0);
+    await expect(
       reportPicker.getByRole("button", {
         name: "Закрыть выбор кабинета для отчёта",
       }),
@@ -375,6 +378,9 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(
       page.getByRole("dialog", { name: /Кабинеты Meta Ads/ }),
     ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Скрыть кабинеты" }),
+    ).toHaveCount(0);
     await page
       .getByRole("button", { name: /Основной рекламный кабинет/ })
       .first()

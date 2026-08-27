@@ -85,6 +85,10 @@ describe("V2 performance reports", () => {
     });
     expect(document.subarray(0, 2).toString()).toBe("PK");
     expect(document.toString("utf8")).not.toContain("accessToken");
+    const documentArchive = await JSZip.loadAsync(document);
+    expect(
+      await documentArchive.file("word/document.xml")?.async("string"),
+    ).toContain("1234567890");
     const presentation = await service.performancePptx("workspace-a", {
       accountId: "1234567890",
       startDate: "2026-01-01",
@@ -100,6 +104,9 @@ describe("V2 performance reports", () => {
     expect(
       await archive.file("ppt/presentation.xml")?.async("string"),
     ).toContain("p:sldIdLst");
+    expect(
+      await archive.file("ppt/slides/slide1.xml")?.async("string"),
+    ).toContain("1234567890");
   });
 
   it("uses an equal previous period when the report form does not send one", async () => {

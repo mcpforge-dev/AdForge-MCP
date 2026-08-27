@@ -1949,8 +1949,8 @@ export default function DashboardPage() {
                   <div className="report-status" role="status">
                     <strong>Сначала выберите рекламный кабинет.</strong>
                     <span>
-                      В picker попадут только кабинеты, включённые в разделе
-                      «Подключения».
+                      Здесь отображаются только те кабинеты, которые включены у
+                      вас в разделе «Подключения».
                     </span>
                     <button
                       className="secondary-button btn--small"
@@ -2604,16 +2604,6 @@ export default function DashboardPage() {
                     }}
                   >
                     Назад к платформам
-                  </button>
-                  <button
-                    className="ghost-button btn--small"
-                    type="button"
-                    onClick={() => {
-                      setReportPickerProvider(null);
-                      setReportAccountSearch("");
-                    }}
-                  >
-                    Скрыть кабинеты
                   </button>
                 </div>
                 <label className="account-selector__search">

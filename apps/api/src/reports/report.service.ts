@@ -535,7 +535,7 @@ export class ReportService {
                   size: 21,
                 }),
                 new TextRun({
-                  text: `  ·  ${report.account.provider}  ·  ${report.account.currency ?? "валюта не указана"}`,
+                  text: `  ·  ${report.account.provider}  ·  ID ${report.account.externalAccountId}  ·  ${report.account.currency ?? "валюта не указана"}`,
                   color: "64748B",
                   size: 19,
                 }),
@@ -748,7 +748,7 @@ export class ReportService {
           4.04,
           8.5,
           0.3,
-          `${providerLabel}  |  ${currentPeriod}`,
+          `${providerLabel}  |  ID ${report.account.externalAccountId}  |  ${currentPeriod}`,
           {
             color: "EADCF2",
             fontSize: 11,
