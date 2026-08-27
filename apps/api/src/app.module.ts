@@ -62,6 +62,9 @@ import { LegacyAdminController } from "./compat/legacy-admin.controller.js";
 import { LegacyMetaSkillsController } from "./compat/legacy-meta-skills.controller.js";
 import { ProductAnalyticsController } from "./analytics/product-analytics.controller.js";
 import { ProductAnalyticsService } from "./analytics/product-analytics.service.js";
+import { AdminController } from "./admin/admin.controller.js";
+import { AdminAuthenticationGuard } from "./admin/admin-authentication.guard.js";
+import { AdminService } from "./admin/admin.service.js";
 
 @Module({
   controllers: [
@@ -94,6 +97,7 @@ import { ProductAnalyticsService } from "./analytics/product-analytics.service.j
     LegacyAdminController,
     LegacyMetaSkillsController,
     ProductAnalyticsController,
+    AdminController,
   ],
   providers: [
     DatabaseService,
@@ -124,6 +128,8 @@ import { ProductAnalyticsService } from "./analytics/product-analytics.service.j
     BillingService,
     ManualConnectionRequestService,
     ProductAnalyticsService,
+    AdminService,
+    AdminAuthenticationGuard,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

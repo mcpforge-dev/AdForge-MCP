@@ -113,6 +113,15 @@ const rawConfigSchema = z.object({
     .default(20000),
   COOKIE_DOMAIN: z.string().optional(),
   AD_MCP_INITIAL_ADMIN_EMAIL: z.string().default(""),
+  HOLYMEDIA_ADMIN_ENABLED: booleanFromEnv.default(true),
+  HOLYMEDIA_ADMIN_LOGIN: z.string().trim().min(1).max(80).default("admin"),
+  HOLYMEDIA_ADMIN_PASSWORD: z.string().min(16).max(256).optional(),
+  HOLYMEDIA_ADMIN_SESSION_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(24)
+    .default(8),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
   EMAIL_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
   ARGON2_MEMORY_KIB: z.coerce
@@ -185,6 +194,10 @@ export type AppConfig = {
   providerHttpTimeoutMs: number;
   cookieDomain: string | undefined;
   companyAdminEmails: string[];
+  adminEnabled: boolean;
+  adminLogin: string;
+  adminPassword: string | undefined;
+  adminSessionTtlHours: number;
   sessionTtlDays: number;
   emailTokenTtlMinutes: number;
   argon2MemoryKib: number;
@@ -410,6 +423,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     companyAdminEmails: value.AD_MCP_INITIAL_ADMIN_EMAIL.split(",")
       .map((email) => email.trim().toLowerCase())
       .filter(Boolean),
+    adminEnabled:
+      value.HOLYMEDIA_ADMIN_ENABLED && Boolean(value.HOLYMEDIA_ADMIN_PASSWORD),
+    adminLogin: value.HOLYMEDIA_ADMIN_LOGIN,
+    adminPassword: value.HOLYMEDIA_ADMIN_PASSWORD,
+    adminSessionTtlHours: value.HOLYMEDIA_ADMIN_SESSION_TTL_HOURS,
     sessionTtlDays: value.SESSION_TTL_DAYS,
     emailTokenTtlMinutes: value.EMAIL_TOKEN_TTL_MINUTES,
     argon2MemoryKib: value.ARGON2_MEMORY_KIB,

@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { loadConfig } from "./index.js";
 
 describe("v2 configuration", () => {
+  it("keeps owner admin access disabled until an environment secret is supplied", () => {
+    const base = {
+      NODE_ENV: "test" as const,
+      DATABASE_URL:
+        "postgresql://holymedia:change-me@localhost:5433/holymedia_v2",
+      REDIS_URL: "redis://localhost:6380",
+      CORS_ORIGINS: "http://localhost:3000",
+      SESSION_HASH_SECRET: "test-session-hash-secret-01234567890123456789",
+    };
+    expect(loadConfig(base).adminEnabled).toBe(false);
+    const configured = loadConfig({
+      ...base,
+      HOLYMEDIA_ADMIN_PASSWORD: randomUUID(),
+    });
+    expect(configured.adminEnabled).toBe(true);
+    expect(configured.adminLogin).toBe("admin");
+  });
+
   it("parses the string false as boolean false", () => {
     const config = loadConfig({
       NODE_ENV: "test",

@@ -81,8 +81,25 @@ type MockServiceToken = {
   lastUsedAt: string | null;
 };
 
-export async function installMockApi(page: Page) {
+export async function installMockApi(
+  page: Page,
+  options: { adminPassword?: string } = {},
+) {
   const now = Date.now();
+  const adminPassword = options.adminPassword ?? randomUUID();
+  let adminAuthenticated = false;
+  const adminCompany = {
+    id: workspace.id,
+    name: "HolyMedia",
+    legalName: "HolyMedia LLP",
+    registrationNumber: "123456789012",
+    registrationCountry: "KZ",
+    legalAddress: "Almaty",
+    companyPhone: "+7 700 000 0000",
+    companyEmail: "phase-b-legacy-user@example.test",
+    accessStatus: "PENDING",
+    createdAt: new Date(now - 86_400_000).toISOString(),
+  };
   const tokens: MockServiceToken[] = [
     {
       id: "55555555-5555-4555-8555-555555555555",
@@ -122,6 +139,155 @@ export async function installMockApi(page: Page) {
       });
     if (path === "/api/v1/auth/csrf")
       return json(route, { csrfToken: "mock-csrf" });
+    if (path === "/api/v1/admin/auth/login") {
+      const body = request.postDataJSON() as {
+        login?: string;
+        password?: string;
+      };
+      if (body.login !== "admin" || body.password !== adminPassword)
+        return route.fulfill({ status: 401, headers: cors });
+      adminAuthenticated = true;
+      return json(route, { authenticated: true });
+    }
+    if (path === "/api/v1/admin/auth/logout") {
+      adminAuthenticated = false;
+      return json(route, { success: true });
+    }
+    if (path === "/api/v1/admin/session") {
+      return json(route, { authenticated: adminAuthenticated });
+    }
+    if (path === "/api/v1/admin/overview")
+      return json(route, {
+        companies: { total: 2, pending: 1, active: 1, suspended: 0 },
+        users: 3,
+        connections: { active: 1, attention: 0 },
+        health: {
+          api: "ok",
+          web: "not_probed",
+          worker: "not_probed",
+          postgres: "ok",
+          redis: "ok",
+        },
+        latestAudit: [
+          {
+            id: "audit-1",
+            eventType: "company_profile_updated",
+            success: true,
+            createdAt: new Date(now).toISOString(),
+          },
+        ],
+        support: [],
+      });
+    if (path === "/api/v1/admin/companies")
+      return json(route, {
+        companies: [
+          {
+            ...adminCompany,
+            memberships: [
+              {
+                user: {
+                  name: "Анна",
+                  email: "phase-b-legacy-user@example.test",
+                },
+              },
+            ],
+            subscriptions: [],
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 25,
+      });
+    if (path === `/api/v1/admin/companies/${workspace.id}`)
+      return json(route, {
+        ...adminCompany,
+        memberships: [
+          {
+            role: "OWNER",
+            user: {
+              id: members[0].user.id,
+              name: "Анна",
+              email: "phase-b-legacy-user@example.test",
+              status: "active",
+            },
+          },
+        ],
+        invitations: [
+          {
+            id: "invite-1",
+            email: "colleague@example.test",
+            role: "MEMBER",
+            expiresAt: new Date(now + 86_400_000).toISOString(),
+          },
+        ],
+        connections: [
+          {
+            id: connectionId,
+            provider: "META_ADS",
+            status: "CONNECTED",
+            _count: { accounts: 2 },
+          },
+        ],
+        selectedAccountCount: 1,
+        subscriptions: [],
+        entitlements: [],
+        auditEvents: [],
+      });
+    if (
+      path === `/api/v1/admin/companies/${workspace.id}/access` &&
+      request.method() === "PATCH"
+    ) {
+      const body = request.postDataJSON() as { status: string };
+      adminCompany.accessStatus = body.status;
+      return json(route, {
+        company: { id: workspace.id, accessStatus: body.status },
+      });
+    }
+    if (path === "/api/v1/admin/users")
+      return json(route, {
+        users: [
+          {
+            id: members[0].user.id,
+            name: "Анна",
+            email: "phase-b-legacy-user@example.test",
+            status: "active",
+            memberships: [
+              {
+                role: "OWNER",
+                workspace: {
+                  id: workspace.id,
+                  name: "HolyMedia",
+                  accessStatus: "PENDING",
+                },
+              },
+            ],
+            sessions: [],
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 25,
+      });
+    if (path === `/api/v1/admin/users/${members[0].user.id}/access`)
+      return json(route, { success: true });
+    if (path === "/api/v1/admin/diagnostics")
+      return json(route, {
+        connections: [
+          {
+            id: connectionId,
+            provider: "META_ADS",
+            status: "CONNECTED",
+            workspace: { id: workspace.id, name: "HolyMedia" },
+            _count: { accounts: 2 },
+            lastErrorCode: null,
+          },
+        ],
+        tokens: [],
+        reports: [],
+      });
+    if (path === "/api/v1/admin/support") return json(route, { requests: [] });
+    if (path === "/api/v1/admin/audit")
+      return json(route, { events: [], total: 0, page: 1, pageSize: 25 });
     if (["/api/v1/auth/login", "/api/v1/auth/signup"].includes(path))
       return json(route, {
         user: { name: "Анна", email: "phase-b-legacy-user@example.test" },
