@@ -1,6 +1,12 @@
 -- Existing production workspaces retain their current product access. New
 -- workspaces use the Prisma PENDING default after this migration completes.
-CREATE TYPE "WorkspaceAccessStatus" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED');
+DO $$
+BEGIN
+  CREATE TYPE "WorkspaceAccessStatus" AS ENUM ('PENDING', 'ACTIVE', 'SUSPENDED');
+EXCEPTION
+  WHEN duplicate_object THEN NULL;
+END
+$$;
 
 ALTER TABLE "workspaces"
   ADD COLUMN "access_status" "WorkspaceAccessStatus" NOT NULL DEFAULT 'ACTIVE',
