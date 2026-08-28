@@ -362,11 +362,19 @@ test.describe("restored HolyMedia client UX", () => {
 
     const tokenForm = page.locator("form.token-form");
     await tokenForm.locator('input[name="name"]').fill("Playwright client");
+    const tokenRequest = page.waitForRequest(
+      (request) =>
+        request.method() === "POST" &&
+        request.url().includes("/service-tokens"),
+    );
     await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
+    expect((await tokenRequest).postDataJSON()).not.toHaveProperty(
+      "accountIds",
+    );
     await expect(page.locator(".one-time-secret")).toBeVisible();
     await expect(page.locator(".account-picker")).toHaveCount(0);
     await expect(page.locator(".scope-note")).toContainText(
-      "выбранным кабинетам",
+      "всем подключённым кабинетам",
     );
     await expect(tokenForm.locator('input[name="name"]')).toHaveValue("");
     await expect(page.locator(".notice--error")).toHaveCount(0);

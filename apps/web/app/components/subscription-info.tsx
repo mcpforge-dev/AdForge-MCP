@@ -23,15 +23,16 @@ function date(value?: string | null, language = "ru") {
   }).format(parsed);
 }
 
-export function subscriptionPresentation(
-  subscription?: SubscriptionInfoValue | null,
+function getPresentation(
+  subscription: SubscriptionInfoValue | null | undefined,
+  language: "ru" | "en",
 ) {
   const key = subscription?.plan?.key;
   const fullAccess =
     key === "legacy_internal" ||
     subscription?.metadata?.accessGrant === "FULL_NON_EXPIRING";
   const plan = key ? tariffPlanByKey(key) : undefined;
-  const language = "ru" as const;
+  const level = tariffServiceLevel(key ?? "");
   const status = subscription?.status;
   const trialEndsAt = subscription?.trialEndsAt
     ? new Date(subscription.trialEndsAt)
@@ -39,26 +40,54 @@ export function subscriptionPresentation(
   const daysLeft = trialEndsAt
     ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86_400_000))
     : null;
+  const ru = language === "ru";
+
   return {
     fullAccess,
     planName: fullAccess
-      ? "Полный доступ"
-      : (plan?.name[language] ?? subscription?.plan?.name ?? "Тариф не выбран"),
+      ? ru
+        ? "Полный доступ"
+        : "Full access"
+      : (plan?.name[language] ??
+        subscription?.plan?.name ??
+        (ru ? "Тариф не выбран" : "No plan selected")),
     mode: fullAccess
-      ? "Бессрочно"
-      : tariffServiceLevel(key ?? "") === "HOLYMEDIA_SUPPORT"
-        ? "Расширенная поддержка"
-        : "Самостоятельно",
+      ? ru
+        ? "Бессрочно"
+        : "Permanent"
+      : level === "HOLYMEDIA_SUPPORT"
+        ? ru
+          ? "Расширенная поддержка"
+          : "Extended support"
+        : ru
+          ? "Самостоятельно"
+          : "Self-service",
     status: fullAccess
-      ? "Полный доступ"
+      ? ru
+        ? "Полный доступ"
+        : "Full access"
       : status === "TRIALING"
-        ? `Пробный период${daysLeft !== null ? ` · ${daysLeft} дн.` : ""}`
+        ? ru
+          ? `Пробный период${daysLeft !== null ? ` · ${daysLeft} дн.` : ""}`
+          : `Trial${daysLeft !== null ? ` · ${daysLeft} days` : ""}`
         : status === "ACTIVE"
-          ? "Активен"
+          ? ru
+            ? "Активен"
+            : "Active"
           : status === "PAST_DUE"
-            ? "Требует внимания"
-            : "Нет активного тарифа",
+            ? ru
+              ? "Требует внимания"
+              : "Needs attention"
+            : ru
+              ? "Нет активного тарифа"
+              : "No active plan",
   };
+}
+
+export function subscriptionPresentation(
+  subscription?: SubscriptionInfoValue | null,
+) {
+  return getPresentation(subscription, "ru");
 }
 
 export function SubscriptionInfo({
@@ -72,55 +101,11 @@ export function SubscriptionInfo({
 }) {
   const language = useLanguage();
   const ru = language === "ru";
-  const key = subscription?.plan?.key;
-  const fullAccess =
-    key === "legacy_internal" ||
-    subscription?.metadata?.accessGrant === "FULL_NON_EXPIRING";
-  const plan = key ? tariffPlanByKey(key) : undefined;
-  const level = tariffServiceLevel(key ?? "");
-  const trialEndsAt = subscription?.trialEndsAt
-    ? new Date(subscription.trialEndsAt)
-    : null;
-  const daysLeft = trialEndsAt
-    ? Math.max(0, Math.ceil((trialEndsAt.getTime() - Date.now()) / 86_400_000))
-    : null;
-  const planName = fullAccess
-    ? ru
-      ? "Полный доступ"
-      : "Full access"
-    : (plan?.name[language] ??
-      subscription?.plan?.name ??
-      (ru ? "Тариф не выбран" : "No plan selected"));
-  const status = fullAccess
-    ? ru
-      ? "Полный доступ"
-      : "Full access"
-    : subscription?.status === "TRIALING"
-      ? ru
-        ? `Пробный период${daysLeft !== null ? ` · ${daysLeft} дн.` : ""}`
-        : `Trial${daysLeft !== null ? ` · ${daysLeft} days` : ""}`
-      : subscription?.status === "ACTIVE"
-        ? ru
-          ? "Активен"
-          : "Active"
-        : subscription?.status === "PAST_DUE"
-          ? ru
-            ? "Требует внимания"
-            : "Needs attention"
-          : ru
-            ? "Нет активного тарифа"
-            : "No active plan";
-  const mode = fullAccess
-    ? ru
-      ? "Бессрочно"
-      : "Permanent"
-    : level === "HOLYMEDIA_SUPPORT"
-      ? ru
-        ? "Расширенная поддержка"
-        : "Extended support"
-      : ru
-        ? "Самостоятельно"
-        : "Self-service";
+  const presentation = getPresentation(subscription, language);
+  const endsAt =
+    subscription?.status === "TRIALING"
+      ? subscription.trialEndsAt
+      : subscription?.currentPeriodEnd;
 
   return (
     <section
@@ -129,10 +114,13 @@ export function SubscriptionInfo({
     >
       <div className="subscription-info__top">
         <span>{ru ? "Тариф и подписка" : "Plan and subscription"}</span>
-        <b>{status}</b>
+        <b>{presentation.status}</b>
       </div>
-      <strong>{planName}</strong>
-      <p>{mode}</p>
+      <strong>{presentation.planName}</strong>
+      <p className="subscription-info__level">
+        <span>{ru ? "Уровень" : "Service level"}</span>
+        {presentation.mode}
+      </p>
       <dl>
         {subscription?.startsAt && (
           <div>
@@ -140,36 +128,51 @@ export function SubscriptionInfo({
             <dd>{date(subscription.startsAt, language)}</dd>
           </div>
         )}
-        {fullAccess ? (
-          <div>
-            <dt>{ru ? "Доступ" : "Access"}</dt>
-            <dd>{ru ? "Оплата не требуется" : "No payment required"}</dd>
-          </div>
-        ) : (
-          subscription?.status === "TRIALING" && (
+        {presentation.fullAccess ? (
+          <>
             <div>
-              <dt>{ru ? "До" : "Until"}</dt>
-              <dd>{date(subscription.trialEndsAt, language)}</dd>
+              <dt>{ru ? "Доступ" : "Access"}</dt>
+              <dd>{ru ? "Бессрочно" : "Permanent"}</dd>
+            </div>
+            <div>
+              <dt>{ru ? "Оплата" : "Payment"}</dt>
+              <dd>{ru ? "Оплата не требуется" : "No payment required"}</dd>
+            </div>
+          </>
+        ) : (
+          endsAt && (
+            <div>
+              <dt>
+                {subscription?.status === "TRIALING"
+                  ? ru
+                    ? "Пробный период до"
+                    : "Trial until"
+                  : ru
+                    ? "Подписка до"
+                    : "Subscription until"}
+              </dt>
+              <dd>{date(endsAt, language)}</dd>
             </div>
           )
         )}
-        {!fullAccess &&
-          subscription?.status === "ACTIVE" &&
-          subscription?.currentPeriodEnd && (
-            <div>
-              <dt>{ru ? "Период до" : "Period until"}</dt>
-              <dd>{date(subscription.currentPeriodEnd, language)}</dd>
-            </div>
-          )}
       </dl>
       {onOpenTariffs && (
-        <button
-          type="button"
-          className="secondary-button btn--small"
-          onClick={onOpenTariffs}
-        >
-          {ru ? "Посмотреть тарифы" : "View plans"}
-        </button>
+        <div className="subscription-info__footer">
+          <button
+            type="button"
+            className="secondary-button btn--small"
+            onClick={onOpenTariffs}
+          >
+            {ru ? "Посмотреть тарифы" : "View plans"}
+          </button>
+          {!compact && (
+            <p>
+              {ru
+                ? "Все подробности о тарифе и доступе доступны в разделе «Тарифы»."
+                : "All plan and access details are available in the Plans section."}
+            </p>
+          )}
+        </div>
       )}
     </section>
   );

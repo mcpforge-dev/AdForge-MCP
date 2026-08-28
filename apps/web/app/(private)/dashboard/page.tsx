@@ -948,11 +948,6 @@ export default function DashboardPage() {
     if (!active) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
-    const accountIds = enabledAccounts.map(({ account }) => account.id);
-    if (!accountIds.length) {
-      fail("Сначала выберите кабинеты в разделе «Подключения».");
-      return;
-    }
     setBusy(true);
     try {
       const response = await fetch(
@@ -969,7 +964,6 @@ export default function DashboardPage() {
             scopes: form.get("write")
               ? ["adforge:mcp:read", "adforge:mcp:write"]
               : ["adforge:mcp:read"],
-            accountIds,
             expiresInDays: Number(form.get("expires_in_days") || 90),
           }),
         },
@@ -1729,8 +1723,8 @@ export default function DashboardPage() {
                         </label>
                       </div>
                       <p className="scope-note">
-                        Ключ получит доступ к {enabledAccounts.length} выбранным
-                        кабинетам из раздела «Подключения».
+                        Ключ получит доступ ко всем подключённым кабинетам из
+                        раздела «Подключения» текущей компании.
                       </p>
                       <details className="advanced-settings">
                         <summary>Дополнительные настройки</summary>
@@ -1746,7 +1740,7 @@ export default function DashboardPage() {
                       <button
                         className="primary-button"
                         type="submit"
-                        disabled={busy || !enabledAccounts.length}
+                        disabled={busy}
                       >
                         Создать ключ
                       </button>

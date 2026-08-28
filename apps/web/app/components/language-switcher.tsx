@@ -10,6 +10,24 @@ export type Language = "en" | "ru";
 const STORAGE_KEY = "holymedia-language-v2";
 const LANGUAGE_CHANGE_EVENT = "holymedia-language-change";
 const PAIRS: Array<[string, string]> = [
+  ["Подключите кабинеты", "Connect accounts"],
+  [
+    "AI-клиент увидит все подключённые кабинеты вашей компании.",
+    "Your AI client will see every connected account in your company.",
+  ],
+  [
+    "AI видит все подключённые рекламные кабинеты вашей компании.",
+    "AI can see every connected advertising account in your company.",
+  ],
+  ["Кабинеты вашей компании", "Your company accounts"],
+  [
+    "Доступ ограничен текущей компанией и её участниками.",
+    "Access is limited to the current company and its members.",
+  ],
+  [
+    "Ключ получит доступ ко всем подключённым кабинетам из раздела «Подключения» текущей компании.",
+    "The key will have access to every connected account in the current company.",
+  ],
   ["Рекламная аналитика и MCP", "Advertising analytics and MCP"],
   ["HolyMedia MCP", "HolyMedia MCP"],
   ["Навигация", "Navigation"],
@@ -55,10 +73,10 @@ const PAIRS: Array<[string, string]> = [
     "Войдите через Google, Meta, TikTok или Яндекс.",
     "Sign in with Google, Meta, TikTok, or Yandex.",
   ],
-  ["Выберите кабинеты", "Choose accounts"],
+  ["Подключите кабинеты", "Connect accounts"],
   [
-    "Отметьте аккаунты, которые будут доступны AI-клиенту.",
-    "Select the accounts your AI client can access.",
+    "AI-клиент увидит все подключённые кабинеты вашей компании.",
+    "Your AI client will see every connected account in your company.",
   ],
   ["Подключите MCP", "Connect MCP"],
   [
@@ -67,8 +85,8 @@ const PAIRS: Array<[string, string]> = [
   ],
   ["Что можно узнать", "What you can learn"],
   [
-    "AI видит только выбранные вами рекламные кабинеты.",
-    "AI can see only the advertising accounts you select.",
+    "AI видит все подключённые рекламные кабинеты вашей компании.",
+    "AI can see every connected advertising account in your company.",
   ],
   [
     "какие кампании активны и где есть проблемы;",

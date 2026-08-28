@@ -16,8 +16,29 @@ import {
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 
+const SUPPORT_GROUPS = [
+  { key: "access", from: 0, to: 7 },
+  { key: "reports", from: 7, to: 10 },
+  { key: "team", from: 10, to: SUPPORT_FEATURES.length },
+] as const;
+const SERVICE_LEVELS: readonly TariffServiceLevel[] = [
+  "SELF_SERVICE",
+  "HOLYMEDIA_SUPPORT",
+];
+
 function money(value: number) {
-  return `${new Intl.NumberFormat("ru-RU").format(value)} ₸`;
+  return `${new Intl.NumberFormat("ru-RU").format(value)} \u20b8`;
+}
+
+function planName(
+  plan: (typeof TARIFF_PLANS)[number],
+  level: TariffServiceLevel,
+  language: "ru" | "en",
+) {
+  if (level === "SELF_SERVICE") return plan.name[language];
+  return language === "ru"
+    ? `${plan.name.ru} + поддержка`
+    : `${plan.name.en} + support`;
 }
 
 export function TariffCatalog({
@@ -35,6 +56,14 @@ export function TariffCatalog({
   const [pendingPlan, setPendingPlan] = useState<string | null>(null);
   const [requestError, setRequestError] = useState<string | null>(null);
   const currentKey = subscription?.plan?.key;
+  const supportMode = level === "HOLYMEDIA_SUPPORT";
+  const modeCopy = supportMode
+    ? ru
+      ? "Команда Holy Media берёт на себя настройку, контроль и приоритетную поддержку."
+      : "The Holy Media team handles setup, control, and priority support."
+    : ru
+      ? "Управляйте подключениями и работой самостоятельно в рамках выбранного тарифа."
+      : "Manage connections and day-to-day work independently within your plan.";
 
   async function requestPlan(planKey: string) {
     if (!workspaceId) return;
@@ -64,6 +93,17 @@ export function TariffCatalog({
     }
   }
 
+  function moveServiceLevel(current: TariffServiceLevel, direction: 1 | -1) {
+    const currentIndex = SERVICE_LEVELS.indexOf(current);
+    const next =
+      SERVICE_LEVELS[
+        (currentIndex + direction + SERVICE_LEVELS.length) %
+          SERVICE_LEVELS.length
+      ];
+    if (next) setLevel(next);
+    return next;
+  }
+
   return (
     <section className="tariffs" id="tariffs" aria-labelledby="tariffs-title">
       <div className="tariffs__head">
@@ -83,36 +123,51 @@ export function TariffCatalog({
         >
           {(
             [
-              [
-                "SELF_SERVICE",
-                ru ? "Самостоятельно" : "Self-service",
-                ru
-                  ? "Управляйте подключениями и работой сами."
-                  : "Manage connections and work independently.",
-              ],
+              ["SELF_SERVICE", ru ? "Самостоятельно" : "Self-service"],
               [
                 "HOLYMEDIA_SUPPORT",
                 ru ? "Расширенная поддержка" : "Extended support",
-                ru
-                  ? "Команда Holy Media помогает с регулярной работой."
-                  : "Holy Media supports ongoing work.",
               ],
             ] as const
-          ).map(([value, label, hint]) => (
+          ).map(([value, label]) => (
             <button
               key={value}
               type="button"
               role="radio"
+              data-service-level={value}
               aria-checked={level === value}
               className={level === value ? "is-active" : ""}
               onClick={() => setLevel(value)}
+              onKeyDown={(event) => {
+                if (event.key === "ArrowRight" || event.key === "ArrowDown") {
+                  event.preventDefault();
+                  const next = moveServiceLevel(value, 1);
+                  event.currentTarget.parentElement
+                    ?.querySelector<HTMLButtonElement>(
+                      `[data-service-level="${next}"]`,
+                    )
+                    ?.focus();
+                }
+                if (event.key === "ArrowLeft" || event.key === "ArrowUp") {
+                  event.preventDefault();
+                  const next = moveServiceLevel(value, -1);
+                  event.currentTarget.parentElement
+                    ?.querySelector<HTMLButtonElement>(
+                      `[data-service-level="${next}"]`,
+                    )
+                    ?.focus();
+                }
+              }}
             >
-              <span>{label}</span>
-              <small>{hint}</small>
+              {label}
             </button>
           ))}
         </div>
       </div>
+
+      <p className="tariffs__mode-copy" aria-live="polite">
+        {modeCopy}
+      </p>
 
       {subscription && <SubscriptionInfo subscription={subscription} compact />}
       {requestError && (
@@ -136,15 +191,20 @@ export function TariffCatalog({
             >
               <div>
                 <span>{plan.direction[language]}</span>
-                <h3>{plan.name[language]}</h3>
+                <h3>{planName(plan, level, language)}</h3>
               </div>
               <strong>
                 {money(plan.priceKzt[level])}
                 <small>{ru ? " / мес." : " / mo."}</small>
               </strong>
               <p>
-                {plan.tokens.toLocaleString("ru-RU")}{" "}
-                {ru ? "AI-токенов в месяц" : "AI tokens per month"}
+                {supportMode
+                  ? ru
+                    ? "Увеличенный лимит AI-токенов"
+                    : "Increased AI token limit"
+                  : `${plan.tokens.toLocaleString("ru-RU")} ${
+                      ru ? "AI-токенов в месяц" : "AI tokens per month"
+                    }`}
               </p>
               {selected ? (
                 <b>{ru ? "Ваш тариф" : "Your plan"}</b>
@@ -172,46 +232,85 @@ export function TariffCatalog({
         })}
       </div>
 
-      <div className="tariffs__table-wrap">
-        <table className="tariffs__table">
-          <thead>
-            <tr>
-              <th>{ru ? "Возможности" : "Features"}</th>
-              {TARIFF_PLANS.map((plan) => (
-                <th key={plan.code}>{plan.name[language]}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {TARIFF_FEATURES.map((feature) => (
-              <tr key={feature.key}>
-                <th>{feature.label[language]}</th>
+      {supportMode ? (
+        <section
+          className="tariffs__support-groups"
+          aria-labelledby="support-benefits-title"
+        >
+          <div className="tariffs__support-head">
+            <p className="eyebrow">
+              {ru ? "С ПОДДЕРЖКОЙ HOLY MEDIA" : "WITH HOLY MEDIA SUPPORT"}
+            </p>
+            <h3 id="support-benefits-title">
+              {ru
+                ? "Что добавляет расширенная поддержка"
+                : "What extended support adds"}
+            </h3>
+          </div>
+          <div className="tariffs__support-grid">
+            {SUPPORT_GROUPS.map((group) => {
+              const rows = SUPPORT_FEATURES.slice(group.from, group.to);
+              const title =
+                group.key === "access"
+                  ? ru
+                    ? "Доступ и аналитика"
+                    : "Access and analytics"
+                  : group.key === "reports"
+                    ? ru
+                      ? "Отчёты"
+                      : "Reports"
+                    : ru
+                      ? "Работа команды Holy Media"
+                      : "Holy Media team";
+              return (
+                <article key={group.key}>
+                  <h4>{title}</h4>
+                  <ul>
+                    {rows.map(([russian, english, , supported]) => (
+                      <li key={russian}>
+                        <span>{ru ? russian : english}</span>
+                        <b>{supported}</b>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              );
+            })}
+          </div>
+        </section>
+      ) : (
+        <div
+          className="tariffs__table-wrap"
+          tabIndex={0}
+          role="region"
+          aria-label={
+            ru
+              ? "Таблица сравнения тарифов. Прокручивается по горизонтали."
+              : "Plan comparison table. Scroll horizontally."
+          }
+        >
+          <table className="tariffs__table">
+            <thead>
+              <tr>
+                <th>{ru ? "Возможности" : "Features"}</th>
                 {TARIFF_PLANS.map((plan) => (
-                  <td key={plan.code}>{feature.values[plan.code]}</td>
+                  <th key={plan.code}>{plan.name[language]}</th>
                 ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <details className="tariffs__support">
-        <summary>
-          {ru
-            ? "Что входит в расширенную поддержку Holy Media"
-            : "What Holy Media extended support includes"}
-        </summary>
-        <table>
-          <tbody>
-            {SUPPORT_FEATURES.map(([russian, english, self, supported]) => (
-              <tr key={russian}>
-                <th>{ru ? russian : english}</th>
-                <td>{self}</td>
-                <td>{supported}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </details>
+            </thead>
+            <tbody>
+              {TARIFF_FEATURES.map((feature) => (
+                <tr key={feature.key}>
+                  <th>{feature.label[language]}</th>
+                  {TARIFF_PLANS.map((plan) => (
+                    <td key={plan.code}>{feature.values[plan.code]}</td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {requestedPlan && (
         <div

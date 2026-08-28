@@ -110,8 +110,10 @@ export default function PublicHomePage() {
             <li className="how-step">
               <div className="how-step__num">2</div>
               <div className="how-step__body">
-                <h3>Выберите кабинеты</h3>
-                <p>Отметьте аккаунты, которые будут доступны AI-клиенту.</p>
+                <h3>Подключите кабинеты</h3>
+                <p>
+                  AI-клиент увидит все подключённые кабинеты вашей компании.
+                </p>
               </div>
             </li>
             <li className="how-arrow" aria-hidden="true">
@@ -132,7 +134,7 @@ export default function PublicHomePage() {
         <section className="capabilities" aria-labelledby="capabilities-title">
           <div className="capabilities__copy">
             <h2 id="capabilities-title">Что можно узнать</h2>
-            <p>AI видит только выбранные вами рекламные кабинеты.</p>
+            <p>AI видит все подключённые рекламные кабинеты вашей компании.</p>
             <ul className="capabilities__list">
               <li>какие кампании активны и где есть проблемы;</li>
               <li>сколько потрачено за выбранный период;</li>
@@ -163,8 +165,10 @@ export default function PublicHomePage() {
               <li>
                 <span aria-hidden="true">✓</span>
                 <div>
-                  <strong>Только выбранные кабинеты</strong>
-                  <span>Доступ ограничен вашими аккаунтами.</span>
+                  <strong>Кабинеты вашей компании</strong>
+                  <span>
+                    Доступ ограничен текущей компанией и её участниками.
+                  </span>
                 </div>
               </li>
               <li>
