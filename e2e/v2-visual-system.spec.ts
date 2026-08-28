@@ -79,7 +79,7 @@ test.describe("visual system", () => {
     expect(consoleErrors).toEqual([]);
   });
 
-  test("keeps cursor desktop-only and leaves text inputs native", async ({
+  test("uses the native dark cursor pack on desktop and system cursors on touch", async ({
     page,
   }, testInfo) => {
     await page.goto("/");
@@ -87,25 +87,19 @@ test.describe("visual system", () => {
       () => window.matchMedia("(pointer: fine) and (hover: hover)").matches,
     );
     if (isFinePointer) {
-      const cursor = page.locator(".brand-cursor");
-      await expect(cursor).toBeVisible();
-      await page.mouse.move(160, 160);
-      await expect(cursor.locator(".brand-cursor__dot")).not.toHaveCSS(
-        "transform",
-        "none",
-      );
-      await page.locator('a[href="/auth"]').first().hover();
-      await expect(page.locator("html")).toHaveClass(
-        /brand-cursor--interactive/,
+      await expect(page.locator("body")).toHaveCSS("cursor", /arrow\.cur/);
+      await expect(page.locator('a[href="/auth"]').first()).toHaveCSS(
+        "cursor",
+        /hand\.cur/,
       );
       await page.goto("/auth");
-      await page.locator('input[name="email"]').hover();
-      await expect(page.locator("html")).toHaveClass(/brand-cursor--text/);
+      await expect(page.locator('input[name="email"]')).toHaveCSS(
+        "cursor",
+        /ibeam\.cur/,
+      );
       await page.screenshot({
         path: testInfo.outputPath("desktop-cursor.png"),
       });
-    } else {
-      await expect(page.locator(".brand-cursor")).toHaveCount(0);
     }
   });
 
@@ -229,7 +223,7 @@ test.describe("visual system", () => {
       () => window.matchMedia("(pointer: coarse)").matches,
     );
     if (isCoarsePointer)
-      await expect(page.locator(".brand-cursor")).toHaveCount(0);
+      await expect(page.locator("body")).not.toHaveCSS("cursor", /arrow\.cur/);
   });
 
   test("uses an accessible project listbox and requests a tariff without self-assigning", async ({

@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 import { AppLoader } from "./components/app-loader";
-import { BrandCursor } from "./components/brand-cursor";
 import { ThemeProvider } from "./components/theme-provider";
 import "./globals.css";
 
@@ -41,7 +40,6 @@ export default function RootLayout({
       <body>
         <ThemeProvider>
           <AppLoader />
-          <BrandCursor />
           {children}
         </ThemeProvider>
       </body>

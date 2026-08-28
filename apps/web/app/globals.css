@@ -4578,62 +4578,90 @@ html[data-theme="light"] .app-loader__wordmark--light {
     transform: translateY(4px);
   }
 }
-.brand-cursor {
-  position: fixed;
-  z-index: 1100;
-  inset: 0;
-  pointer-events: none;
-}
-.brand-cursor__dot,
-.brand-cursor__ring {
-  position: fixed;
-  top: 0;
-  left: 0;
-  will-change: transform;
-}
-.brand-cursor__dot {
-  width: 5px;
-  height: 5px;
-  margin: -2.5px;
-  border-radius: 50%;
-  background: var(--accent-strong);
-}
-.brand-cursor__ring {
-  width: 25px;
-  height: 25px;
-  margin: -12.5px;
-  border: 1px solid color-mix(in srgb, var(--accent) 72%, transparent);
-  border-radius: 50%;
-  transition:
-    width 120ms ease,
-    height 120ms ease,
-    margin 120ms ease,
-    border-color 120ms ease,
-    opacity 120ms ease;
-}
-html.brand-cursor--interactive .brand-cursor__ring {
-  width: 34px;
-  height: 34px;
-  margin: -17px;
-  border-color: var(--accent);
-}
-html.brand-cursor--outside .brand-cursor__ring,
-html.brand-cursor--outside .brand-cursor__dot,
-html.brand-cursor--text .brand-cursor {
-  opacity: 0;
-}
-html.has-brand-cursor,
-html.has-brand-cursor a,
-html.has-brand-cursor button,
-html.has-brand-cursor select,
-html.has-brand-cursor [role="button"],
-html.has-brand-cursor [role="link"] {
-  cursor: none;
-}
-html.has-brand-cursor input,
-html.has-brand-cursor textarea,
-html.has-brand-cursor [contenteditable="true"] {
-  cursor: text;
+/* Native cursor pack: only desktop fine-pointer devices receive the custom assets. */
+@media (pointer: fine) and (hover: hover) {
+  html,
+  body {
+    cursor:
+      url("/cursors/dark/arrow.cur") 2 2,
+      default;
+  }
+  a[href],
+  button:not(:disabled),
+  select:not(:disabled),
+  summary,
+  [role="button"],
+  [role="link"],
+  [role="option"],
+  [data-cursor-interactive] {
+    cursor:
+      url("/cursors/dark/hand.cur") 2 2,
+      pointer;
+  }
+  input:not([type="checkbox"]):not([type="radio"]),
+  textarea,
+  [contenteditable="true"] {
+    cursor:
+      url("/cursors/dark/ibeam.cur") 2 2,
+      text;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    cursor:
+      url("/cursors/dark/hand.cur") 2 2,
+      pointer;
+  }
+  button:disabled,
+  select:disabled,
+  input:disabled,
+  [aria-disabled="true"] {
+    cursor:
+      url("/cursors/dark/no.cur") 2 2,
+      not-allowed;
+  }
+  [aria-busy="true"],
+  [data-cursor="wait"] {
+    cursor:
+      url("/cursors/dark/wait.ani") 2 2,
+      wait;
+  }
+  [title],
+  [data-cursor="help"] {
+    cursor:
+      url("/cursors/dark/help.cur") 2 2,
+      help;
+  }
+  [draggable="true"],
+  [data-cursor="move"] {
+    cursor:
+      url("/cursors/dark/sizeall.cur") 2 2,
+      move;
+  }
+  [data-cursor="resize-ew"] {
+    cursor:
+      url("/cursors/dark/sizewe.cur") 2 2,
+      ew-resize;
+  }
+  [data-cursor="resize-ns"] {
+    cursor:
+      url("/cursors/dark/sizens.cur") 2 2,
+      ns-resize;
+  }
+  [data-cursor="resize-nesw"] {
+    cursor:
+      url("/cursors/dark/sizenesw.cur") 2 2,
+      nesw-resize;
+  }
+  [data-cursor="resize-nwse"] {
+    cursor:
+      url("/cursors/dark/sizenwse.cur") 2 2,
+      nwse-resize;
+  }
+  [data-cursor="crosshair"] {
+    cursor:
+      url("/cursors/dark/crosshair.cur") 2 2,
+      crosshair;
+  }
 }
 
 /* Light surfaces retain the visual hierarchy of the approved dark interface. */
@@ -4722,11 +4750,6 @@ html[data-theme="light"] .company-status--suspended {
   .app-loader__wordmark img {
     opacity: 1;
     transform: none;
-  }
-}
-@media (pointer: coarse), (hover: none) {
-  .brand-cursor {
-    display: none;
   }
 }
 @media (max-width: 620px) {
