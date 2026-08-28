@@ -46,14 +46,9 @@ export function SiteFooter({ compact = false }: { compact?: boolean }) {
           aria-label={copy.astanaHub}
         >
           <img
-            className="footer__partner-logo footer__partner-logo--dark"
+            className="footer__partner-logo"
             src="/assets/astana-hub-logo.svg"
             alt="Astana Hub"
-          />
-          <img
-            className="footer__partner-logo footer__partner-logo--light"
-            src="/assets/astana-hub-logo-dark.svg"
-            alt=""
           />
         </a>
       </div>

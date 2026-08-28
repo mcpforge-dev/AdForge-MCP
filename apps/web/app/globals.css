@@ -5638,16 +5638,9 @@ select {
   background: #151922;
 }
 
-.footer__partner-logo--light {
-  display: none;
-}
-
-html[data-theme="light"] .footer__partner-logo--dark {
-  display: none;
-}
-
-html[data-theme="light"] .footer__partner-logo--light {
-  display: block;
+html[data-theme="light"] .footer__partner-logo {
+  filter: brightness(0) saturate(100%) invert(13%) sepia(15%) saturate(1768%)
+    hue-rotate(176deg) brightness(92%) contrast(93%);
 }
 
 @media (prefers-reduced-motion: reduce) {
