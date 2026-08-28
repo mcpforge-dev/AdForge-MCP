@@ -240,8 +240,13 @@ async function safeGetOne(
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.1",
           "user-agent": "HolyMediaSiteAudit/3.0 (+https://mcp.holymedia.kz)",
         },
-        lookup: (_host, _opts, callback) =>
-          callback(null, chosen.address, chosen.family),
+        lookup: (_host, lookupOptions, callback) => {
+          // Node 24 can request DNS records with `all: true`. Return the same
+          // pre-validated records in that form, rather than allowing Node to
+          // resolve the host again and bypass the DNS-rebinding guard.
+          if (lookupOptions.all) return callback(null, addresses);
+          return callback(null, chosen.address, chosen.family);
+        },
       },
       (response) => {
         const remote = response.socket.remoteAddress;
