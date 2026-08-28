@@ -620,14 +620,14 @@ async function runLighthouse(url: string): Promise<
         `--host-resolver-rules=MAP ${target.hostname} ${address}, MAP * ~NOTFOUND, EXCLUDE localhost`,
       ],
     });
-    const result = await lighthouse(normalized, {
+    const result = await lighthouseWithTimeout(normalized, {
       port: 9222,
       output: "json",
       onlyCategories: ["performance", "accessibility", "seo"],
     });
     const { default: desktopConfig } =
       await import("lighthouse/core/config/desktop-config.js");
-    const desktopResult = await lighthouse(
+    const desktopResult = await lighthouseWithTimeout(
       normalized,
       {
         port: 9222,
@@ -770,6 +770,28 @@ async function runLighthouse(url: string): Promise<
     return undefined;
   } finally {
     await browser?.close();
+  }
+}
+
+async function lighthouseWithTimeout(
+  url: string,
+  options: Parameters<typeof lighthouse>[1],
+  config?: Parameters<typeof lighthouse>[2],
+) {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      lighthouse(url, options, config),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () =>
+            reject(new Error("Lighthouse did not finish within 90 seconds.")),
+          90_000,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
   }
 }
 
