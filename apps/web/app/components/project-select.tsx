@@ -108,6 +108,10 @@ export function ProjectSelect({
               role="option"
               aria-selected={option.value === selectedValue}
               disabled={option.disabled}
+              onPointerDown={(event) => {
+                event.preventDefault();
+                commit(option.value);
+              }}
               onClick={() => commit(option.value)}
               onKeyDown={(event) => {
                 if (event.key === "ArrowDown" || event.key === "ArrowUp") {
@@ -117,6 +121,10 @@ export function ProjectSelect({
                 if (event.key === "Escape") {
                   setOpen(false);
                   triggerRef.current?.focus();
+                }
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  commit(option.value);
                 }
               }}
             >

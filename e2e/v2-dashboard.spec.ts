@@ -37,6 +37,21 @@ async function login(page: Page) {
   await expect(page.locator("main.dashboard-shell")).toBeVisible();
 }
 
+async function selectProjectOption(
+  page: Page,
+  ariaLabel: string,
+  optionName: string,
+) {
+  const trigger = page.getByRole("button", { name: ariaLabel, exact: true });
+  if ((await trigger.getAttribute("aria-expanded")) !== "true") {
+    await trigger.focus();
+    await page.keyboard.press("ArrowDown");
+  }
+  const listbox = page.getByRole("listbox", { name: ariaLabel, exact: true });
+  await expect(listbox).toBeVisible();
+  await listbox.getByRole("option", { name: optionName, exact: true }).click();
+}
+
 test.describe("restored HolyMedia client UX", () => {
   test("keeps an active session when returning from legal pages", async ({
     page,
@@ -148,13 +163,13 @@ test.describe("restored HolyMedia client UX", () => {
     ).toBeVisible();
 
     await page.getByRole("button", { name: "Обзор", exact: true }).click();
-    const attention = page
+    const tariff = page
       .locator(".stat-card--link")
-      .filter({ hasText: "Требуют внимания" });
-    await expect(attention).toContainText("0");
-    await attention.click();
+      .filter({ hasText: "Тариф" });
+    await expect(tariff).toContainText("Не выбран");
+    await tariff.click();
     await expect(
-      page.getByRole("heading", { name: "Подключения" }),
+      page.getByRole("heading", { name: "Тарифы HolyMedia MCP" }),
     ).toBeVisible();
   });
 
@@ -446,7 +461,11 @@ test.describe("restored HolyMedia client UX", () => {
       ["30", 29],
     ]) {
       reportUrl = "";
-      await page.locator('select[name="period"]').selectOption(days);
+      await selectProjectOption(
+        page,
+        "Период отчёта",
+        `Последние ${days} дней`,
+      );
       await expect.poll(() => reportUrl).not.toBe("");
       previewParams = new URL(reportUrl).searchParams;
       expect(
@@ -456,7 +475,7 @@ test.describe("restored HolyMedia client UX", () => {
       ).toBe(expectedRange);
     }
     reportUrl = "";
-    await page.locator('select[name="period"]').selectOption("14");
+    await selectProjectOption(page, "Период отчёта", "Последние 14 дней");
     await page.getByRole("button", { name: "Скачать отчёт" }).click();
     await expect.poll(() => reportUrl).not.toBe("");
     const reportParams = new URL(reportUrl).searchParams;
@@ -467,7 +486,7 @@ test.describe("restored HolyMedia client UX", () => {
     ).toBe(13);
     expect(new URL(reportUrl).pathname).toMatch(/performance\.docx$/);
     reportUrl = "";
-    await page.locator('select[name="format"]').selectOption("pptx");
+    await selectProjectOption(page, "Формат отчёта", "PowerPoint (.pptx)");
     await page.getByRole("button", { name: "Скачать отчёт" }).click();
     await expect.poll(() => reportUrl).not.toBe("");
     expect(new URL(reportUrl).pathname).toMatch(/performance\.pptx$/);
@@ -730,9 +749,7 @@ test.describe("restored HolyMedia client UX", () => {
 
     const tokenForm = page.locator("form.token-form");
     await tokenForm.locator('input[name="name"]').fill("30-day client");
-    await tokenForm
-      .locator('select[name="expires_in_days"]')
-      .selectOption("30");
+    await selectProjectOption(page, "Срок действия", "30 дней");
     await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
     await expect(page.locator(".one-time-secret")).toBeVisible();
     await page.reload();
@@ -747,9 +764,7 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(thirtyDayToken.getByText(/Действует до/)).toBeVisible();
 
     await tokenForm.locator('input[name="name"]').fill("90-day client");
-    await tokenForm
-      .locator('select[name="expires_in_days"]')
-      .selectOption("90");
+    await selectProjectOption(page, "Срок действия", "90 дней");
     await tokenForm.getByRole("button", { name: "Создать ключ" }).click();
     await expect(page.locator(".one-time-secret")).toBeVisible();
     await page.getByRole("button", { name: "Скрыть" }).click();
