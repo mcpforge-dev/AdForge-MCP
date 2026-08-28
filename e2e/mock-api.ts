@@ -69,6 +69,90 @@ async function json(route: Route, body: unknown) {
   });
 }
 
+function mockSiteAudit(id: string, url: string) {
+  return {
+    id,
+    normalizedUrl: url,
+    status: "COMPLETED",
+    stage: "completed",
+    progress: 100,
+    pagesFound: 3,
+    pagesChecked: 3,
+    coverageSampled: false,
+    elapsedMs: 12_000,
+    createdAt: new Date().toISOString(),
+    scores: [
+      {
+        id: "seo",
+        label: "SEO",
+        value: 62,
+        passed: 9,
+        applicable: 14,
+        origin: "weighted deterministic checks",
+      },
+      {
+        id: "accessibility",
+        label: "Доступность",
+        value: 71,
+        passed: 4,
+        applicable: 6,
+        origin: "axe",
+      },
+    ],
+    issueCounts: { P1: 1, P2: 1 },
+    summary: {
+      executiveSummary:
+        "Проверено 3 страницы. Сначала исправьте видимость главного действия.",
+      methodology: "Проверки измерены или вычислены.",
+      fieldData: "Недостаточно полевых данных.",
+      gsc: "Search Console не подключена — поисковые данные не учитывались.",
+    },
+    findings: [
+      {
+        id: "finding-1",
+        severity: "P1",
+        category: "ux",
+        evidenceKind: "MEASURED",
+        title: "CTA теряется на первом экране",
+        finding: "Главное действие не видно.",
+        location: url,
+        evidence: "CTA не найден.",
+        impact: "Пользователь не понимает следующий шаг.",
+        recommendation: "Добавьте заметную кнопку.",
+        ownerRole: "Дизайнер",
+        effort: "1–2 часа",
+      },
+      {
+        id: "finding-2",
+        severity: "P2",
+        category: "seo",
+        evidenceKind: "COMPUTED",
+        title: "Canonical не настроен",
+        finding: "Не найден canonical.",
+        location: url,
+        evidence: "rel=canonical отсутствует.",
+        impact: "Возможны дубли.",
+        recommendation: "Укажите canonical.",
+        ownerRole: "SEO",
+        effort: "15 минут",
+      },
+    ],
+    screenshots: [
+      {
+        kind: "DESKTOP_SCREENSHOT",
+        domMap: [
+          {
+            label: "Hero",
+            selector: "h1",
+            text: "Понятный оффер",
+            box: { x: 80, y: 180, width: 640, height: 160 },
+          },
+        ],
+      },
+    ],
+  };
+}
+
 type MockServiceToken = {
   id: string;
   name: string;
@@ -125,6 +209,7 @@ export async function installMockApi(
     },
   ];
   const tariffRequests: Array<Record<string, unknown>> = [];
+  const siteAudits: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/**", async (route) => {
     const request = route.request();
@@ -309,6 +394,45 @@ export async function installMockApi(
       return json(route, []);
     if (path === `/api/v1/workspaces/${workspace.id}/billing/subscription`)
       return json(route, null);
+    if (path === `/api/v1/workspaces/${workspace.id}/site-audits`) {
+      if (request.method() === "POST") {
+        const body = request.postDataJSON() as { url: string };
+        const audit = mockSiteAudit(`audit-${siteAudits.length + 1}`, body.url);
+        siteAudits.unshift(audit);
+        return json(route, audit);
+      }
+      return json(route, { items: siteAudits });
+    }
+    if (path.startsWith(`/api/v1/workspaces/${workspace.id}/site-audits/`)) {
+      const tail = path.slice(
+        `/api/v1/workspaces/${workspace.id}/site-audits/`.length,
+      );
+      const [auditId, resource] = tail.split("/");
+      const audit =
+        siteAudits.find((item) => item.id === auditId) ??
+        mockSiteAudit(auditId || "audit-1", "https://example.com");
+      if (resource === "screenshot")
+        return route.fulfill({
+          status: 200,
+          headers: { ...cors, "content-type": "image/png" },
+          body: Buffer.from(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0l" +
+              "EQVR42mP8/x8AAusB9Wl6x4YAAAAASUVORK5CYII=",
+            "base64",
+          ),
+        });
+      if (resource === "report.docx")
+        return route.fulfill({
+          status: 200,
+          headers: {
+            ...cors,
+            "content-type":
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+          },
+          body: "mock-docx",
+        });
+      return json(route, audit);
+    }
     if (
       path === `/api/v1/workspaces/${workspace.id}/billing/tariff-requests` &&
       request.method() === "POST"

@@ -15,6 +15,9 @@ const ignoredPrefixes = [
   ".impeccable/",
   "packages/database/src/generated/",
 ];
+// Lockfile integrity digests are package-manager metadata, not credentials.  They
+// can accidentally contain the same character sequence as a provider token.
+const contentIgnoredPaths = new Set(["pnpm-lock.yaml"]);
 const files = tracked.filter(
   (file) =>
     existsSync(file) &&
@@ -28,7 +31,7 @@ const pathFindings = files.filter((file) => forbiddenPath.test(file));
 const findings = [];
 
 for (const file of files) {
-  if (pathFindings.includes(file)) continue;
+  if (pathFindings.includes(file) || contentIgnoredPaths.has(file)) continue;
   const content = readFileSync(file, "utf8");
   if (forbiddenValue.test(content)) findings.push(file);
 }

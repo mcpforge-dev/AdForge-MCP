@@ -42,6 +42,8 @@ import { LegacySiteAnalysisController } from "./compat/legacy-site-analysis.cont
 import { LegacyProfileController } from "./compat/legacy-profile.controller.js";
 import { SiteAnalysisController } from "./site-analysis/site-analysis.controller.js";
 import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
+import { SiteAuditController } from "./site-audits/site-audit.controller.js";
+import { SiteAuditService } from "./site-audits/site-audit.service.js";
 import { BillingController } from "./billing/billing.controller.js";
 import { BillingService } from "./billing/billing.service.js";
 import { ManualConnectionRequestController } from "./compat/manual-connection-request.controller.js";
@@ -80,6 +82,7 @@ import { AdminService } from "./admin/admin.service.js";
     LegacySiteAnalysisController,
     LegacyProfileController,
     SiteAnalysisController,
+    SiteAuditController,
     BillingController,
     ManualConnectionRequestController,
     LegacyDiagnosticsController,
@@ -117,6 +120,7 @@ import { AdminService } from "./admin/admin.service.js";
     GoogleLoginService,
     ReportService,
     SiteAnalysisService,
+    SiteAuditService,
     BillingService,
     ManualConnectionRequestService,
     ProductAnalyticsService,

@@ -12,6 +12,7 @@ import { FeedbackBlock } from "../../components/feedback-block";
 import { TariffCatalog } from "../../components/tariff-catalog";
 import { SubscriptionInfo } from "../../components/subscription-info";
 import { ProjectSelect } from "../../components/project-select";
+import { SiteAuditV3 } from "../../components/site-audit-v3";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const MCP_URL = "https://mcp.holymedia.kz/mcp";
@@ -698,10 +699,6 @@ export default function DashboardPage() {
   }, [active]);
 
   useEffect(() => {
-    if (section === "analysis" && active) void loadAnalysisHistory();
-  }, [active, section]);
-
-  useEffect(() => {
     if (
       reportAccountId &&
       !reportableAccounts.some(({ account }) => account.id === reportAccountId)
@@ -1301,7 +1298,7 @@ export default function DashboardPage() {
     { id: "connections", label: "Подключения" },
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
-    { label: "Анализ сайта", disabled: true },
+    { id: "analysis", label: "Анализ сайта" },
     { label: "SEO", disabled: true },
   ];
   const allProviderIds = [
@@ -2214,7 +2211,16 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {section === "analysis" && (
+        {section === "analysis" && active && (
+          <SiteAuditV3
+            workspaceId={active.id}
+            csrf={csrf}
+            notify={notify}
+            fail={fail}
+          />
+        )}
+
+        {section === "analysis" && Boolean(analysisResult) && (
           <section className="section" aria-labelledby="analysis-title">
             <div className="section-head">
               <div>

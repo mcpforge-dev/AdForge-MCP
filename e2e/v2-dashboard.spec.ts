@@ -917,4 +917,62 @@ test.describe("restored HolyMedia client UX", () => {
     });
     expect(failures, failures.join("\n")).toEqual([]);
   });
+
+  test("runs the V3 website audit brief and shows evidence-based results", async ({
+    page,
+  }, testInfo) => {
+    await installMockApi(page);
+    const failures = collectClientFailures(page);
+    await login(page);
+    await page
+      .getByRole("button", { name: "Анализ сайта", exact: true })
+      .click();
+    await expect(
+      page.getByRole("heading", { name: "Анализ сайта" }),
+    ).toBeVisible();
+    await expect(page.getByText("Шаг 1. Сайт", { exact: true })).toBeVisible();
+    await page.getByLabel("URL сайта").fill("https://example.com");
+    await page.getByRole("button", { name: "Далее" }).click();
+    await page
+      .getByRole("textbox", { name: "Целевая аудитория" })
+      .fill("Владельцы малого бизнеса");
+    await page
+      .getByLabel("Главная цель сайта")
+      .selectOption({ label: "Заявки" });
+    await page.getByRole("button", { name: "Посмотреть summary" }).click();
+    await expect(
+      page.getByText(
+        "crawl → браузер → SEO → Lighthouse → accessibility → ссылки → отчёт Word.",
+      ),
+    ).toBeVisible();
+    expect(await new AxeBuilder({ page }).analyze()).toEqual(
+      expect.objectContaining({ violations: [] }),
+    );
+    await page.getByRole("button", { name: "Запустить анализ" }).click();
+    await expect(
+      page.getByRole("heading", { name: "Что исправить в первую очередь" }),
+    ).toBeVisible();
+    await expect(
+      page
+        .getByRole("heading", { name: "CTA теряется на первом экране" })
+        .first(),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Показать проблемы на экране" }),
+    ).toBeVisible();
+    await page
+      .getByRole("button", { name: "Показать проблемы на экране" })
+      .click();
+    await expect(page.getByText("1 — Hero")).toBeVisible();
+    const dimensions = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      scroll: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.viewport + 1);
+    await page.screenshot({
+      path: testInfo.outputPath("site-audit-v3.png"),
+      fullPage: true,
+    });
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
 });

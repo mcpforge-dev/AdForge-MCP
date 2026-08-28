@@ -84,6 +84,38 @@ enum TariffRequestStatus {
   CANCELED
 }
 
+enum SiteAuditStatus {
+  QUEUED
+  CRAWLING
+  BROWSER_ANALYSIS
+  SEO_ANALYSIS
+  PERFORMANCE
+  AI_ANALYSIS
+  REPORTING
+  COMPLETED
+  FAILED
+}
+
+enum SiteAuditSeverity {
+  P0
+  P1
+  P2
+  P3
+}
+
+enum SiteAuditEvidenceKind {
+  MEASURED
+  COMPUTED
+  AI_ASSESSMENT
+}
+
+enum SiteAuditArtifactKind {
+  DESKTOP_SCREENSHOT
+  MOBILE_SCREENSHOT
+  ANNOTATED_SCREENSHOT
+  DOCX_REPORT
+}
+
 model User {
   id                String               @id @default(uuid()) @db.Uuid
   email             String               @unique @db.VarChar(320)
@@ -104,6 +136,7 @@ model User {
   connections       ProviderConnection[]
   oauthStates       OAuthState[]
   siteAnalysisRecords SiteAnalysisRecord[]
+  siteAudits          SiteAudit[]
   manualConnectionRequests ManualConnectionRequest[]
   tariffRequests TariffRequest[]
   mcpOAuthClients McpOAuthClient[]
@@ -156,6 +189,7 @@ model Workspace {
   providerAccounts ProviderAccount[]
   oauthStates  OAuthState[]
   siteAnalysisRecords SiteAnalysisRecord[]
+  siteAudits          SiteAudit[]
   subscriptions WorkspaceSubscription[]
   billingOrders BillingOrder[]
   usageRecords UsageRecord[]
@@ -519,6 +553,146 @@ model Price {
   @@unique([planId, currency, interval])
   @@index([active, currency])
   @@map("prices")
+}
+
+model SiteAudit {
+  id                String          @id @default(uuid()) @db.Uuid
+  workspaceId       String          @map("workspace_id") @db.Uuid
+  userId            String          @map("user_id") @db.Uuid
+  url               String          @db.VarChar(2048)
+  normalizedUrl     String          @map("normalized_url") @db.VarChar(2048)
+  status            SiteAuditStatus @default(QUEUED)
+  stage             String          @default("queued") @db.VarChar(80)
+  progress          Int             @default(0)
+  pagesFound        Int             @default(0) @map("pages_found")
+  pagesChecked      Int             @default(0) @map("pages_checked")
+  coverageSampled   Boolean         @default(false) @map("coverage_sampled")
+  elapsedMs         Int?            @map("elapsed_ms")
+  scores            Json?
+  summary           Json?
+  errorCode         String?         @map("error_code") @db.VarChar(80)
+  errorMessage      String?         @map("error_message") @db.VarChar(1000)
+  startedAt         DateTime?       @map("started_at")
+  completedAt       DateTime?       @map("completed_at")
+  createdAt         DateTime        @default(now()) @map("created_at")
+  updatedAt         DateTime        @updatedAt @map("updated_at")
+  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brief             SiteAuditBrief?
+  pages             SiteAuditPage[]
+  findings          SiteAuditFinding[]
+  metrics           SiteAuditMetric[]
+  screenshots       SiteAuditScreenshot[]
+  report            SiteAuditReport?
+
+  @@index([workspaceId, createdAt])
+  @@index([workspaceId, status, createdAt])
+  @@index([userId, createdAt])
+  @@map("site_audits")
+}
+
+model SiteAuditBrief {
+  id               String    @id @default(uuid()) @db.Uuid
+  auditId          String    @unique @map("audit_id") @db.Uuid
+  companyName      String?   @map("company_name") @db.VarChar(160)
+  industry         String?   @db.VarChar(160)
+  targetAudience   String?   @map("target_audience") @db.VarChar(2000)
+  primaryGoal      String?   @map("primary_goal") @db.VarChar(120)
+  mainProblem      String?   @map("main_problem") @db.VarChar(2000)
+  primaryAction    String?   @map("primary_action") @db.VarChar(500)
+  market           String?   @db.VarChar(500)
+  competitors      Json      @default("[]")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  audit            SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@map("site_audit_briefs")
+}
+
+model SiteAuditPage {
+  id                String    @id @default(uuid()) @db.Uuid
+  auditId           String    @map("audit_id") @db.Uuid
+  url               String    @db.VarChar(2048)
+  canonicalUrl      String?   @map("canonical_url") @db.VarChar(2048)
+  statusCode        Int?      @map("status_code")
+  indexable         Boolean?
+  discoveredFrom    String?   @map("discovered_from") @db.VarChar(2048)
+  title             String?   @db.VarChar(1000)
+  description       String?   @db.VarChar(2000)
+  headings          Json      @default("{}")
+  checks            Json      @default("{}")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  audit             SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, url])
+  @@index([auditId, statusCode])
+  @@map("site_audit_pages")
+}
+
+model SiteAuditFinding {
+  id                String                @id @default(uuid()) @db.Uuid
+  auditId           String                @map("audit_id") @db.Uuid
+  category          String                @db.VarChar(80)
+  severity          SiteAuditSeverity
+  evidenceKind      SiteAuditEvidenceKind @map("evidence_kind")
+  title             String                @db.VarChar(500)
+  finding           String                @db.VarChar(4000)
+  location          String?               @db.VarChar(2048)
+  selector          String?               @db.VarChar(1000)
+  evidence          String                @db.VarChar(4000)
+  impact            String                @db.VarChar(4000)
+  recommendation    String                @db.VarChar(4000)
+  ownerRole         String?               @map("owner_role") @db.VarChar(80)
+  effort            String?               @db.VarChar(120)
+  sortOrder         Int                   @default(0) @map("sort_order")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  audit             SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@index([auditId, severity, sortOrder])
+  @@index([auditId, category])
+  @@map("site_audit_findings")
+}
+
+model SiteAuditMetric {
+  id                String                @id @default(uuid()) @db.Uuid
+  auditId           String                @map("audit_id") @db.Uuid
+  category          String                @db.VarChar(80)
+  metricKey         String                @map("metric_key") @db.VarChar(120)
+  label             String                @db.VarChar(300)
+  value             Json
+  unit              String?               @db.VarChar(40)
+  evidenceKind      SiteAuditEvidenceKind @map("evidence_kind")
+  source            String                @db.VarChar(200)
+  createdAt         DateTime              @default(now()) @map("created_at")
+  audit             SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, metricKey])
+  @@index([auditId, category])
+  @@map("site_audit_metrics")
+}
+
+model SiteAuditScreenshot {
+  id                String                @id @default(uuid()) @db.Uuid
+  auditId           String                @map("audit_id") @db.Uuid
+  kind              SiteAuditArtifactKind
+  mimeType          String                @map("mime_type") @db.VarChar(100)
+  data              Bytes
+  domMap            Json?                 @map("dom_map")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  audit             SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@unique([auditId, kind])
+  @@map("site_audit_screenshots")
+}
+
+model SiteAuditReport {
+  id                String    @id @default(uuid()) @db.Uuid
+  auditId           String    @unique @map("audit_id") @db.Uuid
+  mimeType          String    @map("mime_type") @db.VarChar(100)
+  data              Bytes
+  generatedAt       DateTime  @default(now()) @map("generated_at")
+  audit             SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+
+  @@map("site_audit_reports")
 }
 
 model TariffRequest {

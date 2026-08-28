@@ -1,11 +1,17 @@
 import { Queue, Worker, type Job } from "bullmq";
 import { loadConfig } from "@holymedia/config";
+import { closeDatabase, createDatabase } from "@holymedia/database";
 import { createLogger } from "@holymedia/observability";
 import {
   PROVIDER_DISCOVERY_QUEUE,
   redisConnection,
   type ProviderDiscoveryJobData,
 } from "./provider-discovery.job.js";
+import {
+  processSiteAudit,
+  SITE_AUDIT_QUEUE,
+  type SiteAuditJobData,
+} from "./site-audit.job.js";
 
 const queueName = "holymedia-v2-foundation";
 
@@ -13,6 +19,7 @@ async function bootstrap(): Promise<void> {
   const config = loadConfig();
   const logger = createLogger("holymedia-mcp-v2-worker", config.logLevel);
   const connection = redisConnection(config.redisUrl);
+  const database = createDatabase(config.databaseUrl);
   const queue = new Queue(queueName, { connection });
   const worker = new Worker(
     queueName,
@@ -44,6 +51,11 @@ async function bootstrap(): Promise<void> {
     },
     { connection, concurrency: 2 },
   );
+  const siteAuditWorker = new Worker<SiteAuditJobData>(
+    SITE_AUDIT_QUEUE,
+    (job) => processSiteAudit(database, job),
+    { connection, concurrency: 1 },
+  );
 
   worker.on("failed", (job, error) => {
     logger.error(
@@ -70,7 +82,9 @@ async function bootstrap(): Promise<void> {
   const close = async () => {
     await worker.close();
     await discoveryWorker.close();
+    await siteAuditWorker.close();
     await queue.close();
+    await closeDatabase(database);
   };
   process.once("SIGTERM", () => void close());
   process.once("SIGINT", () => void close());
