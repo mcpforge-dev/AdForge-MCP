@@ -17,12 +17,10 @@ describe("SiteAuditService tenant boundary", () => {
   });
 
   it("scopes private screenshots and reports to the requested workspace", async () => {
-    const reportFindFirst = vi
-      .fn()
-      .mockResolvedValue({
-        data: new Uint8Array([1]),
-        mimeType: "application/octet-stream",
-      });
+    const reportFindFirst = vi.fn().mockResolvedValue({
+      data: new Uint8Array([1]),
+      mimeType: "application/octet-stream",
+    });
     const screenshotFindFirst = vi
       .fn()
       .mockResolvedValue({ data: new Uint8Array([2]), mimeType: "image/png" });

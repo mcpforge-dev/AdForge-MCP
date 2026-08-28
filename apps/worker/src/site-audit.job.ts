@@ -540,9 +540,7 @@ async function checkLinks(
   return broken.slice(0, 25);
 }
 
-async function runLighthouse(
-  url: string,
-): Promise<
+async function runLighthouse(url: string): Promise<
   | {
       metrics: Array<{
         category: string;
