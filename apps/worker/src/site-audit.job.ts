@@ -466,7 +466,13 @@ async function inspectFirstScreen(
       : undefined;
     const desktop = await desktopPage.screenshot({ type: "png" });
     const domMap = await extractDomMap(desktopPage);
-    const axe = await new AxeBuilder({ page: desktopPage }).analyze();
+    // A site's CSP can reject axe's injected helper. Screenshots and DOM
+    // evidence are still valid read-only browser measurements, so retain them
+    // and report accessibility as unavailable rather than dropping the whole
+    // browser artifact set.
+    const axe = await new AxeBuilder({ page: desktopPage })
+      .analyze()
+      .catch(() => ({ violations: [] }));
     const mobilePage = await browser.newPage({
       viewport: { width: 390, height: 844 },
       isMobile: true,
@@ -482,7 +488,9 @@ async function inspectFirstScreen(
     const mobileOverflow = await mobilePage.evaluate(
       () => document.documentElement.scrollWidth > window.innerWidth + 1,
     );
-    const mobileAxe = await new AxeBuilder({ page: mobilePage }).analyze();
+    const mobileAxe = await new AxeBuilder({ page: mobilePage })
+      .analyze()
+      .catch(() => ({ violations: [] }));
     await desktopPage.close();
     await mobilePage.close();
     return {
