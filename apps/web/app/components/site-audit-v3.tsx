@@ -491,6 +491,11 @@ export function SiteAuditV3({
           setShowMarkers={setShowMarkers}
           byRole={byRole}
           onSelectHistory={(id) => void loadAudit(id)}
+          onStartNew={() => {
+            setSelected(null);
+            setBrief(blankBrief());
+            setStep(1);
+          }}
           history={history}
         />
       )}
@@ -508,6 +513,7 @@ function AuditResults({
   byRole,
   history,
   onSelectHistory,
+  onStartNew,
 }: {
   audit: Audit;
   workspaceId: string;
@@ -518,6 +524,7 @@ function AuditResults({
   byRole: Record<string, Finding[]>;
   history: Audit[];
   onSelectHistory: (id: string) => void;
+  onStartNew: () => void;
 }) {
   const running = !["COMPLETED", "FAILED"].includes(audit.status);
   const currentStage = Math.max(0, stageOrder.indexOf(audit.stage));
@@ -589,6 +596,13 @@ function AuditResults({
               <h2>{audit.normalizedUrl}</h2>
               <p>{audit.summary?.executiveSummary}</p>
             </div>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={onStartNew}
+            >
+              Новый анализ
+            </button>
             <dl>
               <div>
                 <dt>Проверено страниц</dt>
