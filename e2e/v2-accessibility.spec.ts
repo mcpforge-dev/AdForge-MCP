@@ -155,11 +155,13 @@ test.describe("axe accessibility", () => {
         await page.getByRole("button", { name: "Отмена" }).first().click();
       }
     }
-    for (const label of ["Анализ сайта", "SEO"]) {
-      const item = page.getByRole("button", { name: new RegExp(label) });
-      await expect(item).toBeDisabled();
-      await expect(item.locator("small")).toHaveText("Скоро");
-    }
+    const siteAudit = page.getByRole("button", { name: /Анализ сайта/ });
+    await expect(siteAudit).toBeEnabled();
+    await siteAudit.click();
+    await expectAccessible(page, "site audit brief");
+    const seo = page.getByRole("button", { name: /SEO/ });
+    await expect(seo).toBeDisabled();
+    await expect(seo.locator("small")).toHaveText("Скоро");
     await page.getByRole("button", { name: "Тарифы", exact: true }).click();
     await expectAccessible(page, "tariffs");
     await page.getByRole("button", { name: /Открыть профиль/ }).click();
