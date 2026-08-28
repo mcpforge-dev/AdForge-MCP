@@ -939,7 +939,8 @@ test.describe("restored HolyMedia client UX", () => {
     await page
       .getByLabel("Главная цель сайта")
       .selectOption({ label: "Заявки" });
-    await page.getByRole("button", { name: "Посмотреть summary" }).click();
+    await page.getByLabel("Главное целевое действие").fill("Оставить заявку");
+    await page.getByRole("button", { name: "Проверить данные" }).click();
     await expect(
       page.getByText(
         "crawl → браузер → SEO → Lighthouse → accessibility → ссылки → отчёт Word.",

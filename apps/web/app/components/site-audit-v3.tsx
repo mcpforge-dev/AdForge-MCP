@@ -162,6 +162,36 @@ export function SiteAuditV3({
   const [selected, setSelected] = useState<Audit | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [showMarkers, setShowMarkers] = useState(false);
+  const [stepMessage, setStepMessage] = useState<string | null>(null);
+
+  const siteReady = useMemo(() => {
+    try {
+      const url = new URL(brief.url.trim());
+      return url.protocol === "https:" || url.protocol === "http:";
+    } catch {
+      return false;
+    }
+  }, [brief.url]);
+  const businessReady =
+    siteReady &&
+    Boolean(brief.targetAudience.trim()) &&
+    Boolean(brief.primaryGoal) &&
+    Boolean(brief.primaryAction.trim());
+  const availableStep = businessReady ? 3 : siteReady ? 2 : 1;
+
+  function goToStep(next: number) {
+    if (next > availableStep) {
+      setStepMessage(
+        next === 2
+          ? "Укажите корректный публичный URL сайта, чтобы продолжить."
+          : "Заполните цель, целевую аудиторию и главное действие сайта, чтобы перейти к запуску.",
+      );
+      setStep(Math.min(next - 1, availableStep));
+      return;
+    }
+    setStepMessage(null);
+    setStep(next);
+  }
 
   const running =
     selected && !["COMPLETED", "FAILED"].includes(selected.status);
@@ -203,7 +233,10 @@ export function SiteAuditV3({
   }
   async function launch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!brief.url.trim()) return;
+    if (!businessReady) {
+      goToStep(3);
+      return;
+    }
     setSubmitting(true);
     try {
       const response = await fetch(
@@ -263,7 +296,7 @@ export function SiteAuditV3({
     >
       <div className="section-head">
         <div>
-          <p className="eyebrow">AI Website Audit V3</p>
+          <p className="eyebrow">КОМПЛЕКСНЫЙ АУДИТ САЙТА</p>
           <h1 id="site-audit-title">Анализ сайта</h1>
           <p className="section-head__sub">
             Не просто балл: где проблема, чем она подтверждена, почему важна и
@@ -278,8 +311,8 @@ export function SiteAuditV3({
             type="button"
             className={step === index + 1 ? "is-active" : ""}
             aria-current={step === index + 1 ? "step" : undefined}
-            onClick={() => setStep(index + 1)}
-            disabled={index + 1 === 3 && !selected}
+            onClick={() => goToStep(index + 1)}
+            disabled={index + 1 > availableStep}
           >
             {index + 1}. {label}
           </button>
@@ -326,15 +359,23 @@ export function SiteAuditV3({
                 />
               </label>
             </div>
-            <p id="audit-url-note" className="field-note">
-              Проверяем только публичные HTTP(S)-страницы. Вход, формы и любые
-              изменения сайта исключены.
+            <p
+              id="audit-url-note"
+              className="field-note site-audit-v3__safety-note"
+            >
+              Проверяем только общедоступные страницы сайта. Мы не авторизуемся,
+              не отправляем формы и ничего не изменяем на сайте.
             </p>
+            {stepMessage && (
+              <p className="form-error" role="alert">
+                {stepMessage}
+              </p>
+            )}
             <div className="site-audit-v3__actions">
               <button
                 className="primary-button"
                 type="button"
-                onClick={() => setStep(2)}
+                onClick={() => goToStep(2)}
               >
                 Далее
               </button>
@@ -430,16 +471,16 @@ export function SiteAuditV3({
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => setStep(1)}
+                onClick={() => goToStep(1)}
               >
                 Назад
               </button>
               <button
                 className="primary-button"
                 type="button"
-                onClick={() => setStep(3)}
+                onClick={() => goToStep(3)}
               >
-                Посмотреть summary
+                Проверить данные
               </button>
             </div>
           </fieldset>
@@ -466,7 +507,7 @@ export function SiteAuditV3({
               <button
                 className="secondary-button"
                 type="button"
-                onClick={() => setStep(2)}
+                onClick={() => goToStep(2)}
               >
                 Назад
               </button>
@@ -853,10 +894,20 @@ function AuditResults({
               onClick={() => onSelectHistory(item.id)}
               key={item.id}
             >
-              <strong>{item.normalizedUrl}</strong>
-              <span>
+              <span className="site-audit-v3__history-site">
+                <strong>{new URL(item.normalizedUrl).hostname}</strong>
+                <small>{item.normalizedUrl}</small>
+              </span>
+              <span className="site-audit-v3__history-meta">
                 {new Date(item.createdAt).toLocaleDateString("ru-RU")} ·{" "}
                 {statusCopy[item.status]}
+                <em>
+                  {item.status === "FAILED"
+                    ? "Посмотреть причину"
+                    : item.status === "COMPLETED"
+                      ? "Открыть результат"
+                      : "Открыть проверку"}
+                </em>
               </span>
             </button>
           ))}

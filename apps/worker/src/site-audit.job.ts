@@ -4,6 +4,7 @@ import {
   computeAudit,
   crawlPublicSite,
   normalizePublicUrl,
+  parseAuditPage,
   resolvePublicHost,
   safeGet,
   validateStructuredData,
@@ -93,7 +94,29 @@ export async function processSiteAudit(
       });
       return { completed: false, robotsBlocked: true };
     }
-    if (!crawl.pages.length) {
+    let pages = crawl.pages;
+    let browser: Awaited<ReturnType<typeof inspectFirstScreen>> | undefined;
+    let browserFailure: string | undefined;
+    // Some public SPAs return an empty shell to a plain HTTP client.  A pinned,
+    // read-only browser render is a real fallback, not a synthetic result.
+    if (!pages.length) {
+      try {
+        browser = await inspectFirstScreen(audit.normalizedUrl, {
+          includeRenderedHtml: true,
+        });
+        if (browser.renderedHtml && browser.renderedUrl)
+          pages = [
+            parseAuditPage(browser.renderedUrl, 200, browser.renderedHtml),
+          ];
+      } catch (cause) {
+        browserFailure =
+          cause instanceof Error
+            ? cause.message
+            : "Браузерная проверка не завершилась.";
+      }
+    }
+    if (!pages.length) {
+      const crawlFailure = crawl.failures[0]?.reason;
       await database.client.siteAudit.update({
         where: { id: audit.id },
         data: {
@@ -103,8 +126,13 @@ export async function processSiteAudit(
           pagesFound: crawl.pagesFound,
           pagesChecked: 0,
           errorCode: "SITE_UNAVAILABLE",
-          errorMessage:
-            "Не удалось получить ни одной публичной HTML-страницы. Сайт может быть недоступен, требовать вход или блокировать автоматические проверки.",
+          errorMessage: [
+            "Не удалось получить ни одной публичной HTML-страницы.",
+            crawlFailure ? `HTTP-проверка: ${crawlFailure}` : null,
+            browserFailure ? `Браузерная проверка: ${browserFailure}` : null,
+          ]
+            .filter(Boolean)
+            .join(" "),
           elapsedMs: elapsed(startedAt),
           completedAt: new Date(),
         },
@@ -113,7 +141,7 @@ export async function processSiteAudit(
     }
     const competitors = await inspectCompetitors(brief.competitors ?? []);
     await database.client.siteAuditPage.createMany({
-      data: crawl.pages.map((page) => ({
+      data: pages.map((page) => ({
         auditId: audit.id,
         url: page.url,
         canonicalUrl: page.canonicalUrl,
@@ -135,9 +163,7 @@ export async function processSiteAudit(
       43,
       startedAt,
     );
-    const browser = crawl.pages[0]
-      ? await inspectFirstScreen(crawl.pages[0].url)
-      : undefined;
+    browser ??= await inspectFirstScreen(pages[0]!.url).catch(() => undefined);
     if (browser) {
       await database.client.siteAuditScreenshot.createMany({
         data: [
@@ -168,11 +194,11 @@ export async function processSiteAudit(
       62,
       startedAt,
     );
-    const brokenLinks = await checkLinks(crawl.pages);
-    const structured = await validateStructuredData(crawl.pages[0]?.html ?? "");
+    const brokenLinks = await checkLinks(pages);
+    const structured = await validateStructuredData(pages[0]?.html ?? "");
     const computation = computeAudit(
       brief,
-      crawl.pages,
+      pages,
       browser
         ? {
             brokenLinks,
@@ -188,7 +214,7 @@ export async function processSiteAudit(
       computation.findings.push(
         ...axeFindings(
           browser.axeViolations,
-          crawl.pages[0]?.url ?? audit.normalizedUrl,
+          pages[0]?.url ?? audit.normalizedUrl,
         ),
       );
     if (browser?.mobileOverflow)
@@ -198,7 +224,7 @@ export async function processSiteAudit(
         evidenceKind: "MEASURED",
         title: "На mobile есть горизонтальный overflow",
         finding: "Ширина содержимого больше ширины мобильного viewport.",
-        location: crawl.pages[0]?.url ?? audit.normalizedUrl,
+        location: pages[0]?.url ?? audit.normalizedUrl,
         evidence:
           "documentElement.scrollWidth > window.innerWidth на viewport 390px.",
         impact:
@@ -226,7 +252,7 @@ export async function processSiteAudit(
           title: "Ошибка структурированных данных",
           finding:
             "Validator обнаружил проблему в Schema.org / Rich Results разметке.",
-          location: crawl.pages[0]?.url ?? audit.normalizedUrl,
+          location: pages[0]?.url ?? audit.normalizedUrl,
           evidence: item.message,
           impact:
             "Разметка может быть проигнорирована поисковой системой или не получить расширенный результат.",
@@ -245,8 +271,8 @@ export async function processSiteAudit(
       72,
       startedAt,
     );
-    const performance = crawl.pages[0]
-      ? await runLighthouse(crawl.pages[0].url)
+    const performance = pages[0]
+      ? await runLighthouse(pages[0].url)
       : undefined;
     if (performance) {
       computation.metrics.push(...performance.metrics);
@@ -279,13 +305,13 @@ export async function processSiteAudit(
       audit.id,
       computation,
       crawl.pagesFound,
-      crawl.pages.length,
+      pages.length,
       crawl.sampled,
       browser?.desktop,
       browser?.domMap,
       startedAt,
     );
-    return { completed: true, pages: crawl.pages.length };
+    return { completed: true, pages: pages.length };
   } catch (cause) {
     const message =
       cause instanceof Error ? cause.message : "Неизвестная ошибка аудита.";
@@ -403,7 +429,10 @@ async function update(
   });
 }
 
-async function inspectFirstScreen(url: string) {
+async function inspectFirstScreen(
+  url: string,
+  options: { includeRenderedHtml?: boolean } = {},
+) {
   const normalized = await normalizePublicUrl(url);
   const pageUrl = new URL(normalized);
   const addresses = await resolvePublicHost(pageUrl.hostname);
@@ -429,6 +458,12 @@ async function inspectFirstScreen(url: string) {
       timeout: 25_000,
     });
     await desktopPage.waitForTimeout(800);
+    const renderedHtml = options.includeRenderedHtml
+      ? await desktopPage.content()
+      : undefined;
+    const renderedUrl = options.includeRenderedHtml
+      ? desktopPage.url()
+      : undefined;
     const desktop = await desktopPage.screenshot({ type: "png" });
     const domMap = await extractDomMap(desktopPage);
     const axe = await new AxeBuilder({ page: desktopPage }).analyze();
@@ -463,6 +498,8 @@ async function inspectFirstScreen(url: string) {
           nodes: item.nodes.length,
         }),
       ),
+      renderedHtml,
+      renderedUrl,
     };
   } finally {
     await browser.close();

@@ -291,11 +291,23 @@ async function safeGetOne(
       fail(
         error instanceof PublicUrlError
           ? error
-          : new PublicUrlError("Не удалось безопасно получить страницу сайта."),
+          : new PublicUrlError(describeRequestError(error)),
       ),
     );
     request.end();
   });
+}
+
+function describeRequestError(error: NodeJS.ErrnoException) {
+  if (/CERT_|TLS/i.test(error.code ?? ""))
+    return "Не удалось установить защищённое TLS-соединение с сайтом.";
+  if (error.code === "ENOTFOUND")
+    return "Домен сайта не удалось разрешить в публичный IP-адрес.";
+  if (error.code === "ECONNREFUSED")
+    return "Сайт отклонил соединение аудитора.";
+  if (["ECONNRESET", "EHOSTUNREACH", "ETIMEDOUT"].includes(error.code ?? ""))
+    return "Сайт временно не ответил на безопасную проверку.";
+  return "Не удалось безопасно получить страницу сайта.";
 }
 
 export async function crawlPublicSite(
@@ -310,6 +322,7 @@ export async function crawlPublicSite(
   pagesFound: number;
   sampled: boolean;
   robotsBlocked: boolean;
+  failures: Array<{ url: string; reason: string }>;
 }> {
   const home = await normalizePublicUrl(startUrl);
   const root = new URL(home);
@@ -319,7 +332,13 @@ export async function crawlPublicSite(
     crawlDelayMs: 300,
   }));
   if (!robots.allowed)
-    return { pages: [], pagesFound: 0, sampled: false, robotsBlocked: true };
+    return {
+      pages: [],
+      pagesFound: 0,
+      sampled: false,
+      robotsBlocked: true,
+      failures: [],
+    };
   const seed = new Set<string>([home]);
   for (const sitemapUrl of robots.sitemaps) {
     for (const item of await readSitemap(sitemapUrl).catch(() => [])) {
@@ -327,12 +346,18 @@ export async function crawlPublicSite(
     }
   }
   const pages: AuditPage[] = [];
+  const failures: Array<{ url: string; reason: string }> = [];
   const queue = [...seed];
   const seen = new Set(queue);
   while (queue.length && pages.length < maxPages) {
     const url = queue.shift();
     if (!url) continue;
-    const page = await fetchAuditPage(url).catch(() => null);
+    const page = await fetchAuditPageWithRetry(url).catch((error) => {
+      const reason =
+        error instanceof Error ? error.message : "Неизвестная ошибка загрузки.";
+      failures.push({ url, reason });
+      return null;
+    });
     if (page) {
       pages.push(page);
       for (const link of page.links) {
@@ -355,7 +380,21 @@ export async function crawlPublicSite(
     pagesFound: seen.size,
     sampled: queue.length > 0 || seen.size > pages.length,
     robotsBlocked: false,
+    failures: failures.slice(0, 10),
   };
+}
+
+async function fetchAuditPageWithRetry(url: string): Promise<AuditPage> {
+  try {
+    return await fetchAuditPage(url);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "";
+    if (!/временно не ответил|вовремя/i.test(message)) throw error;
+    // One delayed retry is reserved for a genuine transport timeout. It never
+    // retries access controls, CAPTCHA pages, authentication, or robots rules.
+    await delay(750);
+    return fetchAuditPage(url);
+  }
 }
 
 async function fetchRobots(root: URL) {
@@ -423,6 +462,14 @@ async function readSitemap(url: string, depth = 0): Promise<string[]> {
 
 async function fetchAuditPage(url: string): Promise<AuditPage> {
   const response = await safeGet(url);
+  if (response.statusCode >= 400)
+    throw new PublicUrlError(
+      `Сайт вернул HTTP ${response.statusCode}${
+        response.statusCode === 401 || response.statusCode === 403
+          ? "; публичная страница недоступна без авторизации или заблокировала проверку."
+          : "."
+      }`,
+    );
   const contentType = String(response.headers["content-type"] ?? "");
   if (!contentType.includes("text/html"))
     throw new PublicUrlError("URL не вернул HTML.");
@@ -1242,17 +1289,15 @@ export async function buildAuditDocx(input: {
       continue;
     }
     children.push(
-      ...entries
-        .slice(0, 15)
-        .flatMap((item) => [
-          new Paragraph({
-            text: `${item.severity} · ${item.title}`,
-            heading: HeadingLevel.HEADING_2,
-          }),
-          new Paragraph({
-            text: `Где: ${item.location || "страница сайта"}\nEvidence: ${item.evidence}\nПочему важно: ${item.impact}\nРекомендация: ${item.recommendation}\nОснование: ${evidenceLabel(item.evidenceKind)}.`,
-          }),
-        ]),
+      ...entries.slice(0, 15).flatMap((item) => [
+        new Paragraph({
+          text: `${item.severity} · ${item.title}`,
+          heading: HeadingLevel.HEADING_2,
+        }),
+        new Paragraph({
+          text: `Где: ${item.location || "страница сайта"}\nEvidence: ${item.evidence}\nПочему важно: ${item.impact}\nРекомендация: ${item.recommendation}\nОснование: ${evidenceLabel(item.evidenceKind)}.`,
+        }),
+      ]),
     );
   }
   children.push(
