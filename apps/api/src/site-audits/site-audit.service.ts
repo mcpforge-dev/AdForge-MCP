@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { Inject, Injectable, NotFoundException } from "@nestjs/common";
 import { Queue } from "bullmq";
 import { normalizePublicUrl } from "@holymedia/site-audit";
 import { loadConfig } from "@holymedia/config";
-import type { DatabaseService } from "../infrastructure/database.service.js";
-import type { ProviderService } from "../providers/provider.service.js";
+import { DatabaseService } from "../infrastructure/database.service.js";
+import { ProviderService } from "../providers/provider.service.js";
 
 const SITE_AUDIT_QUEUE = "holymedia-v3-site-audit";
 
@@ -22,7 +22,9 @@ export type CreateSiteAuditInput = {
 @Injectable()
 export class SiteAuditService {
   public constructor(
+    @Inject(DatabaseService)
     private readonly database: DatabaseService,
+    @Inject(ProviderService)
     private readonly providers: ProviderService,
   ) {}
 
