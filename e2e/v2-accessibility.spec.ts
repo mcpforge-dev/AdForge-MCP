@@ -119,8 +119,15 @@ test.describe("axe accessibility", () => {
       legalFooter.getByRole("button", { name: "English" }),
     ).toHaveCount(0);
     await expect(
-      legalFooter.locator('a[href="https://astanahub.com/"] img'),
-    ).toHaveAttribute("src", "/assets/astana-hub-logo.svg");
+      legalFooter.locator(
+        'a[href="https://astanahub.com/"] img.footer__partner-logo--dark-theme',
+      ),
+    ).toHaveAttribute("src", "/assets/astana-hub-dark.svg");
+    await expect(
+      legalFooter.locator(
+        'a[href="https://astanahub.com/"] img.footer__partner-logo--light-theme',
+      ),
+    ).toHaveAttribute("src", "/assets/astana-hub-light.svg");
 
     await page.getByRole("button", { name: "English" }).click();
     await expect(page.locator("html")).toHaveAttribute("lang", "en");
