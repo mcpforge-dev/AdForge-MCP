@@ -43,7 +43,7 @@ test.describe("owner admin console", () => {
       page.getByRole("dialog", { name: "Активировать компанию?" }),
     ).toBeVisible();
     await page.getByRole("button", { name: "Подтвердить" }).click();
-    await expect(drawer.getByText("ACTIVE", { exact: true })).toBeVisible();
+    await expect(drawer.getByText("Активна", { exact: true })).toBeVisible();
     await page.screenshot({
       path: testInfo.outputPath("admin-company.png"),
       fullPage: true,
@@ -72,6 +72,35 @@ test.describe("owner admin console", () => {
       path: testInfo.outputPath("admin-mobile.png"),
       fullPage: true,
     });
+  });
+
+  test("uses understandable admin labels and supports keyboard dismissal", async ({
+    page,
+  }) => {
+    const adminPassword = randomUUID();
+    await installMockApi(page, { adminPassword });
+    await page.goto("/admin");
+    await openLogin(page);
+    await page.locator('input[name="login"]').fill("Admin");
+    await page.locator('input[name="password"]').fill(adminPassword);
+    await page.getByRole("button", { name: "Войти" }).click();
+
+    await expect(
+      page.getByText("Работает", { exact: true }).first(),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Обновлён профиль компании", { exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "На проверке" }).click();
+    await expect(
+      page.getByRole("button", { name: "Активные", exact: true }),
+    ).toBeVisible();
+    await page.getByRole("button", { name: "Открыть" }).click();
+    const drawer = page.getByRole("dialog", { name: "HolyMedia" });
+    await expect(drawer).toBeVisible();
+    await expect(drawer.getByText(/Meta Ads/)).toBeVisible();
+    await page.keyboard.press("Escape");
+    await expect(drawer).toBeHidden();
   });
 
   test("has no serious accessibility regressions", async ({ page }) => {

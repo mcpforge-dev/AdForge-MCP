@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLockup } from "../components/brand-lockup";
 import { ThemeSwitcher } from "../components/theme-switcher";
@@ -24,7 +24,64 @@ const labels: Record<Section, string> = {
   diagnostics: "Диагностика",
   support: "Поддержка",
   "tariff-requests": "Заявки на тарифы",
-  audit: "Audit log",
+  audit: "Журнал действий",
+};
+
+const providerLabels: Record<string, string> = {
+  GOOGLE_ADS: "Google Ads",
+  META_ADS: "Meta Ads",
+  TIKTOK_ADS: "TikTok Ads",
+  YANDEX_DIRECT: "Яндекс Директ",
+  GOOGLE_SEARCH_CONSOLE: "Google Search Console",
+};
+
+const statusLabels: Record<string, string> = {
+  ACTIVE: "Активна",
+  active: "Активен",
+  PENDING: "На проверке",
+  SUSPENDED: "Приостановлена",
+  disabled: "Заблокирован",
+  CONNECTED: "Подключено",
+  DEGRADED: "Требует внимания",
+  REAUTH_REQUIRED: "Нужно переподключить",
+  ERROR: "Ошибка",
+  ok: "Работает",
+  not_probed: "Не проверялось",
+  failed: "Ошибка",
+  NEW: "Новый",
+  IN_PROGRESS: "В работе",
+  WAITING_FOR_CLIENT: "Ждём клиента",
+  READY_FOR_CONNECTION: "Готов к подключению",
+  COMPLETED: "Завершён",
+  CANCELED: "Отменён",
+  IN_REVIEW: "На рассмотрении",
+  APPROVED: "Одобрена",
+  DECLINED: "Отклонена",
+};
+
+const roleLabels: Record<string, string> = {
+  OWNER: "Владелец",
+  ADMIN: "Администратор",
+  MEMBER: "Участник",
+  VIEWER: "Наблюдатель",
+};
+
+const eventLabels: Record<string, string> = {
+  login_success: "Вход в систему",
+  logout: "Выход из системы",
+  admin_login_success: "Вход в админ-панель",
+  admin_login_failed: "Неудачная попытка входа в админ-панель",
+  admin_logout: "Выход из админ-панели",
+  company_profile_updated: "Обновлён профиль компании",
+  company_access_updated: "Изменён доступ компании",
+  user_access_updated: "Изменён доступ пользователя",
+  provider_connected: "Подключена рекламная платформа",
+  provider_disconnected: "Отключена рекламная платформа",
+  provider_reauthorized: "Обновлён доступ к платформе",
+  report_generated: "Сформирован отчёт",
+  mcp_tool_executed: "Выполнен запрос AI-клиента",
+  invitation_created: "Отправлено приглашение",
+  invitation_accepted: "Принято приглашение",
 };
 
 async function csrf(): Promise<string> {
@@ -61,6 +118,32 @@ function value(row: Json, key: string) {
   return typeof item === "string" || typeof item === "number"
     ? String(item)
     : "—";
+}
+
+function humanStatus(status: string) {
+  return statusLabels[status] ?? status.replaceAll("_", " ");
+}
+
+function humanRole(role: string) {
+  return roleLabels[role] ?? role;
+}
+
+function humanProvider(provider: string) {
+  return providerLabels[provider] ?? provider.replaceAll("_", " ");
+}
+
+function humanEvent(eventType: string) {
+  return eventLabels[eventType] ?? eventType.replaceAll("_", " ");
+}
+
+function humanError(code: string) {
+  if (code === "—") return code;
+  const labels: Record<string, string> = {
+    insufficient_permissions: "Недостаточно разрешений у подключения",
+    reauth_required: "Нужно переподключить аккаунт",
+    provider_error: "Ошибка рекламной платформы",
+  };
+  return labels[code] ?? code.replaceAll("_", " ");
 }
 
 export default function AdminPage() {
@@ -168,21 +251,23 @@ export default function AdminPage() {
     <main className="admin-shell">
       <header className="admin-header">
         <BrandLockup />
-        <div>
+        <div className="admin-header__title">
           <strong>Операционная панель</strong>
           <small>Защищённый доступ владельца</small>
         </div>
-        <ThemeSwitcher compact />
-        <button
-          className="text-button"
-          onClick={() =>
-            void adminFetch("/auth/logout", { method: "POST" }).then(() =>
-              setAuthenticated(false),
-            )
-          }
-        >
-          Выйти
-        </button>
+        <div className="admin-header__actions">
+          <ThemeSwitcher compact />
+          <button
+            className="text-button"
+            onClick={() =>
+              void adminFetch("/auth/logout", { method: "POST" }).then(() =>
+                setAuthenticated(false),
+              )
+            }
+          >
+            Выйти
+          </button>
+        </div>
       </header>
       <div className="admin-layout">
         <nav className="admin-nav" aria-label="Разделы администрирования">
@@ -469,7 +554,7 @@ function Overview({ data, onPending }: { data: Json; onPending: () => void }) {
             <div key={name}>
               <span>{name}</span>
               <strong className={status === "ok" ? "is-ok" : "is-muted"}>
-                {String(status)}
+                {humanStatus(String(status))}
               </strong>
             </div>
           ))}
@@ -541,6 +626,22 @@ function Companies({
             { value: "SUSPENDED", label: "Приостановленные" },
           ]}
         />
+        <div className="admin-filter-actions" aria-label="Быстрые фильтры">
+          <button
+            type="button"
+            className={status === "PENDING" ? "is-active" : ""}
+            onClick={() => onStatus(status === "PENDING" ? "" : "PENDING")}
+          >
+            На проверке
+          </button>
+          <button
+            type="button"
+            className={status === "ACTIVE" ? "is-active" : ""}
+            onClick={() => onStatus(status === "ACTIVE" ? "" : "ACTIVE")}
+          >
+            Активные
+          </button>
+        </div>
       </div>
       <section className="admin-card admin-table-wrap">
         <p className="muted">Найдено: {value(data, "total")}</p>
@@ -637,7 +738,8 @@ function Users({
                       const workspace = item.workspace as Json;
                       return (
                         <small key={String(workspace.id)}>
-                          {value(workspace, "name")} · {value(item, "role")}
+                          {value(workspace, "name")} ·{" "}
+                          {humanRole(value(item, "role"))}
                         </small>
                       );
                     })
@@ -683,12 +785,12 @@ function Diagnostics({ data }: { data: Json }) {
   return (
     <div className="admin-stack">
       <section className="admin-card admin-table-wrap">
-        <h2>Provider connections</h2>
+        <h2>Подключения рекламных платформ</h2>
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Workspace</th>
-              <th>Provider</th>
+              <th>Компания</th>
+              <th>Платформа</th>
               <th>Статус</th>
               <th>Кабинеты</th>
               <th>Последняя ошибка</th>
@@ -701,12 +803,14 @@ function Diagnostics({ data }: { data: Json }) {
               return (
                 <tr key={String(row.id)}>
                   <td>{value(workspace, "name")}</td>
-                  <td>{value(row, "provider")}</td>
+                  <td>{humanProvider(value(row, "provider"))}</td>
                   <td>
                     <Status status={value(row, "status")} />
                   </td>
                   <td>{value(count, "accounts")}</td>
-                  <td>{value(row, "lastErrorCode")}</td>
+                  <td className="admin-cell-text">
+                    {humanError(value(row, "lastErrorCode"))}
+                  </td>
                 </tr>
               );
             })}
@@ -714,16 +818,16 @@ function Diagnostics({ data }: { data: Json }) {
         </table>
       </section>
       <section className="admin-card admin-table-wrap">
-        <h2>Service tokens</h2>
+        <h2>Ключи AI-клиента</h2>
         <p className="muted">
           Только lifecycle-метаданные; значения токенов не отображаются.
         </p>
         <table className="admin-table">
           <thead>
             <tr>
-              <th>Workspace</th>
+              <th>Компания</th>
               <th>Имя</th>
-              <th>Префикс</th>
+              <th>Идентификатор</th>
               <th>Истекает</th>
               <th>Последнее использование</th>
             </tr>
@@ -764,7 +868,7 @@ function Support({
         <thead>
           <tr>
             <th>Компания / пользователь</th>
-            <th>Provider</th>
+            <th>Платформа</th>
             <th>Сообщение</th>
             <th>Статус</th>
             <th />
@@ -780,7 +884,7 @@ function Support({
                   <strong>{value(workspace, "name")}</strong>
                   <small>{value(user, "email")}</small>
                 </td>
-                <td>{value(row, "provider")}</td>
+                <td>{humanProvider(value(row, "provider"))}</td>
                 <td className="admin-cell-text">{value(row, "clientNote")}</td>
                 <td>
                   <ProjectSelect
@@ -906,7 +1010,7 @@ function Audit({ data }: { data: Json }) {
               return (
                 <tr key={String(row.id)}>
                   <td>{formatDate(row.createdAt)}</td>
-                  <td>{value(row, "eventType")}</td>
+                  <td>{humanEvent(value(row, "eventType"))}</td>
                   <td>{workspace ? value(workspace, "name") : "—"}</td>
                   <td>{actor ? value(actor, "email") : "admin"}</td>
                   <td>
@@ -951,6 +1055,7 @@ function CompanyDrawer({
     : [];
   const [plans, setPlans] = useState<Json[]>([]);
   const [selectedPlanKey, setSelectedPlanKey] = useState("");
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {
     void adminFetch("/plans")
       .then(async (response) =>
@@ -961,6 +1066,14 @@ function CompanyDrawer({
       )
       .catch(() => setPlans([]));
   }, []);
+  useEffect(() => {
+    closeButtonRef.current?.focus();
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [onClose]);
 
   function submitEntitlement(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -991,6 +1104,7 @@ function CompanyDrawer({
           <h2 id="company-title">{value(company, "name")}</h2>
         </div>
         <button
+          ref={closeButtonRef}
           className="icon-button"
           aria-label="Закрыть карточку компании"
           onClick={onClose}
@@ -1040,12 +1154,12 @@ function CompanyDrawer({
             const user = item.user as Json;
             return [
               value(user, "name"),
-              `${value(user, "email")} · ${value(item, "role")} · ${value(user, "status")}`,
+              `${value(user, "email")} · ${humanRole(value(item, "role"))} · ${humanStatus(value(user, "status"))}`,
             ];
           })}
         />
         <section>
-          <h3>Тариф и entitlements</h3>
+          <h3>Тариф и доступные возможности</h3>
           <p className="muted">
             Текущий тариф:{" "}
             {activePlan ? value(activePlan, "name") : "не назначен"}
@@ -1068,7 +1182,7 @@ function CompanyDrawer({
                 selectedPlanKey && onPlan(id, selectedPlanKey, "TRIAL")
               }
             >
-              14 дней trial
+              Запустить trial на 14 дней
             </button>
             <button
               className="secondary-button"
@@ -1086,26 +1200,26 @@ function CompanyDrawer({
               : []
             ).map((item) => (
               <li key={value(item, "featureKey")}>
-                <code>{value(item, "featureKey")}</code> · {String(item.value)}{" "}
-                <small>{value(item, "source")}</small>
+                <code>{value(item, "featureKey")}</code> · {String(item.value)}
+                <small>Источник: {value(item, "source")}</small>
               </li>
             ))}
           </ul>
           <form className="admin-entitlement-form" onSubmit={submitEntitlement}>
             <input
               name="featureKey"
-              placeholder="feature_key"
-              aria-label="Ключ entitlement"
+              placeholder="Код возможности"
+              aria-label="Код возможности"
               required
             />
             <input
               name="value"
-              placeholder="true, 10 или значение"
-              aria-label="Значение entitlement"
+              placeholder="Значение"
+              aria-label="Значение возможности"
               required
             />
             <button className="secondary-button" type="submit">
-              Сохранить entitlement
+              Сохранить возможность
             </button>
           </form>
         </section>
@@ -1117,7 +1231,7 @@ function CompanyDrawer({
               : []
             ).map((item) => (
               <li key={String(item.id)}>
-                {value(item, "provider")} ·{" "}
+                {humanProvider(value(item, "provider"))} ·{" "}
                 <Status status={value(item, "status")} /> ·{" "}
                 {value(item._count as Json, "accounts")} кабинетов
               </li>
@@ -1156,7 +1270,7 @@ function CompanyDrawer({
           </ul>
         </section>
         <section>
-          <h3>История</h3>
+          <h3>История действий</h3>
           <SimpleEvents
             rows={
               Array.isArray(company.auditEvents)
@@ -1190,7 +1304,7 @@ function SimpleEvents({ rows }: { rows: Json[] }) {
     <ul className="admin-list">
       {rows.map((row) => (
         <li key={String(row.id)}>
-          <strong>{value(row, "eventType")}</strong>
+          <strong>{humanEvent(value(row, "eventType"))}</strong>
           <small>
             {formatDate(row.createdAt)} ·{" "}
             {row.success === false ? "ошибка" : "успешно"}
@@ -1204,7 +1318,7 @@ function SimpleEvents({ rows }: { rows: Json[] }) {
 function Status({ status }: { status: string }) {
   return (
     <span className={`admin-status admin-status--${status.toLowerCase()}`}>
-      {status}
+      {humanStatus(status)}
     </span>
   );
 }
