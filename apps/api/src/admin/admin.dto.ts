@@ -97,6 +97,11 @@ export class AdminSupportStatusDto {
   public note?: string;
 }
 
+export class AdminFeedbackSupportStatusDto {
+  @IsIn(["NEW", "IN_PROGRESS", "CLOSED"])
+  public status!: "NEW" | "IN_PROGRESS" | "CLOSED";
+}
+
 export class AdminTariffRequestStatusDto {
   @IsIn(["PENDING", "IN_REVIEW", "APPROVED", "DECLINED", "CANCELED"])
   public status!:

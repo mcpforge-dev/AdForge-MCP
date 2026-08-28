@@ -76,6 +76,20 @@ enum ManualConnectionRequestStatus {
   CANCELED
 }
 
+enum SupportRequestStatus {
+  NEW
+  IN_PROGRESS
+  CLOSED
+}
+
+enum TelegramDeliveryStatus {
+  PENDING
+  SENDING
+  SENT
+  FAILED
+  NOT_CONFIGURED
+}
+
 enum TariffRequestStatus {
   PENDING
   IN_REVIEW
@@ -117,34 +131,35 @@ enum SiteAuditArtifactKind {
 }
 
 model User {
-  id                String               @id @default(uuid()) @db.Uuid
-  email             String               @unique @db.VarChar(320)
-  name              String               @db.VarChar(160)
-  passwordHash      String               @map("password_hash") @db.VarChar(255)
-  status            String               @default("active") @db.VarChar(32)
-  emailVerifiedAt   DateTime?            @map("email_verified_at")
-  avatarData        Bytes?               @map("avatar_data")
-  avatarMimeType    String?              @map("avatar_mime_type") @db.VarChar(32)
-  createdAt         DateTime             @default(now()) @map("created_at")
-  updatedAt         DateTime             @updatedAt @map("updated_at")
-  memberships       WorkspaceMembership[]
-  sessions          Session[]
-  emailVerifications EmailVerification[]
-  passwordResets    PasswordReset[]
-  invitationsSent   WorkspaceInvitation[] @relation("inviter")
-  auditEvents       AuditEvent[]
-  connections       ProviderConnection[]
-  oauthStates       OAuthState[]
-  siteAnalysisRecords SiteAnalysisRecord[]
-  siteAudits          SiteAudit[]
+  id                       String                      @id @default(uuid()) @db.Uuid
+  email                    String                      @unique @db.VarChar(320)
+  name                     String                      @db.VarChar(160)
+  passwordHash             String                      @map("password_hash") @db.VarChar(255)
+  status                   String                      @default("active") @db.VarChar(32)
+  emailVerifiedAt          DateTime?                   @map("email_verified_at")
+  avatarData               Bytes?                      @map("avatar_data")
+  avatarMimeType           String?                     @map("avatar_mime_type") @db.VarChar(32)
+  createdAt                DateTime                    @default(now()) @map("created_at")
+  updatedAt                DateTime                    @updatedAt @map("updated_at")
+  memberships              WorkspaceMembership[]
+  sessions                 Session[]
+  emailVerifications       EmailVerification[]
+  passwordResets           PasswordReset[]
+  invitationsSent          WorkspaceInvitation[]       @relation("inviter")
+  auditEvents              AuditEvent[]
+  connections              ProviderConnection[]
+  oauthStates              OAuthState[]
+  siteAnalysisRecords      SiteAnalysisRecord[]
+  siteAudits               SiteAudit[]
   manualConnectionRequests ManualConnectionRequest[]
-  tariffRequests TariffRequest[]
-  mcpOAuthClients McpOAuthClient[]
-  mcpOAuthCodes McpOAuthAuthorizationCode[]
-  serviceIdentities ServiceIdentity[]
-  directPermissionGrants UserPermissionGrant[] @relation("permission_grantee")
-  issuedPermissionGrants UserPermissionGrant[] @relation("permission_grantor")
-  productEvents      ProductEvent[]
+  supportRequests          SupportRequest[]
+  tariffRequests           TariffRequest[]
+  mcpOAuthClients          McpOAuthClient[]
+  mcpOAuthCodes            McpOAuthAuthorizationCode[]
+  serviceIdentities        ServiceIdentity[]
+  directPermissionGrants   UserPermissionGrant[]       @relation("permission_grantee")
+  issuedPermissionGrants   UserPermissionGrant[]       @relation("permission_grantor")
+  productEvents            ProductEvent[]
 
   @@index([email])
   @@index([status, createdAt])
@@ -167,39 +182,40 @@ model AdminSession {
 }
 
 model Workspace {
-  id                    String                @id @default(uuid()) @db.Uuid
-  name                  String                @db.VarChar(160)
-  slug                  String                @unique @db.VarChar(120)
-  accessStatus          WorkspaceAccessStatus @default(PENDING) @map("access_status")
-  legalName             String?               @map("legal_name") @db.VarChar(255)
-  registrationNumber    String?               @map("registration_number") @db.VarChar(64)
-  registrationCountry   String                @default("KZ") @map("registration_country") @db.VarChar(2)
-  legalAddress          String?               @map("legal_address") @db.VarChar(500)
-  companyPhone          String?               @map("company_phone") @db.VarChar(64)
-  companyEmail          String?               @map("company_email") @db.VarChar(320)
-  websiteUrl            String?               @map("website_url") @db.VarChar(500)
-  onboardingCompletedAt DateTime?             @map("onboarding_completed_at")
-  createdAt             DateTime              @default(now()) @map("created_at")
-  updatedAt             DateTime              @updatedAt @map("updated_at")
-  memberships  WorkspaceMembership[]
-  invitations  WorkspaceInvitation[]
-  auditEvents  AuditEvent[]
-  identities   ServiceIdentity[]
-  connections  ProviderConnection[]
-  providerAccounts ProviderAccount[]
-  oauthStates  OAuthState[]
-  siteAnalysisRecords SiteAnalysisRecord[]
-  siteAudits          SiteAudit[]
-  subscriptions WorkspaceSubscription[]
-  billingOrders BillingOrder[]
-  usageRecords UsageRecord[]
-  entitlements Entitlement[]
+  id                       String                      @id @default(uuid()) @db.Uuid
+  name                     String                      @db.VarChar(160)
+  slug                     String                      @unique @db.VarChar(120)
+  accessStatus             WorkspaceAccessStatus       @default(PENDING) @map("access_status")
+  legalName                String?                     @map("legal_name") @db.VarChar(255)
+  registrationNumber       String?                     @map("registration_number") @db.VarChar(64)
+  registrationCountry      String                      @default("KZ") @map("registration_country") @db.VarChar(2)
+  legalAddress             String?                     @map("legal_address") @db.VarChar(500)
+  companyPhone             String?                     @map("company_phone") @db.VarChar(64)
+  companyEmail             String?                     @map("company_email") @db.VarChar(320)
+  websiteUrl               String?                     @map("website_url") @db.VarChar(500)
+  onboardingCompletedAt    DateTime?                   @map("onboarding_completed_at")
+  createdAt                DateTime                    @default(now()) @map("created_at")
+  updatedAt                DateTime                    @updatedAt @map("updated_at")
+  memberships              WorkspaceMembership[]
+  invitations              WorkspaceInvitation[]
+  auditEvents              AuditEvent[]
+  identities               ServiceIdentity[]
+  connections              ProviderConnection[]
+  providerAccounts         ProviderAccount[]
+  oauthStates              OAuthState[]
+  siteAnalysisRecords      SiteAnalysisRecord[]
+  siteAudits               SiteAudit[]
+  subscriptions            WorkspaceSubscription[]
+  billingOrders            BillingOrder[]
+  usageRecords             UsageRecord[]
+  entitlements             Entitlement[]
   manualConnectionRequests ManualConnectionRequest[]
-  tariffRequests TariffRequest[]
-  mcpPreviews  McpPreview[]
-  mcpOAuthClients McpOAuthClient[]
-  mcpOAuthCodes McpOAuthAuthorizationCode[]
-  productEvents ProductEvent[]
+  supportRequests          SupportRequest[]
+  tariffRequests           TariffRequest[]
+  mcpPreviews              McpPreview[]
+  mcpOAuthClients          McpOAuthClient[]
+  mcpOAuthCodes            McpOAuthAuthorizationCode[]
+  productEvents            ProductEvent[]
 
   @@index([createdAt])
   @@map("workspaces")
@@ -222,9 +238,9 @@ model WorkspaceMembership {
 }
 
 model Permission {
-  id          String           @id @default(uuid()) @db.Uuid
-  key         String           @unique @db.VarChar(120)
-  description String           @db.VarChar(255)
+  id          String                @id @default(uuid()) @db.Uuid
+  key         String                @unique @db.VarChar(120)
+  description String                @db.VarChar(255)
   roleLinks   RolePermission[]
   userGrants  UserPermissionGrant[]
 
@@ -260,16 +276,16 @@ model RolePermission {
 }
 
 model Session {
-  id           String    @id @default(uuid()) @db.Uuid
-  userId       String    @map("user_id") @db.Uuid
-  tokenDigest  String    @unique @map("token_digest") @db.VarChar(128)
-  createdAt    DateTime  @default(now()) @map("created_at")
-  expiresAt    DateTime  @map("expires_at")
-  lastSeenAt   DateTime  @default(now()) @map("last_seen_at")
-  revokedAt    DateTime? @map("revoked_at")
-  userAgent    String?   @map("user_agent") @db.VarChar(512)
-  ipHash       String?   @map("ip_hash") @db.VarChar(128)
-  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid()) @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  tokenDigest String    @unique @map("token_digest") @db.VarChar(128)
+  createdAt   DateTime  @default(now()) @map("created_at")
+  expiresAt   DateTime  @map("expires_at")
+  lastSeenAt  DateTime  @default(now()) @map("last_seen_at")
+  revokedAt   DateTime? @map("revoked_at")
+  userAgent   String?   @map("user_agent") @db.VarChar(512)
+  ipHash      String?   @map("ip_hash") @db.VarChar(128)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, revokedAt])
   @@index([expiresAt])
@@ -305,18 +321,18 @@ model PasswordReset {
 }
 
 model WorkspaceInvitation {
-  id         String        @id @default(uuid()) @db.Uuid
-  workspaceId String       @map("workspace_id") @db.Uuid
-  inviterId  String        @map("inviter_id") @db.Uuid
-  email      String        @db.VarChar(320)
-  role       WorkspaceRole @default(MEMBER)
-  tokenDigest String       @unique @map("token_digest") @db.VarChar(128)
-  expiresAt  DateTime      @map("expires_at")
-  acceptedAt DateTime?     @map("accepted_at")
-  revokedAt  DateTime?     @map("revoked_at")
-  createdAt  DateTime      @default(now()) @map("created_at")
-  workspace  Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  inviter    User          @relation("inviter", fields: [inviterId], references: [id], onDelete: Restrict)
+  id          String        @id @default(uuid()) @db.Uuid
+  workspaceId String        @map("workspace_id") @db.Uuid
+  inviterId   String        @map("inviter_id") @db.Uuid
+  email       String        @db.VarChar(320)
+  role        WorkspaceRole @default(MEMBER)
+  tokenDigest String        @unique @map("token_digest") @db.VarChar(128)
+  expiresAt   DateTime      @map("expires_at")
+  acceptedAt  DateTime?     @map("accepted_at")
+  revokedAt   DateTime?     @map("revoked_at")
+  createdAt   DateTime      @default(now()) @map("created_at")
+  workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  inviter     User          @relation("inviter", fields: [inviterId], references: [id], onDelete: Restrict)
 
   @@index([workspaceId, email])
   @@index([workspaceId, expiresAt])
@@ -324,15 +340,15 @@ model WorkspaceInvitation {
 }
 
 model ServiceIdentity {
-  id            String     @id @default(uuid()) @db.Uuid
-  workspaceId   String?    @map("workspace_id") @db.Uuid
-  createdById   String?    @map("created_by_id") @db.Uuid
-  name          String     @db.VarChar(160)
-  createdAt     DateTime   @default(now()) @map("created_at")
-  revokedAt     DateTime?  @map("revoked_at")
-  workspace     Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  createdBy     User?      @relation(fields: [createdById], references: [id], onDelete: SetNull)
-  tokens        ServiceToken[]
+  id          String         @id @default(uuid()) @db.Uuid
+  workspaceId String?        @map("workspace_id") @db.Uuid
+  createdById String?        @map("created_by_id") @db.Uuid
+  name        String         @db.VarChar(160)
+  createdAt   DateTime       @default(now()) @map("created_at")
+  revokedAt   DateTime?      @map("revoked_at")
+  workspace   Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  createdBy   User?          @relation(fields: [createdById], references: [id], onDelete: SetNull)
+  tokens      ServiceToken[]
 
   @@index([workspaceId, revokedAt])
   @@index([createdById, revokedAt])
@@ -360,22 +376,22 @@ model ServiceToken {
 }
 
 model McpOAuthClient {
-  id                    String                    @id @default(uuid()) @db.Uuid
-  clientId              String                    @unique @map("client_id") @db.VarChar(255)
-  workspaceId           String                    @map("workspace_id") @db.Uuid
-  userId                String                    @map("user_id") @db.Uuid
-  clientName            String                    @map("client_name") @db.VarChar(160)
-  redirectUris          Json                      @map("redirect_uris")
-  scope                 String                    @default("adforge:mcp:read") @db.VarChar(120)
-  tokenEndpointAuthMethod String                  @default("client_secret_basic") @map("token_endpoint_auth_method") @db.VarChar(40)
-  clientSecretDigest    String                    @unique @map("client_secret_digest") @db.VarChar(128)
-  clientSecretPrefix    String                    @map("client_secret_prefix") @db.VarChar(32)
-  status                String                    @default("active") @db.VarChar(32)
-  createdAt             DateTime                  @default(now()) @map("created_at")
-  revokedAt             DateTime?                 @map("revoked_at")
-  workspace             Workspace                 @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user                  User                      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  authorizationCodes    McpOAuthAuthorizationCode[]
+  id                      String                      @id @default(uuid()) @db.Uuid
+  clientId                String                      @unique @map("client_id") @db.VarChar(255)
+  workspaceId             String                      @map("workspace_id") @db.Uuid
+  userId                  String                      @map("user_id") @db.Uuid
+  clientName              String                      @map("client_name") @db.VarChar(160)
+  redirectUris            Json                        @map("redirect_uris")
+  scope                   String                      @default("adforge:mcp:read") @db.VarChar(120)
+  tokenEndpointAuthMethod String                      @default("client_secret_basic") @map("token_endpoint_auth_method") @db.VarChar(40)
+  clientSecretDigest      String                      @unique @map("client_secret_digest") @db.VarChar(128)
+  clientSecretPrefix      String                      @map("client_secret_prefix") @db.VarChar(32)
+  status                  String                      @default("active") @db.VarChar(32)
+  createdAt               DateTime                    @default(now()) @map("created_at")
+  revokedAt               DateTime?                   @map("revoked_at")
+  workspace               Workspace                   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                    User                        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  authorizationCodes      McpOAuthAuthorizationCode[]
 
   @@index([workspaceId, status])
   @@index([userId, status])
@@ -383,22 +399,22 @@ model McpOAuthClient {
 }
 
 model McpOAuthAuthorizationCode {
-  id                  String        @id @default(uuid()) @db.Uuid
-  codeDigest          String        @unique @map("code_digest") @db.VarChar(128)
-  clientId            String        @map("client_id") @db.Uuid
-  workspaceId         String        @map("workspace_id") @db.Uuid
-  userId              String        @map("user_id") @db.Uuid
-  sessionId           String        @map("session_id") @db.Uuid
-  redirectUri         String        @map("redirect_uri") @db.VarChar(2000)
-  scope               String        @db.VarChar(120)
-  codeChallenge       String        @map("code_challenge") @db.VarChar(200)
-  codeChallengeMethod String        @default("S256") @map("code_challenge_method") @db.VarChar(16)
-  expiresAt           DateTime      @map("expires_at")
-  usedAt              DateTime?     @map("used_at")
-  createdAt           DateTime      @default(now()) @map("created_at")
+  id                  String         @id @default(uuid()) @db.Uuid
+  codeDigest          String         @unique @map("code_digest") @db.VarChar(128)
+  clientId            String         @map("client_id") @db.Uuid
+  workspaceId         String         @map("workspace_id") @db.Uuid
+  userId              String         @map("user_id") @db.Uuid
+  sessionId           String         @map("session_id") @db.Uuid
+  redirectUri         String         @map("redirect_uri") @db.VarChar(2000)
+  scope               String         @db.VarChar(120)
+  codeChallenge       String         @map("code_challenge") @db.VarChar(200)
+  codeChallengeMethod String         @default("S256") @map("code_challenge_method") @db.VarChar(16)
+  expiresAt           DateTime       @map("expires_at")
+  usedAt              DateTime?      @map("used_at")
+  createdAt           DateTime       @default(now()) @map("created_at")
   client              McpOAuthClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  workspace           Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user                User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace           Workspace      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([clientId, expiresAt, usedAt])
   @@index([workspaceId, userId, expiresAt])
@@ -406,23 +422,23 @@ model McpOAuthAuthorizationCode {
 }
 
 model McpPreview {
-  id                String          @id @default(uuid()) @db.Uuid
-  workspaceId       String          @map("workspace_id") @db.Uuid
-  serviceTokenId    String          @map("service_token_id") @db.Uuid
-  provider          ProviderId
-  accountId         String          @map("account_id") @db.Uuid
-  externalObjectId  String          @map("external_object_id") @db.VarChar(160)
-  operation         String          @db.VarChar(80)
-  payload           Json
-  diff              Json
-  previewTokenDigest String         @unique @map("preview_token_digest") @db.VarChar(128)
-  expiresAt         DateTime        @map("expires_at")
-  confirmedAt       DateTime?       @map("confirmed_at")
-  consumedAt        DateTime?       @map("consumed_at")
-  createdAt         DateTime        @default(now()) @map("created_at")
-  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  serviceToken      ServiceToken    @relation(fields: [serviceTokenId], references: [id], onDelete: Cascade)
-  account           ProviderAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  id                 String          @id @default(uuid()) @db.Uuid
+  workspaceId        String          @map("workspace_id") @db.Uuid
+  serviceTokenId     String          @map("service_token_id") @db.Uuid
+  provider           ProviderId
+  accountId          String          @map("account_id") @db.Uuid
+  externalObjectId   String          @map("external_object_id") @db.VarChar(160)
+  operation          String          @db.VarChar(80)
+  payload            Json
+  diff               Json
+  previewTokenDigest String          @unique @map("preview_token_digest") @db.VarChar(128)
+  expiresAt          DateTime        @map("expires_at")
+  confirmedAt        DateTime?       @map("confirmed_at")
+  consumedAt         DateTime?       @map("consumed_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  workspace          Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  serviceToken       ServiceToken    @relation(fields: [serviceTokenId], references: [id], onDelete: Cascade)
+  account            ProviderAccount @relation(fields: [accountId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, expiresAt, consumedAt])
   @@index([serviceTokenId, createdAt])
@@ -431,19 +447,19 @@ model McpPreview {
 }
 
 model AuditEvent {
-  id           String         @id @default(uuid()) @db.Uuid
-  workspaceId  String?        @map("workspace_id") @db.Uuid
-  actorUserId  String?        @map("actor_user_id") @db.Uuid
-  actorType    AuditActorType @default(HUMAN) @map("actor_type")
-  eventType    String         @map("event_type") @db.VarChar(120)
-  success      Boolean        @default(true)
-  targetType   String?        @map("target_type") @db.VarChar(120)
-  targetId     String?        @map("target_id") @db.VarChar(160)
-  requestId    String?        @map("request_id") @db.VarChar(128)
-  metadata     Json?
-  createdAt    DateTime       @default(now()) @map("created_at")
-  workspace    Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
-  actorUser    User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
+  id          String         @id @default(uuid()) @db.Uuid
+  workspaceId String?        @map("workspace_id") @db.Uuid
+  actorUserId String?        @map("actor_user_id") @db.Uuid
+  actorType   AuditActorType @default(HUMAN) @map("actor_type")
+  eventType   String         @map("event_type") @db.VarChar(120)
+  success     Boolean        @default(true)
+  targetType  String?        @map("target_type") @db.VarChar(120)
+  targetId    String?        @map("target_id") @db.VarChar(160)
+  requestId   String?        @map("request_id") @db.VarChar(128)
+  metadata    Json?
+  createdAt   DateTime       @default(now()) @map("created_at")
+  workspace   Workspace?     @relation(fields: [workspaceId], references: [id], onDelete: SetNull)
+  actorUser   User?          @relation(fields: [actorUserId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, createdAt])
   @@index([actorUserId, createdAt])
@@ -452,15 +468,15 @@ model AuditEvent {
 }
 
 model ProductEvent {
-  id          String   @id @default(uuid()) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  userId      String?  @map("user_id") @db.Uuid
-  eventName   String   @map("event_name") @db.VarChar(120)
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String?   @map("user_id") @db.Uuid
+  eventName   String    @map("event_name") @db.VarChar(120)
   properties  Json?
-  requestId   String?  @map("request_id") @db.VarChar(128)
-  occurredAt  DateTime @default(now()) @map("occurred_at")
+  requestId   String?   @map("request_id") @db.VarChar(128)
+  occurredAt  DateTime  @default(now()) @map("occurred_at")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user        User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  user        User?     @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([workspaceId, occurredAt])
   @@index([workspaceId, eventName, occurredAt])
@@ -480,12 +496,12 @@ model SystemMetadata {
 }
 
 model SiteAnalysisRecord {
-  id          String   @id @default(uuid()) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  url         String   @db.VarChar(2048)
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  userId      String    @map("user_id") @db.Uuid
+  url         String    @db.VarChar(2048)
   result      Json
-  createdAt   DateTime @default(now()) @map("created_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -495,24 +511,24 @@ model SiteAnalysisRecord {
 }
 
 model ManualConnectionRequest {
-  id                String                         @id @default(uuid()) @db.Uuid
-  workspaceId       String                         @map("workspace_id") @db.Uuid
-  userId            String                         @map("user_id") @db.Uuid
-  provider          ProviderId                     @default(META_ADS)
-  companyName       String                         @map("company_name") @db.VarChar(160)
-  metaBusinessId    String?                        @map("meta_business_id") @db.VarChar(64)
-  metaAdAccountId   String                         @map("meta_ad_account_id") @db.VarChar(64)
-  metaPageId        String?                        @map("meta_page_id") @db.VarChar(64)
-  instagramUsername String?                        @map("instagram_username") @db.VarChar(80)
-  contactPreference String                         @default("email") @map("contact_preference") @db.VarChar(24)
-  clientNote        String                         @default("") @map("client_note") @db.VarChar(2000)
+  id                String                        @id @default(uuid()) @db.Uuid
+  workspaceId       String                        @map("workspace_id") @db.Uuid
+  userId            String                        @map("user_id") @db.Uuid
+  provider          ProviderId                    @default(META_ADS)
+  companyName       String                        @map("company_name") @db.VarChar(160)
+  metaBusinessId    String?                       @map("meta_business_id") @db.VarChar(64)
+  metaAdAccountId   String                        @map("meta_ad_account_id") @db.VarChar(64)
+  metaPageId        String?                       @map("meta_page_id") @db.VarChar(64)
+  instagramUsername String?                       @map("instagram_username") @db.VarChar(80)
+  contactPreference String                        @default("email") @map("contact_preference") @db.VarChar(24)
+  clientNote        String                        @default("") @map("client_note") @db.VarChar(2000)
   status            ManualConnectionRequestStatus @default(NEW)
-  specialistNote    String                         @default("") @map("specialist_note") @db.VarChar(2000)
-  assignedTo        String?                        @map("assigned_to") @db.Uuid
-  createdAt         DateTime                       @default(now()) @map("created_at")
-  updatedAt         DateTime                       @updatedAt @map("updated_at")
-  workspace         Workspace                      @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user              User                           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  specialistNote    String                        @default("") @map("specialist_note") @db.VarChar(2000)
+  assignedTo        String?                       @map("assigned_to") @db.Uuid
+  createdAt         DateTime                      @default(now()) @map("created_at")
+  updatedAt         DateTime                      @updatedAt @map("updated_at")
+  workspace         Workspace                     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user              User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([workspaceId, status, createdAt])
   @@index([userId, provider, status])
@@ -520,70 +536,100 @@ model ManualConnectionRequest {
 }
 
 model Plan {
-  id            String                  @id @default(uuid()) @db.Uuid
-  key           String                  @unique @db.VarChar(80)
-  name          String                  @db.VarChar(160)
-  description   String?                 @db.VarChar(500)
-  active        Boolean                 @default(true)
-  features      Json
-  createdAt     DateTime                @default(now()) @map("created_at")
-  updatedAt     DateTime                @updatedAt @map("updated_at")
-  prices        Price[]
-  subscriptions WorkspaceSubscription[]
-  orders        BillingOrder[]
+  id             String                  @id @default(uuid()) @db.Uuid
+  key            String                  @unique @db.VarChar(80)
+  name           String                  @db.VarChar(160)
+  description    String?                 @db.VarChar(500)
+  active         Boolean                 @default(true)
+  features       Json
+  createdAt      DateTime                @default(now()) @map("created_at")
+  updatedAt      DateTime                @updatedAt @map("updated_at")
+  prices         Price[]
+  subscriptions  WorkspaceSubscription[]
+  orders         BillingOrder[]
   tariffRequests TariffRequest[]
+
   @@index([active])
   @@map("plans")
 }
 
 model Price {
-  id             String                  @id @default(uuid()) @db.Uuid
-  planId         String                  @map("plan_id") @db.Uuid
-  currency       String                  @db.VarChar(3)
-  amount         Decimal                 @db.Decimal(18, 6)
-  interval       String                  @db.VarChar(32)
-  active         Boolean                 @default(true)
-  provider       String?                 @db.VarChar(80)
-  providerPriceRef String?               @map("provider_price_ref") @db.VarChar(255)
-  createdAt      DateTime                @default(now()) @map("created_at")
-  updatedAt      DateTime                @updatedAt @map("updated_at")
-  plan           Plan                    @relation(fields: [planId], references: [id], onDelete: Restrict)
-  subscriptions  WorkspaceSubscription[]
-  orders         BillingOrder[]
+  id               String                  @id @default(uuid()) @db.Uuid
+  planId           String                  @map("plan_id") @db.Uuid
+  currency         String                  @db.VarChar(3)
+  amount           Decimal                 @db.Decimal(18, 6)
+  interval         String                  @db.VarChar(32)
+  active           Boolean                 @default(true)
+  provider         String?                 @db.VarChar(80)
+  providerPriceRef String?                 @map("provider_price_ref") @db.VarChar(255)
+  createdAt        DateTime                @default(now()) @map("created_at")
+  updatedAt        DateTime                @updatedAt @map("updated_at")
+  plan             Plan                    @relation(fields: [planId], references: [id], onDelete: Restrict)
+  subscriptions    WorkspaceSubscription[]
+  orders           BillingOrder[]
+
   @@unique([planId, currency, interval])
   @@index([active, currency])
   @@map("prices")
 }
 
+model SupportRequest {
+  id                       String                 @id @default(uuid()) @db.Uuid
+  workspaceId              String                 @map("workspace_id") @db.Uuid
+  userId                   String                 @map("user_id") @db.Uuid
+  category                 String                 @db.VarChar(32)
+  message                  String                 @db.VarChar(4000)
+  sourceRoute              String?                @map("source_route") @db.VarChar(256)
+  locale                   String?                @db.VarChar(8)
+  idempotencyKey           String?                @map("idempotency_key") @db.VarChar(80)
+  status                   SupportRequestStatus   @default(NEW)
+  telegramDeliveryStatus   TelegramDeliveryStatus @default(PENDING) @map("telegram_delivery_status")
+  telegramDeliveryAttempts Int                    @default(0) @map("telegram_delivery_attempts")
+  telegramMessageId        String?                @map("telegram_message_id") @db.VarChar(64)
+  telegramDeliveredAt      DateTime?              @map("telegram_delivered_at")
+  telegramLastErrorCode    String?                @map("telegram_last_error_code") @db.VarChar(120)
+  planKey                  String?                @map("plan_key") @db.VarChar(80)
+  companyAccessStatus      WorkspaceAccessStatus? @map("company_access_status")
+  createdAt                DateTime               @default(now()) @map("created_at")
+  updatedAt                DateTime               @updatedAt @map("updated_at")
+  workspace                Workspace              @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                     User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId, idempotencyKey])
+  @@index([workspaceId, status, createdAt])
+  @@index([telegramDeliveryStatus, createdAt])
+  @@map("support_requests")
+}
+
 model SiteAudit {
-  id                String          @id @default(uuid()) @db.Uuid
-  workspaceId       String          @map("workspace_id") @db.Uuid
-  userId            String          @map("user_id") @db.Uuid
-  url               String          @db.VarChar(2048)
-  normalizedUrl     String          @map("normalized_url") @db.VarChar(2048)
-  status            SiteAuditStatus @default(QUEUED)
-  stage             String          @default("queued") @db.VarChar(80)
-  progress          Int             @default(0)
-  pagesFound        Int             @default(0) @map("pages_found")
-  pagesChecked      Int             @default(0) @map("pages_checked")
-  coverageSampled   Boolean         @default(false) @map("coverage_sampled")
-  elapsedMs         Int?            @map("elapsed_ms")
-  scores            Json?
-  summary           Json?
-  errorCode         String?         @map("error_code") @db.VarChar(80)
-  errorMessage      String?         @map("error_message") @db.VarChar(1000)
-  startedAt         DateTime?       @map("started_at")
-  completedAt       DateTime?       @map("completed_at")
-  createdAt         DateTime        @default(now()) @map("created_at")
-  updatedAt         DateTime        @updatedAt @map("updated_at")
-  workspace         Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  brief             SiteAuditBrief?
-  pages             SiteAuditPage[]
-  findings          SiteAuditFinding[]
-  metrics           SiteAuditMetric[]
-  screenshots       SiteAuditScreenshot[]
-  report            SiteAuditReport?
+  id              String                @id @default(uuid()) @db.Uuid
+  workspaceId     String                @map("workspace_id") @db.Uuid
+  userId          String                @map("user_id") @db.Uuid
+  url             String                @db.VarChar(2048)
+  normalizedUrl   String                @map("normalized_url") @db.VarChar(2048)
+  status          SiteAuditStatus       @default(QUEUED)
+  stage           String                @default("queued") @db.VarChar(80)
+  progress        Int                   @default(0)
+  pagesFound      Int                   @default(0) @map("pages_found")
+  pagesChecked    Int                   @default(0) @map("pages_checked")
+  coverageSampled Boolean               @default(false) @map("coverage_sampled")
+  elapsedMs       Int?                  @map("elapsed_ms")
+  scores          Json?
+  summary         Json?
+  errorCode       String?               @map("error_code") @db.VarChar(80)
+  errorMessage    String?               @map("error_message") @db.VarChar(1000)
+  startedAt       DateTime?             @map("started_at")
+  completedAt     DateTime?             @map("completed_at")
+  createdAt       DateTime              @default(now()) @map("created_at")
+  updatedAt       DateTime              @updatedAt @map("updated_at")
+  workspace       Workspace             @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User                  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  brief           SiteAuditBrief?
+  pages           SiteAuditPage[]
+  findings        SiteAuditFinding[]
+  metrics         SiteAuditMetric[]
+  screenshots     SiteAuditScreenshot[]
+  report          SiteAuditReport?
 
   @@index([workspaceId, createdAt])
   @@index([workspaceId, status, createdAt])
@@ -592,36 +638,36 @@ model SiteAudit {
 }
 
 model SiteAuditBrief {
-  id               String    @id @default(uuid()) @db.Uuid
-  auditId          String    @unique @map("audit_id") @db.Uuid
-  companyName      String?   @map("company_name") @db.VarChar(160)
-  industry         String?   @db.VarChar(160)
-  targetAudience   String?   @map("target_audience") @db.VarChar(2000)
-  primaryGoal      String?   @map("primary_goal") @db.VarChar(120)
-  mainProblem      String?   @map("main_problem") @db.VarChar(2000)
-  primaryAction    String?   @map("primary_action") @db.VarChar(500)
-  market           String?   @db.VarChar(500)
-  competitors      Json      @default("[]")
-  createdAt        DateTime  @default(now()) @map("created_at")
-  audit            SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid()) @db.Uuid
+  auditId        String    @unique @map("audit_id") @db.Uuid
+  companyName    String?   @map("company_name") @db.VarChar(160)
+  industry       String?   @db.VarChar(160)
+  targetAudience String?   @map("target_audience") @db.VarChar(2000)
+  primaryGoal    String?   @map("primary_goal") @db.VarChar(120)
+  mainProblem    String?   @map("main_problem") @db.VarChar(2000)
+  primaryAction  String?   @map("primary_action") @db.VarChar(500)
+  market         String?   @db.VarChar(500)
+  competitors    Json      @default("[]")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  audit          SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@map("site_audit_briefs")
 }
 
 model SiteAuditPage {
-  id                String    @id @default(uuid()) @db.Uuid
-  auditId           String    @map("audit_id") @db.Uuid
-  url               String    @db.VarChar(2048)
-  canonicalUrl      String?   @map("canonical_url") @db.VarChar(2048)
-  statusCode        Int?      @map("status_code")
-  indexable         Boolean?
-  discoveredFrom    String?   @map("discovered_from") @db.VarChar(2048)
-  title             String?   @db.VarChar(1000)
-  description       String?   @db.VarChar(2000)
-  headings          Json      @default("{}")
-  checks            Json      @default("{}")
-  createdAt         DateTime  @default(now()) @map("created_at")
-  audit             SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  id             String    @id @default(uuid()) @db.Uuid
+  auditId        String    @map("audit_id") @db.Uuid
+  url            String    @db.VarChar(2048)
+  canonicalUrl   String?   @map("canonical_url") @db.VarChar(2048)
+  statusCode     Int?      @map("status_code")
+  indexable      Boolean?
+  discoveredFrom String?   @map("discovered_from") @db.VarChar(2048)
+  title          String?   @db.VarChar(1000)
+  description    String?   @db.VarChar(2000)
+  headings       Json      @default("{}")
+  checks         Json      @default("{}")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  audit          SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@unique([auditId, url])
   @@index([auditId, statusCode])
@@ -629,23 +675,23 @@ model SiteAuditPage {
 }
 
 model SiteAuditFinding {
-  id                String                @id @default(uuid()) @db.Uuid
-  auditId           String                @map("audit_id") @db.Uuid
-  category          String                @db.VarChar(80)
-  severity          SiteAuditSeverity
-  evidenceKind      SiteAuditEvidenceKind @map("evidence_kind")
-  title             String                @db.VarChar(500)
-  finding           String                @db.VarChar(4000)
-  location          String?               @db.VarChar(2048)
-  selector          String?               @db.VarChar(1000)
-  evidence          String                @db.VarChar(4000)
-  impact            String                @db.VarChar(4000)
-  recommendation    String                @db.VarChar(4000)
-  ownerRole         String?               @map("owner_role") @db.VarChar(80)
-  effort            String?               @db.VarChar(120)
-  sortOrder         Int                   @default(0) @map("sort_order")
-  createdAt         DateTime              @default(now()) @map("created_at")
-  audit             SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  id             String                @id @default(uuid()) @db.Uuid
+  auditId        String                @map("audit_id") @db.Uuid
+  category       String                @db.VarChar(80)
+  severity       SiteAuditSeverity
+  evidenceKind   SiteAuditEvidenceKind @map("evidence_kind")
+  title          String                @db.VarChar(500)
+  finding        String                @db.VarChar(4000)
+  location       String?               @db.VarChar(2048)
+  selector       String?               @db.VarChar(1000)
+  evidence       String                @db.VarChar(4000)
+  impact         String                @db.VarChar(4000)
+  recommendation String                @db.VarChar(4000)
+  ownerRole      String?               @map("owner_role") @db.VarChar(80)
+  effort         String?               @db.VarChar(120)
+  sortOrder      Int                   @default(0) @map("sort_order")
+  createdAt      DateTime              @default(now()) @map("created_at")
+  audit          SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@index([auditId, severity, sortOrder])
   @@index([auditId, category])
@@ -653,17 +699,17 @@ model SiteAuditFinding {
 }
 
 model SiteAuditMetric {
-  id                String                @id @default(uuid()) @db.Uuid
-  auditId           String                @map("audit_id") @db.Uuid
-  category          String                @db.VarChar(80)
-  metricKey         String                @map("metric_key") @db.VarChar(120)
-  label             String                @db.VarChar(300)
-  value             Json
-  unit              String?               @db.VarChar(40)
-  evidenceKind      SiteAuditEvidenceKind @map("evidence_kind")
-  source            String                @db.VarChar(200)
-  createdAt         DateTime              @default(now()) @map("created_at")
-  audit             SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  id           String                @id @default(uuid()) @db.Uuid
+  auditId      String                @map("audit_id") @db.Uuid
+  category     String                @db.VarChar(80)
+  metricKey    String                @map("metric_key") @db.VarChar(120)
+  label        String                @db.VarChar(300)
+  value        Json
+  unit         String?               @db.VarChar(40)
+  evidenceKind SiteAuditEvidenceKind @map("evidence_kind")
+  source       String                @db.VarChar(200)
+  createdAt    DateTime              @default(now()) @map("created_at")
+  audit        SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@unique([auditId, metricKey])
   @@index([auditId, category])
@@ -671,26 +717,26 @@ model SiteAuditMetric {
 }
 
 model SiteAuditScreenshot {
-  id                String                @id @default(uuid()) @db.Uuid
-  auditId           String                @map("audit_id") @db.Uuid
-  kind              SiteAuditArtifactKind
-  mimeType          String                @map("mime_type") @db.VarChar(100)
-  data              Bytes
-  domMap            Json?                 @map("dom_map")
-  createdAt         DateTime              @default(now()) @map("created_at")
-  audit             SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  id        String                @id @default(uuid()) @db.Uuid
+  auditId   String                @map("audit_id") @db.Uuid
+  kind      SiteAuditArtifactKind
+  mimeType  String                @map("mime_type") @db.VarChar(100)
+  data      Bytes
+  domMap    Json?                 @map("dom_map")
+  createdAt DateTime              @default(now()) @map("created_at")
+  audit     SiteAudit             @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@unique([auditId, kind])
   @@map("site_audit_screenshots")
 }
 
 model SiteAuditReport {
-  id                String    @id @default(uuid()) @db.Uuid
-  auditId           String    @unique @map("audit_id") @db.Uuid
-  mimeType          String    @map("mime_type") @db.VarChar(100)
-  data              Bytes
-  generatedAt       DateTime  @default(now()) @map("generated_at")
-  audit             SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
+  id          String    @id @default(uuid()) @db.Uuid
+  auditId     String    @unique @map("audit_id") @db.Uuid
+  mimeType    String    @map("mime_type") @db.VarChar(100)
+  data        Bytes
+  generatedAt DateTime  @default(now()) @map("generated_at")
+  audit       SiteAudit @relation(fields: [auditId], references: [id], onDelete: Cascade)
 
   @@map("site_audit_reports")
 }
@@ -715,92 +761,97 @@ model TariffRequest {
 }
 
 model WorkspaceSubscription {
-  id                       String             @id @default(uuid()) @db.Uuid
-  workspaceId              String             @map("workspace_id") @db.Uuid
-  planId                   String             @map("plan_id") @db.Uuid
-  priceId                  String?            @map("price_id") @db.Uuid
-  status                   SubscriptionStatus @default(TRIALING)
-  startsAt                 DateTime           @map("starts_at")
+  id                      String             @id @default(uuid()) @db.Uuid
+  workspaceId             String             @map("workspace_id") @db.Uuid
+  planId                  String             @map("plan_id") @db.Uuid
+  priceId                 String?            @map("price_id") @db.Uuid
+  status                  SubscriptionStatus @default(TRIALING)
+  startsAt                DateTime           @map("starts_at")
   currentPeriodStart      DateTime           @map("current_period_start")
   currentPeriodEnd        DateTime           @map("current_period_end")
-  trialEndsAt              DateTime?          @map("trial_ends_at")
-  canceledAt               DateTime?          @map("canceled_at")
-  providerCustomerRef      String?            @map("provider_customer_ref") @db.VarChar(255)
-  providerSubscriptionRef  String?            @map("provider_subscription_ref") @db.VarChar(255)
-  metadata                 Json?
-  createdAt                DateTime           @default(now()) @map("created_at")
-  updatedAt                DateTime           @updatedAt @map("updated_at")
-  workspace                Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  plan                     Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
-  price                    Price?             @relation(fields: [priceId], references: [id], onDelete: SetNull)
+  trialEndsAt             DateTime?          @map("trial_ends_at")
+  canceledAt              DateTime?          @map("canceled_at")
+  providerCustomerRef     String?            @map("provider_customer_ref") @db.VarChar(255)
+  providerSubscriptionRef String?            @map("provider_subscription_ref") @db.VarChar(255)
+  metadata                Json?
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
+  workspace               Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan                    Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  price                   Price?             @relation(fields: [priceId], references: [id], onDelete: SetNull)
+
   @@index([workspaceId, status])
   @@index([currentPeriodEnd])
   @@map("workspace_subscriptions")
 }
 
 model BillingOrder {
-  id                     String             @id @default(uuid()) @db.Uuid
-  workspaceId            String             @map("workspace_id") @db.Uuid
-  planId                 String             @map("plan_id") @db.Uuid
-  priceId                String?            @map("price_id") @db.Uuid
-  status                 BillingOrderStatus @default(OPEN)
-  currency               String             @db.VarChar(3)
-  amount                 Decimal            @db.Decimal(18, 6)
-  idempotencyKey         String             @unique @map("idempotency_key") @db.VarChar(160)
-  providerOrderRef       String?            @map("provider_order_ref") @db.VarChar(255)
-  createdAt               DateTime           @default(now()) @map("created_at")
-  updatedAt               DateTime           @updatedAt @map("updated_at")
-  paidAt                  DateTime?          @map("paid_at")
-  workspace               Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  plan                   Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
-  price                  Price?             @relation(fields: [priceId], references: [id], onDelete: SetNull)
-  attempts               PaymentAttempt[]
+  id               String             @id @default(uuid()) @db.Uuid
+  workspaceId      String             @map("workspace_id") @db.Uuid
+  planId           String             @map("plan_id") @db.Uuid
+  priceId          String?            @map("price_id") @db.Uuid
+  status           BillingOrderStatus @default(OPEN)
+  currency         String             @db.VarChar(3)
+  amount           Decimal            @db.Decimal(18, 6)
+  idempotencyKey   String             @unique @map("idempotency_key") @db.VarChar(160)
+  providerOrderRef String?            @map("provider_order_ref") @db.VarChar(255)
+  createdAt        DateTime           @default(now()) @map("created_at")
+  updatedAt        DateTime           @updatedAt @map("updated_at")
+  paidAt           DateTime?          @map("paid_at")
+  workspace        Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  plan             Plan               @relation(fields: [planId], references: [id], onDelete: Restrict)
+  price            Price?             @relation(fields: [priceId], references: [id], onDelete: SetNull)
+  attempts         PaymentAttempt[]
+
   @@index([workspaceId, createdAt])
   @@index([status, createdAt])
   @@map("billing_orders")
 }
 
 model PaymentAttempt {
-  id                 String                @id @default(uuid()) @db.Uuid
-  orderId            String                @map("order_id") @db.Uuid
-  provider           String                @db.VarChar(80)
-  status             PaymentAttemptStatus  @default(CREATED)
-  providerPaymentRef String?               @map("provider_payment_ref") @db.VarChar(255)
-  idempotencyKey     String                @unique @map("idempotency_key") @db.VarChar(160)
-  errorCode          String?               @map("error_code") @db.VarChar(120)
-  createdAt          DateTime              @default(now()) @map("created_at")
-  updatedAt          DateTime              @updatedAt @map("updated_at")
-  order              BillingOrder          @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  id                 String               @id @default(uuid()) @db.Uuid
+  orderId            String               @map("order_id") @db.Uuid
+  provider           String               @db.VarChar(80)
+  status             PaymentAttemptStatus @default(CREATED)
+  providerPaymentRef String?              @map("provider_payment_ref") @db.VarChar(255)
+  idempotencyKey     String               @unique @map("idempotency_key") @db.VarChar(160)
+  errorCode          String?              @map("error_code") @db.VarChar(120)
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
+  order              BillingOrder         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   @@index([orderId, status])
   @@map("payment_attempts")
 }
 
 model UsageRecord {
-  id          String   @id @default(uuid()) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  metricKey   String   @map("metric_key") @db.VarChar(120)
-  periodStart DateTime @map("period_start")
-  periodEnd   DateTime @map("period_end")
-  quantity    Decimal  @db.Decimal(24, 6)
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  metricKey   String    @map("metric_key") @db.VarChar(120)
+  periodStart DateTime  @map("period_start")
+  periodEnd   DateTime  @map("period_end")
+  quantity    Decimal   @db.Decimal(24, 6)
   metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   @@unique([workspaceId, metricKey, periodStart, periodEnd])
   @@index([workspaceId, periodEnd])
   @@map("usage_records")
 }
 
 model Entitlement {
-  id          String   @id @default(uuid()) @db.Uuid
-  workspaceId String   @map("workspace_id") @db.Uuid
-  featureKey  String   @map("feature_key") @db.VarChar(120)
+  id          String    @id @default(uuid()) @db.Uuid
+  workspaceId String    @map("workspace_id") @db.Uuid
+  featureKey  String    @map("feature_key") @db.VarChar(120)
   value       Json
-  source      String   @db.VarChar(80)
+  source      String    @db.VarChar(80)
   expiresAt   DateTime? @map("expires_at")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
   workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
   @@unique([workspaceId, featureKey])
   @@index([workspaceId, expiresAt])
   @@map("entitlements")
@@ -837,13 +888,13 @@ model ProviderConnection {
 }
 
 model ProviderCredential {
-  id                   String             @id @default(uuid()) @db.Uuid
-  connectionId         String             @unique @map("connection_id") @db.Uuid
-  encryptedPayload     String             @map("encrypted_payload") @db.Text
-  encryptionVersion    Int                @map("encryption_version")
-  createdAt            DateTime           @default(now()) @map("created_at")
-  updatedAt            DateTime           @updatedAt @map("updated_at")
-  connection           ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
+  id                String             @id @default(uuid()) @db.Uuid
+  connectionId      String             @unique @map("connection_id") @db.Uuid
+  encryptedPayload  String             @map("encrypted_payload") @db.Text
+  encryptionVersion Int                @map("encryption_version")
+  createdAt         DateTime           @default(now()) @map("created_at")
+  updatedAt         DateTime           @updatedAt @map("updated_at")
+  connection        ProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Cascade)
 
   @@index([encryptionVersion])
   @@map("provider_credentials")
@@ -874,22 +925,22 @@ model ProviderAccount {
 }
 
 model OAuthState {
-  id                    String             @id @default(uuid()) @db.Uuid
-  stateDigest           String             @unique @map("state_digest") @db.VarChar(128)
-  userId                String             @map("user_id") @db.Uuid
-  workspaceId           String             @map("workspace_id") @db.Uuid
-  provider              ProviderId
-  sessionId             String             @map("session_id") @db.Uuid
-  codeVerifierCiphertext String?           @map("code_verifier_ciphertext") @db.Text
-  codeVerifierEncryptionVersion Int?       @map("code_verifier_encryption_version")
-  codeChallenge         String?            @map("code_challenge") @db.VarChar(128)
-  expiresAt              DateTime           @map("expires_at")
-  consumedAt            DateTime?          @map("consumed_at")
-  createdAt              DateTime           @default(now()) @map("created_at")
-  user                  User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace             Workspace          @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
-  connection            ProviderConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
-  connectionId          String?            @map("connection_id") @db.Uuid
+  id                            String              @id @default(uuid()) @db.Uuid
+  stateDigest                   String              @unique @map("state_digest") @db.VarChar(128)
+  userId                        String              @map("user_id") @db.Uuid
+  workspaceId                   String              @map("workspace_id") @db.Uuid
+  provider                      ProviderId
+  sessionId                     String              @map("session_id") @db.Uuid
+  codeVerifierCiphertext        String?             @map("code_verifier_ciphertext") @db.Text
+  codeVerifierEncryptionVersion Int?                @map("code_verifier_encryption_version")
+  codeChallenge                 String?             @map("code_challenge") @db.VarChar(128)
+  expiresAt                     DateTime            @map("expires_at")
+  consumedAt                    DateTime?           @map("consumed_at")
+  createdAt                     DateTime            @default(now()) @map("created_at")
+  user                          User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace                     Workspace           @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  connection                    ProviderConnection? @relation(fields: [connectionId], references: [id], onDelete: SetNull)
+  connectionId                  String?             @map("connection_id") @db.Uuid
 
   @@index([workspaceId, provider, expiresAt])
   @@index([userId, sessionId, expiresAt])

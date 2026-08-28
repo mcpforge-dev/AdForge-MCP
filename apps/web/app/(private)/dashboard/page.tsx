@@ -2662,7 +2662,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      <FeedbackBlock />
+      {active && <FeedbackBlock workspaceId={active.id} />}
       <SiteFooter compact />
 
       {reportPickerOpen && (

@@ -120,6 +120,15 @@ const rawConfigSchema = z.object({
     .min(1)
     .max(24)
     .default(8),
+  HOLYMEDIA_PUBLIC_BASE_URL: z.string().url().optional(),
+  TELEGRAM_SUPPORT_BOT_TOKEN: z.preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+    z.string().min(20).optional(),
+  ),
+  TELEGRAM_SUPPORT_CHAT_ID: z.preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+    z.string().min(1).max(64).optional(),
+  ),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
   EMAIL_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
   ARGON2_MEMORY_KIB: z.coerce
@@ -195,6 +204,9 @@ export type AppConfig = {
   adminLogin: string;
   adminPassword: string | undefined;
   adminSessionTtlHours: number;
+  publicBaseUrl: string;
+  telegramSupportBotToken: string | undefined;
+  telegramSupportChatId: string | undefined;
   sessionTtlDays: number;
   emailTokenTtlMinutes: number;
   argon2MemoryKib: number;
@@ -424,6 +436,12 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     adminLogin: "Admin",
     adminPassword: value.HOLYMEDIA_ADMIN_PASSWORD,
     adminSessionTtlHours: value.HOLYMEDIA_ADMIN_SESSION_TTL_HOURS,
+    publicBaseUrl: (value.HOLYMEDIA_PUBLIC_BASE_URL ?? corsOrigins[0]!).replace(
+      /\/$/,
+      "",
+    ),
+    telegramSupportBotToken: nonEmpty(value.TELEGRAM_SUPPORT_BOT_TOKEN),
+    telegramSupportChatId: nonEmpty(value.TELEGRAM_SUPPORT_CHAT_ID),
     sessionTtlDays: value.SESSION_TTL_DAYS,
     emailTokenTtlMinutes: value.EMAIL_TOKEN_TTL_MINUTES,
     argon2MemoryKib: value.ARGON2_MEMORY_KIB,

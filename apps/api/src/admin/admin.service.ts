@@ -30,6 +30,7 @@ import {
 } from "../infrastructure/security.utils.js";
 import type {
   AdminAccessStatusDto,
+  AdminFeedbackSupportStatusDto,
   AdminCompanyQueryDto,
   AdminEntitlementDto,
   AdminInvitationActionDto,
@@ -747,8 +748,8 @@ export class AdminService {
   }
 
   public async support(): Promise<unknown> {
-    return {
-      requests: await this.database.client.manualConnectionRequest.findMany({
+    const [requests, feedbackRequests] = await Promise.all([
+      this.database.client.manualConnectionRequest.findMany({
         orderBy: { updatedAt: "desc" },
         take: 100,
         select: {
@@ -765,6 +766,50 @@ export class AdminService {
           user: { select: { id: true, name: true, email: true } },
         },
       }),
+      this.database.client.supportRequest.findMany({
+        orderBy: { updatedAt: "desc" },
+        take: 100,
+        select: {
+          id: true,
+          category: true,
+          message: true,
+          sourceRoute: true,
+          locale: true,
+          status: true,
+          telegramDeliveryStatus: true,
+          telegramDeliveryAttempts: true,
+          telegramDeliveredAt: true,
+          telegramLastErrorCode: true,
+          planKey: true,
+          companyAccessStatus: true,
+          createdAt: true,
+          updatedAt: true,
+          workspace: { select: { id: true, name: true } },
+          user: { select: { id: true, name: true, email: true } },
+        },
+      }),
+    ]);
+    const history = feedbackRequests.length
+      ? await this.database.client.auditEvent.findMany({
+          where: {
+            targetType: "support_request",
+            targetId: { in: feedbackRequests.map((request) => request.id) },
+          },
+          orderBy: { createdAt: "asc" },
+          select: {
+            targetId: true,
+            eventType: true,
+            createdAt: true,
+            success: true,
+          },
+        })
+      : [];
+    return {
+      requests,
+      feedbackRequests: feedbackRequests.map((item) => ({
+        ...item,
+        history: history.filter((event) => event.targetId === item.id),
+      })),
     };
   }
 
@@ -793,6 +838,31 @@ export class AdminService {
       { status: input.status },
       row.workspaceId,
       "manual_connection_request",
+      id,
+    );
+    return { request: row };
+  }
+
+  public async updateFeedbackSupport(
+    id: string,
+    input: AdminFeedbackSupportStatusDto,
+    request: RequestWithAuth,
+  ): Promise<unknown> {
+    const row = await this.database.client.supportRequest
+      .update({
+        where: { id },
+        data: { status: input.status },
+        select: { id: true, workspaceId: true, status: true, updatedAt: true },
+      })
+      .catch(() => null);
+    if (!row) throw new NotFoundException("Support request not found.");
+    await this.record(
+      "admin_feedback_support_request_updated",
+      request,
+      true,
+      { status: input.status },
+      row.workspaceId,
+      "support_request",
       id,
     );
     return { request: row };

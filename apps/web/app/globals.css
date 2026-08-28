@@ -3641,6 +3641,21 @@ pre {
   gap: 14px;
 }
 
+.feedback-block__success,
+.feedback-block__error {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+}
+
+.feedback-block__success strong {
+  color: var(--success);
+}
+
+.feedback-block__error strong {
+  color: var(--danger);
+}
+
 @media (max-width: 620px) {
   .site-header {
     position: sticky;

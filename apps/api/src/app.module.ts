@@ -62,6 +62,8 @@ import { ProductAnalyticsService } from "./analytics/product-analytics.service.j
 import { AdminController } from "./admin/admin.controller.js";
 import { AdminAuthenticationGuard } from "./admin/admin-authentication.guard.js";
 import { AdminService } from "./admin/admin.service.js";
+import { SupportRequestController } from "./support/support-request.controller.js";
+import { SupportRequestService } from "./support/support-request.service.js";
 
 @Module({
   controllers: [
@@ -93,6 +95,7 @@ import { AdminService } from "./admin/admin.service.js";
     LegacyMetaSkillsController,
     ProductAnalyticsController,
     AdminController,
+    SupportRequestController,
   ],
   providers: [
     DatabaseService,
@@ -126,6 +129,7 @@ import { AdminService } from "./admin/admin.service.js";
     ProductAnalyticsService,
     AdminService,
     AdminAuthenticationGuard,
+    SupportRequestService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

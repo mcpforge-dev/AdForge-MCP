@@ -12,6 +12,11 @@ import {
   SITE_AUDIT_QUEUE,
   type SiteAuditJobData,
 } from "./site-audit.job.js";
+import {
+  processSupportTelegram,
+  SUPPORT_TELEGRAM_QUEUE,
+  type SupportTelegramJobData,
+} from "./support-telegram.job.js";
 
 const queueName = "holymedia-v2-foundation";
 
@@ -56,6 +61,11 @@ async function bootstrap(): Promise<void> {
     (job) => processSiteAudit(database, job),
     { connection, concurrency: 1 },
   );
+  const supportTelegramWorker = new Worker<SupportTelegramJobData>(
+    SUPPORT_TELEGRAM_QUEUE,
+    (job) => processSupportTelegram(database, job),
+    { connection, concurrency: 2 },
+  );
 
   worker.on("failed", (job, error) => {
     logger.error(
@@ -83,6 +93,7 @@ async function bootstrap(): Promise<void> {
     await worker.close();
     await discoveryWorker.close();
     await siteAuditWorker.close();
+    await supportTelegramWorker.close();
     await queue.close();
     await closeDatabase(database);
   };

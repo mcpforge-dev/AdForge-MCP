@@ -54,6 +54,7 @@ const statusLabels: Record<string, string> = {
   READY_FOR_CONNECTION: "Готов к подключению",
   COMPLETED: "Завершён",
   CANCELED: "Отменён",
+  CLOSED: "Закрыта",
   IN_REVIEW: "На рассмотрении",
   APPROVED: "Одобрена",
   DECLINED: "Отклонена",
@@ -160,6 +161,13 @@ export default function AdminPage() {
     body: string;
     action: () => Promise<void>;
   }>(null);
+
+  useEffect(() => {
+    const requestedSection = new URLSearchParams(window.location.search).get(
+      "section",
+    );
+    if (requestedSection === "support") setSection("support");
+  }, []);
 
   const endpoint = useMemo(() => {
     if (section === "companies") {
@@ -344,6 +352,14 @@ export default function AdminPage() {
                   title: "Обновить статус запроса?",
                   body: "Изменяется только карточка обращения. Данные подключений и провайдеров не затрагиваются.",
                   action: () => mutate(`/support/${id}`, "PATCH", { status }),
+                })
+              }
+              onFeedbackChange={(id, status) =>
+                setConfirmation({
+                  title: "Обновить статус обращения?",
+                  body: "Изменится только статус заявки поддержки. Данные компании и подключений не затрагиваются.",
+                  action: () =>
+                    mutate(`/support/feedback/${id}`, "PATCH", { status }),
                 })
               }
             />
@@ -856,63 +872,165 @@ function Diagnostics({ data }: { data: Json }) {
 function Support({
   data,
   onChange,
+  onFeedbackChange,
 }: {
   data: Json;
   onChange: (id: string, status: string) => void;
+  onFeedbackChange: (id: string, status: string) => void;
 }) {
   const rows = Array.isArray(data.requests) ? (data.requests as Json[]) : [];
+  const feedbackRows = Array.isArray(data.feedbackRequests)
+    ? (data.feedbackRequests as Json[])
+    : [];
   return (
-    <section className="admin-card admin-table-wrap">
-      <h2>Запросы на подключение</h2>
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th>Компания / пользователь</th>
-            <th>Платформа</th>
-            <th>Сообщение</th>
-            <th>Статус</th>
-            <th />
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((row) => {
-            const workspace = row.workspace as Json;
-            const user = row.user as Json;
-            return (
-              <tr key={String(row.id)}>
-                <td>
-                  <strong>{value(workspace, "name")}</strong>
-                  <small>{value(user, "email")}</small>
-                </td>
-                <td>{humanProvider(value(row, "provider"))}</td>
-                <td className="admin-cell-text">{value(row, "clientNote")}</td>
-                <td>
-                  <ProjectSelect
-                    ariaLabel="Статус запроса"
-                    value={value(row, "status")}
-                    onChange={(status) => onChange(String(row.id), status)}
-                    options={[
-                      { value: "NEW", label: "Новый" },
-                      { value: "IN_PROGRESS", label: "В работе" },
-                      { value: "WAITING_FOR_CLIENT", label: "Ждём клиента" },
-                      {
-                        value: "READY_FOR_CONNECTION",
-                        label: "Готов к подключению",
-                      },
-                      { value: "COMPLETED", label: "Завершён" },
-                      { value: "CANCELED", label: "Отменён" },
-                    ]}
-                  />
-                </td>
-                <td>{formatDate(row.updatedAt)}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {rows.length === 0 && <Empty text="Открытых обращений нет." />}
-    </section>
+    <>
+      <section className="admin-card admin-table-wrap">
+        <h2>Запросы на подключение</h2>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Компания / пользователь</th>
+              <th>Платформа</th>
+              <th>Сообщение</th>
+              <th>Статус</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((row) => {
+              const workspace = row.workspace as Json;
+              const user = row.user as Json;
+              return (
+                <tr key={String(row.id)}>
+                  <td>
+                    <strong>{value(workspace, "name")}</strong>
+                    <small>{value(user, "email")}</small>
+                  </td>
+                  <td>{humanProvider(value(row, "provider"))}</td>
+                  <td className="admin-cell-text">
+                    {value(row, "clientNote")}
+                  </td>
+                  <td>
+                    <ProjectSelect
+                      ariaLabel="Статус запроса"
+                      value={value(row, "status")}
+                      onChange={(status) => onChange(String(row.id), status)}
+                      options={[
+                        { value: "NEW", label: "Новый" },
+                        { value: "IN_PROGRESS", label: "В работе" },
+                        { value: "WAITING_FOR_CLIENT", label: "Ждём клиента" },
+                        {
+                          value: "READY_FOR_CONNECTION",
+                          label: "Готов к подключению",
+                        },
+                        { value: "COMPLETED", label: "Завершён" },
+                        { value: "CANCELED", label: "Отменён" },
+                      ]}
+                    />
+                  </td>
+                  <td>{formatDate(row.updatedAt)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {rows.length === 0 && <Empty text="Открытых обращений нет." />}
+      </section>
+      <section className="admin-card admin-table-wrap">
+        <h2>Обратная связь с сайта</h2>
+        <table className="admin-table">
+          <thead>
+            <tr>
+              <th>Дата</th>
+              <th>Пользователь / компания</th>
+              <th>Тема</th>
+              <th>Сообщение</th>
+              <th>Статус</th>
+              <th>Telegram</th>
+            </tr>
+          </thead>
+          <tbody>
+            {feedbackRows.map((row) => {
+              const workspace = row.workspace as Json;
+              const user = row.user as Json;
+              const history = Array.isArray(row.history)
+                ? (row.history as Json[])
+                : [];
+              return (
+                <tr key={String(row.id)}>
+                  <td>{formatDate(row.createdAt)}</td>
+                  <td>
+                    <strong>{value(user, "name")}</strong>
+                    <small>{value(user, "email")}</small>
+                    <small>{value(workspace, "name")}</small>
+                  </td>
+                  <td>{feedbackCategory(value(row, "category"))}</td>
+                  <td className="admin-cell-text">
+                    <details className="support-details">
+                      <summary>{preview(value(row, "message"))}</summary>
+                      <p>{value(row, "message")}</p>
+                      <p>Страница: {value(row, "sourceRoute")}</p>
+                      <p>Тариф: {value(row, "planKey")}</p>
+                      {history.length > 0 && (
+                        <p>
+                          История:{" "}
+                          {history
+                            .map((event) => formatDate(event.createdAt))
+                            .join(" · ")}
+                        </p>
+                      )}
+                    </details>
+                  </td>
+                  <td>
+                    <ProjectSelect
+                      ariaLabel="Статус обращения"
+                      value={value(row, "status")}
+                      onChange={(status) =>
+                        onFeedbackChange(String(row.id), status)
+                      }
+                      options={[
+                        { value: "NEW", label: "Новая" },
+                        { value: "IN_PROGRESS", label: "В работе" },
+                        { value: "CLOSED", label: "Закрыта" },
+                      ]}
+                    />
+                  </td>
+                  <td>
+                    {telegramStatus(value(row, "telegramDeliveryStatus"))}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        {feedbackRows.length === 0 && <Empty text="Заявок с сайта пока нет." />}
+      </section>
+    </>
   );
+}
+
+function feedbackCategory(value: string) {
+  return (
+    { SUGGESTION: "Пожелание", PROBLEM: "Проблема", QUESTION: "Вопрос" }[
+      value
+    ] ?? "Обращение"
+  );
+}
+
+function telegramStatus(value: string) {
+  return (
+    {
+      PENDING: "В очереди",
+      SENDING: "Отправляется",
+      SENT: "Доставлено",
+      FAILED: "Не доставлено",
+      NOT_CONFIGURED: "Не настроено",
+    }[value] ?? "Статус неизвестен"
+  );
+}
+
+function preview(value: string) {
+  return value.length > 120 ? `${value.slice(0, 117)}…` : value;
 }
 
 function TariffRequests({

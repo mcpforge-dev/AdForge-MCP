@@ -36,6 +36,35 @@ describe("v2 configuration", () => {
     expect(config.environment).toBe("test");
   });
 
+  it("keeps Telegram support delivery disabled until both protected values exist", () => {
+    const base = {
+      NODE_ENV: "test" as const,
+      DATABASE_URL:
+        "postgresql://holymedia:change-me@localhost:5433/holymedia_v2",
+      REDIS_URL: "redis://localhost:6380",
+      CORS_ORIGINS: "https://mcp.holymedia.kz",
+      SESSION_HASH_SECRET: "test-session-hash-secret-01234567890123456789",
+    };
+    expect(
+      loadConfig({
+        ...base,
+        TELEGRAM_SUPPORT_BOT_TOKEN: "",
+        TELEGRAM_SUPPORT_CHAT_ID: "",
+      }).telegramSupportBotToken,
+    ).toBeUndefined();
+    expect(
+      loadConfig({
+        ...base,
+        HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz/",
+        TELEGRAM_SUPPORT_BOT_TOKEN: "test-telegram-token-000000",
+        TELEGRAM_SUPPORT_CHAT_ID: "-1001234567890",
+      }),
+    ).toMatchObject({
+      publicBaseUrl: "https://mcp.holymedia.kz",
+      telegramSupportChatId: "-1001234567890",
+    });
+  });
+
   it("parses confirmed-write allowlists without enabling writes", () => {
     const config = loadConfig({
       NODE_ENV: "test",

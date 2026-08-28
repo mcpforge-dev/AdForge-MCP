@@ -209,6 +209,7 @@ export async function installMockApi(
     },
   ];
   const tariffRequests: Array<Record<string, unknown>> = [];
+  const supportRequests: Array<Record<string, unknown>> = [];
   const siteAudits: Array<Record<string, unknown>> = [];
 
   await page.route("**/api/**", async (route) => {
@@ -371,7 +372,18 @@ export async function installMockApi(
         tokens: [],
         reports: [],
       });
-    if (path === "/api/v1/admin/support") return json(route, { requests: [] });
+    if (path === "/api/v1/admin/support")
+      return json(route, { requests: [], feedbackRequests: supportRequests });
+    if (
+      path.startsWith("/api/v1/admin/support/feedback/") &&
+      request.method() === "PATCH"
+    ) {
+      const id = path.split("/").at(-1);
+      const item = supportRequests.find((request) => request.id === id);
+      if (item)
+        item.status = (request.postDataJSON() as { status: string }).status;
+      return json(route, { request: item });
+    }
     if (path === "/api/v1/admin/tariff-requests")
       return json(route, { requests: tariffRequests });
     if (path === "/api/v1/admin/audit")
@@ -394,6 +406,42 @@ export async function installMockApi(
       return json(route, []);
     if (path === `/api/v1/workspaces/${workspace.id}/billing/subscription`)
       return json(route, null);
+    if (
+      path === `/api/v1/workspaces/${workspace.id}/support-requests` &&
+      request.method() === "POST"
+    ) {
+      const body = request.postDataJSON() as {
+        category: string;
+        message: string;
+        sourceRoute?: string;
+        locale?: string;
+        idempotencyKey?: string;
+      };
+      const existing = supportRequests.find(
+        (item) => item.idempotencyKey === body.idempotencyKey,
+      );
+      if (existing) return json(route, { request: existing, created: false });
+      const item = {
+        id: `support-request-${supportRequests.length + 1}`,
+        idempotencyKey: body.idempotencyKey,
+        category: body.category,
+        message: body.message,
+        sourceRoute: body.sourceRoute ?? "/dashboard",
+        locale: body.locale ?? "ru",
+        status: "NEW",
+        telegramDeliveryStatus: "SENT",
+        createdAt: new Date().toISOString(),
+        workspace: { id: workspace.id, name: workspace.name },
+        user: {
+          id: members[0].user.id,
+          name: members[0].user.name,
+          email: members[0].user.email,
+        },
+        history: [],
+      };
+      supportRequests.unshift(item);
+      return json(route, { request: item, created: true });
+    }
     if (path === `/api/v1/workspaces/${workspace.id}/site-audits`) {
       if (request.method() === "POST") {
         const body = request.postDataJSON() as { url: string };

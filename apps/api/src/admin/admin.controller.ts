@@ -19,6 +19,7 @@ import type { RequestWithAuth } from "../auth/auth.types.js";
 import { AdminAuthenticationGuard } from "./admin-authentication.guard.js";
 import {
   AdminAccessStatusDto,
+  AdminFeedbackSupportStatusDto,
   AdminCompanyQueryDto,
   AdminEntitlementDto,
   AdminInvitationActionDto,
@@ -188,6 +189,16 @@ export class AdminController {
     @Req() request: RequestWithAuth,
   ): Promise<unknown> {
     return this.admin.updateSupport(id, input, request);
+  }
+
+  @UseGuards(AdminAuthenticationGuard)
+  @Patch("support/feedback/:id")
+  public updateFeedbackSupport(
+    @Param("id") id: string,
+    @Body() input: AdminFeedbackSupportStatusDto,
+    @Req() request: RequestWithAuth,
+  ): Promise<unknown> {
+    return this.admin.updateFeedbackSupport(id, input, request);
   }
 
   @UseGuards(AdminAuthenticationGuard)
