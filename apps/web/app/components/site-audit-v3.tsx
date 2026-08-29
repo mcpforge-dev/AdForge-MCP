@@ -161,6 +161,7 @@ export function SiteAuditV3({
   const [history, setHistory] = useState<Audit[]>([]);
   const [selected, setSelected] = useState<Audit | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [launchSubmitted, setLaunchSubmitted] = useState(false);
   const [showMarkers, setShowMarkers] = useState(false);
   const [stepMessage, setStepMessage] = useState<string | null>(null);
 
@@ -190,6 +191,7 @@ export function SiteAuditV3({
       return;
     }
     setStepMessage(null);
+    if (next < 3) setLaunchSubmitted(false);
     setStep(next);
   }
 
@@ -260,6 +262,7 @@ export function SiteAuditV3({
       if (!response.ok)
         throw new Error(data.error?.message ?? "Не удалось запустить анализ.");
       setSelected(data);
+      setLaunchSubmitted(true);
       setHistory((items) => [data, ...items]);
       setStep(3);
       notify("Анализ запущен. Прогресс отражает работу фонового процесса.");
@@ -485,7 +488,7 @@ export function SiteAuditV3({
             </div>
           </fieldset>
         )}
-        {step === 3 && (!selected || selected.status === "FAILED") && (
+        {step === 3 && !launchSubmitted && (
           <fieldset>
             <legend>Шаг 3. Запуск</legend>
             <div className="site-audit-v3__summary">
@@ -562,6 +565,7 @@ export function SiteAuditV3({
           onSelectHistory={(id) => void loadAudit(id)}
           onStartNew={() => {
             setSelected(null);
+            setLaunchSubmitted(false);
             setBrief(blankBrief());
             setStep(1);
           }}
