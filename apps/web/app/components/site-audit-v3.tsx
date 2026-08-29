@@ -485,23 +485,51 @@ export function SiteAuditV3({
             </div>
           </fieldset>
         )}
-        {step === 3 && !selected && (
+        {step === 3 && (!selected || selected.status === "FAILED") && (
           <fieldset>
             <legend>Шаг 3. Запуск</legend>
             <div className="site-audit-v3__summary">
-              <strong>{brief.url || "URL не указан"}</strong>
-              <span>
-                {brief.companyName || "Компания не указана"} ·{" "}
-                {brief.industry || "Сфера не указана"}
-              </span>
-              <span>
-                Цель: {brief.primaryGoal || "не выбрана"} · Действие:{" "}
-                {brief.primaryAction || "не указано"}
-              </span>
-              <span>
-                Аудит: crawl → браузер → SEO → Lighthouse → accessibility →
-                ссылки → отчёт Word.
-              </span>
+              <h2>Проверьте данные перед запуском</h2>
+              <section>
+                <h3>Сайт</h3>
+                <dl>
+                  <dt>URL</dt>
+                  <dd>{brief.url || "Не указан"}</dd>
+                  <dt>Компания</dt>
+                  <dd>{brief.companyName || "Не указана"}</dd>
+                  <dt>Сфера</dt>
+                  <dd>{brief.industry || "Не указана"}</dd>
+                </dl>
+              </section>
+              <section>
+                <h3>Бизнес-задача</h3>
+                <dl>
+                  <dt>Целевая аудитория</dt>
+                  <dd>{brief.targetAudience || "Не указана"}</dd>
+                  <dt>Цель</dt>
+                  <dd>{brief.primaryGoal || "Не выбрана"}</dd>
+                  <dt>Целевое действие</dt>
+                  <dd>{brief.primaryAction || "Не указано"}</dd>
+                  <dt>Проблема</dt>
+                  <dd>{brief.mainProblem || "Не указана"}</dd>
+                  <dt>Рынок</dt>
+                  <dd>{brief.market || "Не указан"}</dd>
+                </dl>
+              </section>
+              {brief.competitors.filter(Boolean).length > 0 && (
+                <section>
+                  <h3>Конкуренты</h3>
+                  <ul>
+                    {brief.competitors.filter(Boolean).map((url) => (
+                      <li key={url}>{url}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
+              <p>
+                Проверим публичные страницы сайта, техническое состояние, SEO,
+                UX, производительность и соответствие бизнес-задаче.
+              </p>
             </div>
             <div className="site-audit-v3__actions">
               <button
@@ -516,7 +544,7 @@ export function SiteAuditV3({
                 type="submit"
                 disabled={submitting}
               >
-                {submitting ? "Запускаем…" : "Запустить анализ"}
+                {submitting ? "Запускаем…" : "Запустить аудит"}
               </button>
             </div>
           </fieldset>
