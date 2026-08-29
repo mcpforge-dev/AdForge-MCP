@@ -17,6 +17,7 @@ import { chromium, type Page } from "playwright";
 import type { Job } from "bullmq";
 
 export const SITE_AUDIT_QUEUE = "holymedia-v3-site-audit";
+const LIGHTHOUSE_TIMEOUT_MS = 300_000;
 
 export function redisConnection(redisUrl: string) {
   const url = new URL(redisUrl);
@@ -785,8 +786,12 @@ async function lighthouseWithTimeout(
       new Promise<never>((_, reject) => {
         timer = setTimeout(
           () =>
-            reject(new Error("Lighthouse did not finish within 90 seconds.")),
-          90_000,
+            reject(
+              new Error(
+                `Lighthouse did not finish within ${LIGHTHOUSE_TIMEOUT_MS / 1_000} seconds.`,
+              ),
+            ),
+          LIGHTHOUSE_TIMEOUT_MS,
         );
       }),
     ]);
