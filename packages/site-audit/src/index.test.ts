@@ -17,6 +17,9 @@ describe("site audit V3 scoring", () => {
     expect(
       audit.scores.find((score) => score.id === "accessibility")?.value,
     ).toBeLessThan(100);
+    expect(
+      audit.scores.find((score) => score.id === "seo")?.findingCount,
+    ).toBeGreaterThan(0);
     expect(audit.scores.find((score) => score.id === "ux")?.value).toBeLessThan(
       100,
     );

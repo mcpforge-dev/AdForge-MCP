@@ -35,8 +35,8 @@ type Score = {
   id: string;
   label: string;
   value: number;
-  passed: number;
   applicable: number;
+  findingCount?: number;
   origin: string;
 };
 type Audit = {
@@ -670,8 +670,11 @@ function AuditResults({
                 <strong>{score.value}</strong>
                 <span>{score.label}</span>
                 <small>
-                  {score.passed} из {score.applicable} применимых checks
-                  пройдены
+                  {score.id === "performance"
+                    ? "Лабораторное измерение Lighthouse"
+                    : score.findingCount === undefined
+                      ? `${score.applicable} контрольных областей; детали — в найденных проблемах`
+                      : `${score.applicable} контрольных областей; ${score.findingCount} проблем повлияли на оценку`}
                 </small>
               </article>
             ))}

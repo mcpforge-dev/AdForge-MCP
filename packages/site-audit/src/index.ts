@@ -81,8 +81,8 @@ export type AuditComputation = {
     id: string;
     label: string;
     value: number;
-    passed: number;
     applicable: number;
+    findingCount?: number;
     origin: string;
   }>;
   summary: Record<string, unknown>;
@@ -898,8 +898,8 @@ export function computeAudit(
       id: "performance",
       label: "Скорость",
       value: Math.round(Number(options.performance.score) * 100),
-      passed: 1,
       applicable: 1,
+      findingCount: 0,
       origin: "Lighthouse laboratory measurement",
     });
   metrics.push(
@@ -963,8 +963,8 @@ function scoreCategory(
     id,
     label,
     value,
-    passed: Math.max(0, applicable - relevant.length),
     applicable,
+    findingCount: relevant.length,
     origin: "weighted deterministic checks",
   };
 }
@@ -1177,7 +1177,9 @@ export async function buildAuditDocx(input: {
           new TableCell({
             children: [
               new Paragraph(
-                `${score.passed} из ${score.applicable} применимых checks пройдены`,
+                score.id === "performance"
+                  ? "Лабораторное измерение Lighthouse"
+                  : `${score.applicable} контрольных областей; ${score.findingCount ?? 0} проблем повлияли на оценку`,
               ),
             ],
           }),
