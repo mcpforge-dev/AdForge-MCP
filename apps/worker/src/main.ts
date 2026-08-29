@@ -59,7 +59,7 @@ async function bootstrap(): Promise<void> {
   const siteAuditWorker = new Worker<SiteAuditJobData>(
     SITE_AUDIT_QUEUE,
     (job) => processSiteAudit(database, job),
-    { connection, concurrency: 1 },
+    { connection, concurrency: 1, lockDuration: 1_200_000 },
   );
   const supportTelegramWorker = new Worker<SupportTelegramJobData>(
     SUPPORT_TELEGRAM_QUEUE,
