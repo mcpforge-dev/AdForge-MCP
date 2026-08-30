@@ -3,8 +3,9 @@ import {
   ForbiddenException,
   Inject,
   Injectable,
+  ServiceUnavailableException,
 } from "@nestjs/common";
-import { Queue } from "bullmq";
+import { Queue, QueueEvents } from "bullmq";
 import { loadConfig } from "@holymedia/config";
 import { createLogger } from "@holymedia/observability";
 import { AuditService } from "../audit/audit.service.js";
@@ -46,9 +47,18 @@ export class SupportRequestService {
     if (input.idempotencyKey) {
       const existing = await this.database.client.supportRequest.findFirst({
         where: { workspaceId, userId, idempotencyKey: input.idempotencyKey },
-        select: { id: true, status: true, createdAt: true },
+        select: {
+          id: true,
+          status: true,
+          createdAt: true,
+          telegramDeliveryStatus: true,
+        },
       });
-      if (existing) return { request: existing, created: false };
+      if (existing) {
+        if (existing.telegramDeliveryStatus !== "SENT")
+          await this.enqueueAndConfirm(existing.id, workspaceId);
+        return { request: existing, created: false };
+      }
     }
 
     await this.consumeRateLimit(workspaceId, userId, request.ip);
@@ -98,7 +108,11 @@ export class SupportRequestService {
     });
 
     if (deliveryStatus === "PENDING")
-      await this.enqueue(created.id, workspaceId);
+      await this.enqueueAndConfirm(created.id, workspaceId);
+    else
+      throw new ServiceUnavailableException(
+        "Support notification is not configured.",
+      );
     return { request: created, created: true };
   }
 
@@ -113,28 +127,39 @@ export class SupportRequestService {
     if (ipHash) await this.limits.consume(`support:ip:${ipHash}`, 30, 3600);
   }
 
-  private async enqueue(id: string, workspaceId: string): Promise<void> {
+  private async enqueueAndConfirm(
+    id: string,
+    workspaceId: string,
+  ): Promise<void> {
     const queue = new Queue(SUPPORT_TELEGRAM_QUEUE, {
       connection: redisConnection(this.config.redisUrl),
     });
+    const events = new QueueEvents(SUPPORT_TELEGRAM_QUEUE, {
+      connection: redisConnection(this.config.redisUrl),
+    });
     try {
-      await queue.add(
+      await events.waitUntilReady();
+      const job = await queue.add(
         SUPPORT_TELEGRAM_JOB,
         { supportRequestId: id, workspaceId },
         {
           jobId: `support-telegram-${id}`,
-          attempts: 5,
+          attempts: 3,
           backoff: { type: "exponential", delay: 1_000 },
           removeOnComplete: 100,
-          removeOnFail: 100,
+          // A later user retry must create a fresh delivery attempt.
+          removeOnFail: true,
         },
       );
+      const result = await job.waitUntilFinished(events, 45_000);
+      if (!isDelivered(result))
+        throw new Error("Telegram delivery unconfirmed.");
     } catch (error) {
       await this.database.client.supportRequest.update({
         where: { id },
         data: {
           telegramDeliveryStatus: "FAILED",
-          telegramLastErrorCode: "QUEUE_UNAVAILABLE",
+          telegramLastErrorCode: "DELIVERY_UNCONFIRMED",
         },
       });
       this.logger.error(
@@ -143,9 +168,11 @@ export class SupportRequestService {
           errorType:
             error instanceof Error ? error.constructor.name : "unknown",
         },
-        "support Telegram job enqueue failed",
+        "support Telegram delivery was not confirmed",
       );
+      throw new ServiceUnavailableException("Support notification failed.");
     } finally {
+      await events.close().catch(() => undefined);
       await queue.close().catch(() => undefined);
     }
   }
@@ -155,6 +182,15 @@ export class SupportRequestService {
       this.config.telegramSupportBotToken && this.config.telegramSupportChatId,
     );
   }
+}
+
+function isDelivered(value: unknown): value is { delivered: true } {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "delivered" in value &&
+    value.delivered === true
+  );
 }
 
 function normalizeMessage(value: string): string {

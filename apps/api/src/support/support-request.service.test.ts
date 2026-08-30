@@ -1,4 +1,7 @@
-import { BadRequestException } from "@nestjs/common";
+import {
+  BadRequestException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { describe, expect, it } from "vitest";
 import { RateLimitExceededError } from "../infrastructure/redis-rate-limit.service.js";
 import { SupportRequestService } from "./support-request.service.js";
@@ -61,10 +64,7 @@ describe("SupportRequestService", () => {
 
     await expect(
       service.create("workspace-a", input(), request),
-    ).resolves.toMatchObject({
-      created: true,
-      request: { id: "support-a" },
-    });
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
     expect(createInput?.data).toMatchObject({
       workspaceId: "workspace-a",
       userId: "user-a",
@@ -93,6 +93,7 @@ describe("SupportRequestService", () => {
             id: "support-existing",
             status: "NEW",
             createdAt: new Date(),
+            telegramDeliveryStatus: "SENT",
           }),
           create: async () => {
             throw new Error("must not create");
