@@ -277,7 +277,7 @@ export async function processSiteAudit(
       : undefined;
     if (performance) {
       computation.metrics.push(...performance.metrics);
-      computation.scores.push(performance.score);
+      computation.scores.push(...performance.scores);
     }
 
     await update(
@@ -379,6 +379,7 @@ async function persist(
     createdAt: audit.createdAt,
     brief: auditBrief(audit.normalizedUrl, audit.brief),
     scores: computation.scores,
+    metrics: computation.metrics,
     findings: computation.findings,
     summary: computation.summary,
     ...(screenshot ? { screenshot } : {}),
@@ -586,6 +587,76 @@ async function checkLinks(
   return broken.slice(0, 25);
 }
 
+type LighthouseReport = {
+  lhr?: {
+    runtimeError?: { code?: string; message?: string } | null;
+    categories?: { performance?: { score?: number | null } };
+    audits?: Record<string, { numericValue?: number | null }>;
+  };
+};
+
+type LighthouseMeasurement = {
+  state: "valid" | "partial" | "measurement_failed";
+  score: number | null;
+  readings: Record<string, number | null>;
+};
+
+const lighthouseAuditIds = [
+  "first-contentful-paint",
+  "largest-contentful-paint",
+  "total-blocking-time",
+  "cumulative-layout-shift",
+  "speed-index",
+] as const;
+
+/**
+ * Keeps an unavailable Lighthouse run distinct from a real, measured score of
+ * zero. Lighthouse can return a report shell with NO_FCP and no performance
+ * category when Chrome did not observe any paint.
+ */
+export function summarizeLighthouseMeasurement(
+  report: LighthouseReport | undefined,
+): LighthouseMeasurement {
+  const lhr = report?.lhr;
+  const score = lhr?.categories?.performance?.score;
+  const readings = Object.fromEntries(
+    lighthouseAuditIds.map((id) => [
+      id,
+      lhr?.audits?.[id]?.numericValue ?? null,
+    ]),
+  ) as Record<string, number | null>;
+  const hasValidScore = typeof score === "number" && Number.isFinite(score);
+  const hasAllReadings = Object.values(readings).every(
+    (value) => typeof value === "number" && Number.isFinite(value),
+  );
+
+  if (lhr?.runtimeError?.code || !hasValidScore)
+    return { state: "measurement_failed", score: null, readings };
+  return {
+    state: hasAllReadings ? "valid" : "partial",
+    score,
+    readings,
+  };
+}
+
+function lighthouseMetric(
+  mode: "mobile" | "desktop",
+  metricKey: string,
+  label: string,
+  value: unknown,
+  unit?: string,
+) {
+  return {
+    category: "performance",
+    metricKey: `${mode}_${metricKey}`,
+    label: `${label} (${mode})`,
+    value,
+    ...(unit ? { unit } : {}),
+    evidenceKind: "MEASURED" as const,
+    source: `Lighthouse ${mode}`,
+  };
+}
+
 async function runLighthouse(url: string): Promise<
   | {
       metrics: Array<{
@@ -597,14 +668,14 @@ async function runLighthouse(url: string): Promise<
         evidenceKind: "MEASURED";
         source: string;
       }>;
-      score: {
+      scores: Array<{
         id: string;
         label: string;
         value: number;
         passed: number;
         applicable: number;
         origin: string;
-      };
+      }>;
     }
   | undefined
 > {
@@ -625,7 +696,7 @@ async function runLighthouse(url: string): Promise<
       port: 9222,
       output: "json",
       onlyCategories: ["performance", "accessibility", "seo"],
-    });
+    }).catch(() => undefined);
     const { default: desktopConfig } =
       await import("lighthouse/core/config/desktop-config.js");
     const desktopResult = await lighthouseWithTimeout(
@@ -636,136 +707,69 @@ async function runLighthouse(url: string): Promise<
         onlyCategories: ["performance", "accessibility", "seo"],
       },
       desktopConfig as never,
+    ).catch(() => undefined);
+    const mobile = summarizeLighthouseMeasurement(result as LighthouseReport);
+    const desktop = summarizeLighthouseMeasurement(
+      desktopResult as LighthouseReport,
     );
-    const categories = result?.lhr.categories;
-    const audits = result?.lhr.audits;
-    if (!categories || !audits) return undefined;
-    const reading = (id: string) => audits[id]?.numericValue ?? null;
-    const score = Number(categories.performance?.score ?? 0);
-    const desktopScore = Number(
-      desktopResult?.lhr.categories.performance?.score ?? 0,
-    );
-    const desktopReading = (id: string) =>
-      desktopResult?.lhr.audits[id]?.numericValue ?? null;
+    const metrics = [
+      lighthouseMetric(
+        "mobile",
+        "measurement_state",
+        "Performance measurement",
+        mobile.state,
+      ),
+      lighthouseMetric(
+        "desktop",
+        "measurement_state",
+        "Performance measurement",
+        desktop.state,
+      ),
+    ];
+    const appendReadings = (
+      mode: "mobile" | "desktop",
+      measurement: LighthouseMeasurement,
+    ) => {
+      if (measurement.score !== null)
+        metrics.push(
+          lighthouseMetric(
+            mode,
+            "lighthouse_performance",
+            "Lighthouse Performance",
+            measurement.score * 100,
+            "/100",
+          ),
+        );
+      const entries = [
+        ["lcp", "LCP", "largest-contentful-paint", "ms"],
+        ["cls", "CLS", "cumulative-layout-shift", "score"],
+        ["tbt", "TBT", "total-blocking-time", "ms"],
+        ["fcp", "FCP", "first-contentful-paint", "ms"],
+        ["speed_index", "Speed Index", "speed-index", "ms"],
+      ] as const;
+      for (const [key, label, auditId, unit] of entries) {
+        const value = measurement.readings[auditId];
+        if (value !== null)
+          metrics.push(lighthouseMetric(mode, key, label, value, unit));
+      }
+    };
+    appendReadings("mobile", mobile);
+    appendReadings("desktop", desktop);
     return {
-      score: {
-        id: "performance",
-        label: "Скорость",
-        value: Math.round(score * 100),
-        passed: score >= 0.9 ? 1 : 0,
-        applicable: 1,
-        origin: "Lighthouse laboratory measurement",
-      },
-      metrics: [
-        {
-          category: "performance",
-          metricKey: "lighthouse_mobile_performance",
-          label: "Lighthouse Performance (mobile)",
-          value: score * 100,
-          unit: "/100",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse mobile",
-        },
-        {
-          category: "performance",
-          metricKey: "lighthouse_desktop_performance",
-          label: "Lighthouse Performance (desktop)",
-          value: desktopScore * 100,
-          unit: "/100",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse desktop",
-        },
-        {
-          category: "performance",
-          metricKey: "mobile_lcp",
-          label: "LCP (mobile)",
-          value: reading("largest-contentful-paint"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse mobile",
-        },
-        {
-          category: "performance",
-          metricKey: "mobile_cls",
-          label: "CLS (mobile)",
-          value: reading("cumulative-layout-shift"),
-          unit: "score",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse mobile",
-        },
-        {
-          category: "performance",
-          metricKey: "mobile_tbt",
-          label: "TBT (mobile)",
-          value: reading("total-blocking-time"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse mobile",
-        },
-        {
-          category: "performance",
-          metricKey: "mobile_fcp",
-          label: "FCP (mobile)",
-          value: reading("first-contentful-paint"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse mobile",
-        },
-        {
-          category: "performance",
-          metricKey: "mobile_speed_index",
-          label: "Speed Index (mobile)",
-          value: reading("speed-index"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse mobile",
-        },
-        {
-          category: "performance",
-          metricKey: "desktop_lcp",
-          label: "LCP (desktop)",
-          value: desktopReading("largest-contentful-paint"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse desktop",
-        },
-        {
-          category: "performance",
-          metricKey: "desktop_cls",
-          label: "CLS (desktop)",
-          value: desktopReading("cumulative-layout-shift"),
-          unit: "score",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse desktop",
-        },
-        {
-          category: "performance",
-          metricKey: "desktop_tbt",
-          label: "TBT (desktop)",
-          value: desktopReading("total-blocking-time"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse desktop",
-        },
-        {
-          category: "performance",
-          metricKey: "desktop_fcp",
-          label: "FCP (desktop)",
-          value: desktopReading("first-contentful-paint"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse desktop",
-        },
-        {
-          category: "performance",
-          metricKey: "desktop_speed_index",
-          label: "Speed Index (desktop)",
-          value: desktopReading("speed-index"),
-          unit: "ms",
-          evidenceKind: "MEASURED",
-          source: "Lighthouse desktop",
-        },
-      ],
+      scores:
+        mobile.score === null
+          ? []
+          : [
+              {
+                id: "performance",
+                label: "Скорость (mobile)",
+                value: Math.round(mobile.score * 100),
+                passed: mobile.score >= 0.9 ? 1 : 0,
+                applicable: 1,
+                origin: "Lighthouse laboratory measurement (mobile)",
+              },
+            ],
+      metrics,
     };
   } catch {
     return undefined;

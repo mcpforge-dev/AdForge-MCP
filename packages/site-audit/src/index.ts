@@ -1149,11 +1149,33 @@ function delay(ms: number) {
   return new Promise<void>((resolve) => setTimeout(resolve, ms));
 }
 
+export function performanceReportNotes(metrics?: AuditMetricInput[]) {
+  const desktopPerformance = metrics?.find(
+    (metric) => metric.metricKey === "desktop_measurement_state",
+  );
+  const mobilePerformance = metrics?.find(
+    (metric) => metric.metricKey === "mobile_lighthouse_performance",
+  );
+  return {
+    desktop:
+      desktopPerformance?.value === "measurement_failed"
+        ? "Desktop performance — измерение недоступно. Страница загрузилась, но браузер проверки не зафиксировал визуальную отрисовку."
+        : desktopPerformance?.value === "partial"
+          ? "Desktop performance — доступна только часть измерений."
+          : null,
+    mobile:
+      typeof mobilePerformance?.value === "number"
+        ? `Mobile performance — ${Math.round(mobilePerformance.value)} / 100 по лабораторному измерению Lighthouse.`
+        : null,
+  };
+}
+
 export async function buildAuditDocx(input: {
   url: string;
   createdAt: Date;
   brief: AuditBriefInput;
   scores: AuditComputation["scores"];
+  metrics?: AuditMetricInput[];
   findings: AuditFindingInput[];
   summary: Record<string, unknown>;
   screenshot?: Buffer;
@@ -1189,6 +1211,7 @@ export async function buildAuditDocx(input: {
   const priority = input.findings
     .filter((item) => item.severity === "P0" || item.severity === "P1")
     .slice(0, 8);
+  const performanceNotes = performanceReportNotes(input.metrics);
   const children = [
     new Paragraph({ text: "HOLYMEDIA MCP", heading: HeadingLevel.TITLE }),
     new Paragraph({ text: "AI-аудит сайта", heading: HeadingLevel.HEADING_1 }),
@@ -1222,6 +1245,20 @@ export async function buildAuditDocx(input: {
         ...rows,
       ],
     }),
+    ...(performanceNotes.mobile || performanceNotes.desktop
+      ? [
+          new Paragraph({
+            text: "Performance measurements",
+            heading: HeadingLevel.HEADING_2,
+          }),
+          ...(performanceNotes.mobile
+            ? [new Paragraph({ text: performanceNotes.mobile })]
+            : []),
+          ...(performanceNotes.desktop
+            ? [new Paragraph({ text: performanceNotes.desktop })]
+            : []),
+        ]
+      : []),
     new Paragraph({
       text: "Что исправить в первую очередь",
       heading: HeadingLevel.HEADING_1,

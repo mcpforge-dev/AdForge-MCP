@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { computeAudit, isBlockedIp, parseAuditPage } from "./index.js";
+import {
+  computeAudit,
+  isBlockedIp,
+  parseAuditPage,
+  performanceReportNotes,
+} from "./index.js";
 
 describe("site audit V3 scoring", () => {
   it("never awards 100 to a fixture with explicit SEO and accessibility regressions", () => {
@@ -33,5 +38,30 @@ describe("site audit V3 scoring", () => {
     expect(isBlockedIp("::1")).toBe(true);
     expect(isBlockedIp("fc00::1")).toBe(true);
     expect(isBlockedIp("93.184.216.34")).toBe(false);
+  });
+
+  it("writes an honest partial-performance note for DOCX instead of a fake desktop zero", () => {
+    const notes = performanceReportNotes([
+      {
+        category: "performance",
+        metricKey: "mobile_lighthouse_performance",
+        label: "Lighthouse Performance (mobile)",
+        value: 26,
+        unit: "/100",
+        evidenceKind: "MEASURED",
+        source: "Lighthouse mobile",
+      },
+      {
+        category: "performance",
+        metricKey: "desktop_measurement_state",
+        label: "Performance measurement (desktop)",
+        value: "measurement_failed",
+        evidenceKind: "MEASURED",
+        source: "Lighthouse desktop",
+      },
+    ]);
+    expect(notes.mobile).toContain("26 / 100");
+    expect(notes.desktop).toContain("измерение недоступно");
+    expect(notes.desktop).not.toContain("0");
   });
 });

@@ -743,15 +743,37 @@ function AuditResults({
               <div className="site-audit-v3__scores">
                 {audit.metrics
                   ?.filter((item) =>
-                    /lighthouse|lcp|cls|tbt|fcp|speed/i.test(item.metricKey),
+                    /lighthouse|measurement_state|lcp|cls|tbt|fcp|speed/i.test(
+                      item.metricKey,
+                    ),
                   )
-                  .map((item) => (
-                    <article key={item.metricKey}>
-                      <strong>{formatMetric(item.value, item.unit)}</strong>
-                      <span>{item.label}</span>
-                      <small>{item.source}</small>
-                    </article>
-                  ))}
+                  .map((item) => {
+                    const unavailable =
+                      item.metricKey === "desktop_measurement_state" &&
+                      item.value === "measurement_failed";
+                    const partial =
+                      item.metricKey.endsWith("measurement_state") &&
+                      item.value === "partial";
+                    return (
+                      <article key={item.metricKey}>
+                        <strong>
+                          {unavailable
+                            ? "Не удалось измерить"
+                            : partial
+                              ? "Частично доступно"
+                              : formatMetric(item.value, item.unit)}
+                        </strong>
+                        <span>
+                          {unavailable ? "Performance (desktop)" : item.label}
+                        </span>
+                        <small>
+                          {unavailable
+                            ? "Страница загрузилась, но браузер проверки не зафиксировал визуальную отрисовку."
+                            : item.source}
+                        </small>
+                      </article>
+                    );
+                  })}
               </div>
             </section>
           )}
