@@ -1,6 +1,6 @@
 "use client";
 
-import { type FormEvent, useRef, useState } from "react";
+import { type FormEvent, useEffect, useRef, useState } from "react";
 import { useLanguage } from "./language-switcher";
 import { ProjectSelect } from "./project-select";
 
@@ -21,12 +21,31 @@ function currentRoute(): string {
   return route.startsWith("/") ? route : "/";
 }
 
+type SupportRequestResponse = {
+  telegramDelivered?: boolean;
+  telegramMessageId?: string;
+};
+
+function hasConfirmedTelegramDelivery(
+  value: unknown,
+): value is Required<SupportRequestResponse> {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    "telegramDelivered" in value &&
+    "telegramMessageId" in value &&
+    value.telegramDelivered === true &&
+    typeof value.telegramMessageId === "string" &&
+    value.telegramMessageId.trim().length > 0
+  );
+}
+
 export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
   const language = useLanguage();
-  const [state, setState] = useState<"idle" | "sending" | "sent" | "error">(
-    "idle",
-  );
+  const [state, setState] = useState<"idle" | "sending" | "error">("idle");
+  const [successOpen, setSuccessOpen] = useState(false);
   const idempotencyKey = useRef<string | undefined>(undefined);
+  const successDialogRef = useRef<HTMLDialogElement>(null);
   const ru = language === "ru";
   const copy = ru
     ? {
@@ -47,6 +66,7 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
         sending: "Отправляем…",
         sent: "Спасибо, сообщение отправлено",
         sentHint: "Мы получили вашу заявку и вернёмся с ответом.",
+        successAction: "Хорошо",
         error: "Не удалось отправить сообщение",
         errorHint: "Попробуйте ещё раз через несколько минут.",
       }
@@ -68,6 +88,7 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
         sending: "Sending…",
         sent: "Thank you, your message has been sent",
         sentHint: "We received your request and will get back to you.",
+        successAction: "Okay",
         error: "Could not send the message",
         errorHint: "Please try again in a few minutes.",
       };
@@ -100,14 +121,24 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
           }),
         },
       );
-      if (!response.ok) throw new Error("support_request");
+      const result: unknown = await response.json().catch(() => null);
+      if (!response.ok || !hasConfirmedTelegramDelivery(result))
+        throw new Error("support_request");
       formElement.reset();
       idempotencyKey.current = undefined;
-      setState("sent");
+      setState("idle");
+      setSuccessOpen(true);
     } catch {
       setState("error");
     }
   }
+
+  useEffect(() => {
+    const dialog = successDialogRef.current;
+    if (!dialog) return;
+    if (successOpen && !dialog.open) dialog.showModal();
+    if (!successOpen && dialog.open) dialog.close();
+  }, [successOpen]);
 
   return (
     <section
@@ -149,12 +180,6 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
           >
             {state === "sending" ? copy.sending : copy.submit}
           </button>
-          {state === "sent" && (
-            <p className="feedback-block__success" role="status">
-              <strong>{copy.sent}</strong>
-              <span>{copy.sentHint}</span>
-            </p>
-          )}
           {state === "error" && (
             <p className="feedback-block__error" role="alert">
               <strong>{copy.error}</strong>
@@ -163,6 +188,31 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
           )}
         </div>
       </form>
+      <dialog
+        ref={successDialogRef}
+        className="feedback-success-dialog"
+        aria-labelledby="feedback-success-title"
+        aria-describedby="feedback-success-description"
+        onClose={() => {
+          setSuccessOpen(false);
+          setState("idle");
+        }}
+      >
+        <form method="dialog" className="feedback-success-dialog__content">
+          <span className="feedback-success-dialog__icon" aria-hidden="true">
+            ✓
+          </span>
+          <div>
+            <h2 id="feedback-success-title">{copy.sent}</h2>
+            <p id="feedback-success-description">{copy.sentHint}</p>
+          </div>
+          <div className="feedback-success-dialog__actions">
+            <button className="primary-button" type="submit" autoFocus>
+              {copy.successAction}
+            </button>
+          </div>
+        </form>
+      </dialog>
     </section>
   );
 }

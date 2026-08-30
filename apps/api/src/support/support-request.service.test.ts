@@ -94,6 +94,7 @@ describe("SupportRequestService", () => {
             status: "NEW",
             createdAt: new Date(),
             telegramDeliveryStatus: "SENT",
+            telegramMessageId: "77",
           }),
           create: async () => {
             throw new Error("must not create");
@@ -111,6 +112,8 @@ describe("SupportRequestService", () => {
       service.create("workspace-a", input(), request),
     ).resolves.toMatchObject({
       created: false,
+      telegramDelivered: true,
+      telegramMessageId: "77",
       request: { id: "support-existing" },
     });
   });

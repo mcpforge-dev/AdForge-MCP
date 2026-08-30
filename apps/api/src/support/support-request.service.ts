@@ -19,6 +19,10 @@ export const SUPPORT_TELEGRAM_QUEUE = "holymedia-v2-support-telegram";
 export const SUPPORT_TELEGRAM_JOB = "support.telegram.notify";
 
 type DeliveryStatus = "PENDING" | "NOT_CONFIGURED" | "FAILED";
+type TelegramDeliveryConfirmation = {
+  delivered: true;
+  telegramMessageId: string;
+};
 
 @Injectable()
 export class SupportRequestService {
@@ -52,12 +56,28 @@ export class SupportRequestService {
           status: true,
           createdAt: true,
           telegramDeliveryStatus: true,
+          telegramMessageId: true,
         },
       });
       if (existing) {
-        if (existing.telegramDeliveryStatus !== "SENT")
-          await this.enqueueAndConfirm(existing.id, workspaceId);
-        return { request: existing, created: false };
+        const delivery =
+          existing.telegramDeliveryStatus === "SENT" &&
+          existing.telegramMessageId
+            ? {
+                delivered: true as const,
+                telegramMessageId: existing.telegramMessageId,
+              }
+            : await this.enqueueAndConfirm(existing.id, workspaceId);
+        return {
+          request: {
+            ...existing,
+            telegramDeliveryStatus: "SENT",
+            telegramMessageId: delivery.telegramMessageId,
+          },
+          created: false,
+          telegramDelivered: true,
+          telegramMessageId: delivery.telegramMessageId,
+        };
       }
     }
 
@@ -107,13 +127,24 @@ export class SupportRequestService {
       },
     });
 
-    if (deliveryStatus === "PENDING")
-      await this.enqueueAndConfirm(created.id, workspaceId);
-    else
+    const delivery =
+      deliveryStatus === "PENDING"
+        ? await this.enqueueAndConfirm(created.id, workspaceId)
+        : null;
+    if (!delivery)
       throw new ServiceUnavailableException(
         "Support notification is not configured.",
       );
-    return { request: created, created: true };
+    return {
+      request: {
+        ...created,
+        telegramDeliveryStatus: "SENT",
+        telegramMessageId: delivery.telegramMessageId,
+      },
+      created: true,
+      telegramDelivered: true,
+      telegramMessageId: delivery.telegramMessageId,
+    };
   }
 
   private async consumeRateLimit(
@@ -130,7 +161,7 @@ export class SupportRequestService {
   private async enqueueAndConfirm(
     id: string,
     workspaceId: string,
-  ): Promise<void> {
+  ): Promise<TelegramDeliveryConfirmation> {
     const queue = new Queue(SUPPORT_TELEGRAM_QUEUE, {
       connection: redisConnection(this.config.redisUrl),
     });
@@ -154,6 +185,7 @@ export class SupportRequestService {
       const result = await job.waitUntilFinished(events, 45_000);
       if (!isDelivered(result))
         throw new Error("Telegram delivery unconfirmed.");
+      return result;
     } catch (error) {
       await this.database.client.supportRequest.update({
         where: { id },
@@ -184,12 +216,15 @@ export class SupportRequestService {
   }
 }
 
-function isDelivered(value: unknown): value is { delivered: true } {
+function isDelivered(value: unknown): value is TelegramDeliveryConfirmation {
   return (
     typeof value === "object" &&
     value !== null &&
     "delivered" in value &&
-    value.delivered === true
+    value.delivered === true &&
+    "telegramMessageId" in value &&
+    typeof value.telegramMessageId === "string" &&
+    value.telegramMessageId.length > 0
   );
 }
 

@@ -80,6 +80,7 @@ describe("support Telegram delivery", () => {
 
     await expect(processSupportTelegram(database, job())).resolves.toEqual({
       delivered: true,
+      telegramMessageId: "77",
     });
     const requestInit = fetchMock.mock.calls[0]?.[1] as RequestInit | undefined;
     const payload = JSON.parse(String(requestInit?.body));
@@ -119,6 +120,28 @@ describe("support Telegram delivery", () => {
     expect(audits.at(-1)?.data).toMatchObject({
       eventType: "support_telegram_delivery_failed",
       success: false,
+    });
+  });
+
+  it("does not confirm delivery without a Telegram message ID", async () => {
+    process.env.TELEGRAM_SUPPORT_BOT_TOKEN = "vitest-telegram-token-000000";
+    process.env.TELEGRAM_SUPPORT_CHAT_ID = "-1001234567890";
+    const { database, updates } = databaseFor();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(
+          new Response(JSON.stringify({ ok: true, result: {} })),
+        ),
+    );
+
+    await expect(processSupportTelegram(database, job())).rejects.toThrow(
+      "Telegram delivery failed",
+    );
+    expect(updates.at(-1)?.data).toMatchObject({
+      telegramDeliveryStatus: "FAILED",
+      telegramLastErrorCode: "MISSING_MESSAGE_ID",
     });
   });
 

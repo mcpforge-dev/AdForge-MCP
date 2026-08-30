@@ -3641,19 +3641,71 @@ pre {
   gap: 14px;
 }
 
-.feedback-block__success,
 .feedback-block__error {
   display: grid;
   gap: 2px;
   margin: 0;
 }
 
-.feedback-block__success strong {
-  color: var(--success);
-}
-
 .feedback-block__error strong {
   color: var(--danger);
+}
+
+.feedback-success-dialog {
+  width: min(calc(100% - 28px), 440px);
+  margin: auto;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--text);
+  background: var(--surface);
+  box-shadow: 0 24px 72px rgb(0 0 0 / 35%);
+}
+
+.feedback-success-dialog::backdrop {
+  background: rgb(3 8 18 / 72%);
+}
+
+.feedback-success-dialog__content {
+  display: grid;
+  gap: 18px;
+  padding: clamp(24px, 5vw, 32px);
+}
+
+.feedback-success-dialog__icon {
+  display: grid;
+  width: 40px;
+  height: 40px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--success) 45%, var(--border));
+  border-radius: 50%;
+  color: var(--success);
+  background: color-mix(in srgb, var(--success) 12%, var(--surface));
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.feedback-success-dialog h2,
+.feedback-success-dialog p {
+  margin: 0;
+}
+
+.feedback-success-dialog h2 {
+  font-size: 22px;
+}
+
+.feedback-success-dialog p {
+  margin-top: 8px;
+  color: var(--text-muted);
+}
+
+.feedback-success-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.feedback-success-dialog__actions .primary-button {
+  min-width: 112px;
 }
 
 @media (max-width: 620px) {
@@ -3685,6 +3737,10 @@ pre {
 
   .legal-card {
     padding: 24px;
+  }
+
+  .feedback-success-dialog__actions .primary-button {
+    width: 100%;
   }
 
   .footer__product {

@@ -86,11 +86,14 @@ export async function processSupportTelegram(
     } | null;
     if (!response.ok || !body?.ok)
       throw new TelegramDeliveryError(response.status);
+    const messageId = body.result?.message_id;
+    if (!isTelegramMessageId(messageId))
+      throw new TelegramDeliveryError(response.status, "MISSING_MESSAGE_ID");
     await database.client.supportRequest.update({
       where: { id: row.id },
       data: {
         telegramDeliveryStatus: "SENT",
-        telegramMessageId: body.result?.message_id?.toString() ?? null,
+        telegramMessageId: messageId.toString(),
         telegramDeliveredAt: new Date(),
         telegramLastErrorCode: null,
       },
@@ -104,7 +107,7 @@ export async function processSupportTelegram(
         targetId: row.id,
       },
     });
-    return { delivered: true };
+    return { delivered: true, telegramMessageId: messageId.toString() };
   } catch (error) {
     const code = telegramErrorCode(error);
     await database.client.supportRequest.update({
@@ -179,6 +182,10 @@ function truncate(value: string, max: number): string {
   return value.length <= max ? value : `${value.slice(0, max - 1)}…`;
 }
 
+function isTelegramMessageId(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value > 0;
+}
+
 function formatDate(value: Date): string {
   return new Intl.DateTimeFormat("ru-RU", {
     dateStyle: "medium",
@@ -188,7 +195,7 @@ function formatDate(value: Date): string {
 }
 
 function telegramErrorCode(error: unknown): string {
-  if (error instanceof TelegramDeliveryError) return `HTTP_${error.status}`;
+  if (error instanceof TelegramDeliveryError) return error.code;
   if (error instanceof DOMException && error.name === "TimeoutError")
     return "TIMEOUT";
   return error instanceof Error
@@ -197,7 +204,10 @@ function telegramErrorCode(error: unknown): string {
 }
 
 class TelegramDeliveryError extends Error {
-  public constructor(public readonly status: number) {
+  public constructor(
+    public readonly status: number,
+    public readonly code = `HTTP_${status}`,
+  ) {
     super(`Telegram delivery failed with status ${status}`);
   }
 }

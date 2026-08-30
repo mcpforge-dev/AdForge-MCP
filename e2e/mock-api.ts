@@ -420,7 +420,13 @@ export async function installMockApi(
       const existing = supportRequests.find(
         (item) => item.idempotencyKey === body.idempotencyKey,
       );
-      if (existing) return json(route, { request: existing, created: false });
+      if (existing)
+        return json(route, {
+          request: existing,
+          created: false,
+          telegramDelivered: true,
+          telegramMessageId: existing.telegramMessageId,
+        });
       const item = {
         id: `support-request-${supportRequests.length + 1}`,
         idempotencyKey: body.idempotencyKey,
@@ -430,6 +436,7 @@ export async function installMockApi(
         locale: body.locale ?? "ru",
         status: "NEW",
         telegramDeliveryStatus: "SENT",
+        telegramMessageId: "77",
         createdAt: new Date().toISOString(),
         workspace: { id: workspace.id, name: workspace.name },
         user: {
@@ -440,7 +447,12 @@ export async function installMockApi(
         history: [],
       };
       supportRequests.unshift(item);
-      return json(route, { request: item, created: true });
+      return json(route, {
+        request: item,
+        created: true,
+        telegramDelivered: true,
+        telegramMessageId: item.telegramMessageId,
+      });
     }
     if (path === `/api/v1/workspaces/${workspace.id}/site-audits`) {
       if (request.method() === "POST") {

@@ -28,8 +28,33 @@ test("feedback form saves a support request and exposes it in admin support", as
   await feedback
     .locator('textarea[name="message"]')
     .fill("Mobile account selection needs more space.");
-  await feedback.locator('button[type="submit"]').click();
-  await expect(feedback.getByRole("status")).toBeVisible();
+  await feedback.locator(".feedback-block__form button[type=submit]").click();
+  const successDialog = page.getByRole("dialog", {
+    name: "Спасибо, сообщение отправлено",
+  });
+  await expect(successDialog).toBeVisible();
+  await expect(successDialog).toContainText(
+    "Мы получили вашу заявку и вернёмся с ответом.",
+  );
+  await expect(
+    successDialog.getByRole("button", { name: "Хорошо" }),
+  ).toBeFocused();
+  expect(
+    await new AxeBuilder({ page })
+      .include(".feedback-success-dialog")
+      .analyze(),
+  ).toEqual(expect.objectContaining({ violations: [] }));
+  await expect(feedback.locator('textarea[name="message"]')).toHaveValue("");
+  await page.keyboard.press("Escape");
+  await expect(successDialog).toBeHidden();
+
+  await feedback
+    .locator('textarea[name="message"]')
+    .fill("The feedback form now confirms delivery.");
+  await feedback.locator(".feedback-block__form button[type=submit]").click();
+  await expect(successDialog).toBeVisible();
+  await successDialog.getByRole("button", { name: "Хорошо" }).click();
+  await expect(successDialog).toBeHidden();
   await expect(feedback.locator('textarea[name="message"]')).toHaveValue("");
 
   await page.goto("/admin?section=support");
@@ -40,7 +65,36 @@ test("feedback form saves a support request and exposes it in admin support", as
     await page.getByRole("button", { name: "Войти", exact: true }).click();
   }
   await expect(page.locator(".admin-content")).toContainText(
-    "Mobile account selection needs more space.",
+    "The feedback form now confirms delivery.",
   );
   await expect(page.locator(".admin-content")).toContainText("HolyMedia");
+});
+
+test("feedback success is withheld without an explicit Telegram delivery confirmation", async ({
+  page,
+}) => {
+  await installMockApi(page);
+  await login(page);
+  await page.route("**/api/v1/workspaces/*/support-requests", async (route) => {
+    await route.fulfill({
+      status: 201,
+      headers: {
+        "access-control-allow-origin": "http://localhost:3000",
+        "access-control-allow-credentials": "true",
+        "content-type": "application/json",
+      },
+      body: JSON.stringify({ request: { id: "unconfirmed" }, created: true }),
+    });
+  });
+
+  const feedback = page.locator(".feedback-block");
+  await feedback
+    .locator('textarea[name="message"]')
+    .fill("Do not confirm without Telegram delivery.");
+  await feedback.locator(".feedback-block__form button[type=submit]").click();
+
+  await expect(
+    page.getByRole("dialog", { name: "Спасибо, сообщение отправлено" }),
+  ).toBeHidden();
+  await expect(feedback.getByRole("alert")).toBeVisible();
 });
