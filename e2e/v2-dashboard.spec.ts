@@ -942,14 +942,16 @@ test.describe("restored HolyMedia client UX", () => {
     await page.getByLabel("Главное целевое действие").fill("Оставить заявку");
     await page.getByRole("button", { name: "Проверить данные" }).click();
     await expect(
-      page.getByText(
-        "crawl → браузер → SEO → Lighthouse → accessibility → ссылки → отчёт Word.",
-      ),
+      page.getByRole("heading", { name: "Проверьте данные перед запуском" }),
+    ).toBeVisible();
+    await expect(page.getByText("Владельцы малого бизнеса")).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Запустить аудит" }),
     ).toBeVisible();
     expect(await new AxeBuilder({ page }).analyze()).toEqual(
       expect.objectContaining({ violations: [] }),
     );
-    await page.getByRole("button", { name: "Запустить анализ" }).click();
+    await page.getByRole("button", { name: "Запустить аудит" }).click();
     await expect(
       page.getByRole("heading", { name: "Что исправить в первую очередь" }),
     ).toBeVisible();
