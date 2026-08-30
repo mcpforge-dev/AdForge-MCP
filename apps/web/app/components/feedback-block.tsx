@@ -14,6 +14,13 @@ async function csrf(): Promise<string> {
   return ((await response.json()) as { csrfToken: string }).csrfToken;
 }
 
+function currentRoute(): string {
+  const route = window.location.pathname
+    .replace(/[^A-Za-z0-9_./-]/g, "")
+    .slice(0, 256);
+  return route.startsWith("/") ? route : "/";
+}
+
 export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
   const language = useLanguage();
   const [state, setState] = useState<"idle" | "sending" | "sent" | "error">(
@@ -87,7 +94,7 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
           body: JSON.stringify({
             category: String(form.get("category") ?? "SUGGESTION"),
             message,
-            sourceRoute: `${window.location.pathname}${window.location.search}`,
+            sourceRoute: currentRoute(),
             locale: language,
             idempotencyKey: idempotencyKey.current,
           }),
