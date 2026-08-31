@@ -114,7 +114,10 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
       started.transaction_id,
       principal,
     );
-    expect(continued.workspace?.id).toBe(workspaceId);
+    expect(continued.url).toContain("/connect/claude?transaction=");
+    await expect(
+      oauth.authorizationContext(started.transaction_id, principal),
+    ).resolves.toMatchObject({ selectedWorkspaceId: workspaceId });
 
     const consent = await oauth.decideAuthorization(
       started.transaction_id,
@@ -172,6 +175,14 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
     expect(tools).toMatchObject({
       result: { tools: [{ name: "list_ad_accounts" }] },
     });
+
+    await expect(
+      oauth.revoke({
+        token: exchanged.access_token,
+        client_id: registered.client_id,
+      }),
+    ).resolves.toEqual({ revoked: true });
+    expect(await oauth.authenticate(exchanged.access_token)).toBeNull();
 
     const rawServiceToken = `hmst_integration_${randomUUID()}`;
     const identity = await database.client.serviceIdentity.create({

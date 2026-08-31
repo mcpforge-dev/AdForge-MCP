@@ -19,6 +19,7 @@ export class OAuthMetadataController {
       authorization_endpoint: "https://mcp.holymedia.kz/oauth/authorize",
       token_endpoint: "https://mcp.holymedia.kz/oauth/token",
       registration_endpoint: "https://mcp.holymedia.kz/oauth/register",
+      revocation_endpoint: "https://mcp.holymedia.kz/oauth/revoke",
       response_types_supported: ["code"],
       grant_types_supported: ["authorization_code"],
       code_challenge_methods_supported: ["S256"],

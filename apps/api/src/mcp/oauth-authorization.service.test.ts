@@ -70,8 +70,26 @@ function fakeDatabase() {
         transactions.push(row);
         return row;
       },
-      findFirst: async ({ where }: { where: Record<string, unknown> }) =>
-        transactions.find((row) => whereMatches(row, where)) ?? null,
+      findFirst: async ({
+        where,
+        include,
+      }: {
+        where: Record<string, unknown>;
+        include?: unknown;
+      }) => {
+        const row = transactions.find((item) => whereMatches(item, where));
+        if (!row || !include) return row ?? null;
+        const registered = publicClients.find(
+          (item) => item.id === row.clientId,
+        )!;
+        return {
+          ...row,
+          client: {
+            clientName: registered.clientName,
+            clientId: registered.clientId,
+          },
+        };
+      },
       update: async ({
         where,
         data,
@@ -157,6 +175,7 @@ function fakeDatabase() {
         return {
           ...row,
           client: {
+            clientId: registered.clientId,
             status: registered.status,
             revokedAt: registered.revokedAt,
           },
@@ -176,6 +195,17 @@ function fakeDatabase() {
         const row = accessTokens.find((item) => item.id === where.id)!;
         Object.assign(row, data);
         return row;
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
+        const rows = accessTokens.filter((row) => whereMatches(row, where));
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
       },
     },
     workspaceMembership: {
@@ -201,6 +231,18 @@ function fakeDatabase() {
             row.workspaceId === where.workspaceId_userId.workspaceId &&
             row.userId === where.workspaceId_userId.userId,
         ) ?? null,
+      findMany: async ({ where }: { where: Record<string, unknown> }) =>
+        memberships
+          .filter((row) => {
+            if (where.userId && row.userId !== where.userId) return false;
+            return (
+              workspaces.get(String(row.workspaceId))?.accessStatus === "ACTIVE"
+            );
+          })
+          .map((row) => ({
+            role: row.role ?? "OWNER",
+            workspace: workspaces.get(String(row.workspaceId)),
+          })),
     },
     $transaction: async (callback: (tx: unknown) => Promise<unknown>) =>
       callback(client),
@@ -326,8 +368,17 @@ describe("OAuth authorization foundation", () => {
       context.principal,
     );
     expect(resumed).toMatchObject({
-      consent_required: true,
-      workspace: { id: context.workspaceId },
+      url: expect.stringContaining("/connect/claude?transaction="),
+      statusCode: 302,
+    });
+    await expect(
+      context.oauth.authorizationContext(
+        started.transaction_id,
+        context.principal,
+      ),
+    ).resolves.toMatchObject({
+      selectedWorkspaceId: context.workspaceId,
+      workspaces: [{ id: context.workspaceId }],
     });
   });
 
@@ -483,6 +534,65 @@ describe("OAuth authorization foundation", () => {
     ).rejects.toMatchObject({ status: 401 });
   });
 
+  it("requires an explicit company choice for a multi-workspace user and binds the code server-side", async () => {
+    const context = await fixture();
+    const secondWorkspaceId = randomUUID();
+    context.state.workspaces.set(secondWorkspaceId, {
+      id: secondWorkspaceId,
+      name: "Second workspace",
+      accessStatus: "ACTIVE",
+    });
+    context.state.memberships.push({
+      id: randomUUID(),
+      userId: context.principal.userId,
+      workspaceId: secondWorkspaceId,
+      role: "ADMIN",
+      createdAt: new Date(),
+    });
+
+    const started = await context.oauth.beginAuthorization(
+      {
+        client_id: context.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        state: "multi-workspace-state",
+        resource: MCP_RESOURCE,
+        code_challenge: pkce(context.verifier),
+        code_challenge_method: "S256",
+      },
+      context.principal,
+    );
+    expect(context.state.transactions[0]!.workspaceId).toBeNull();
+
+    await context.oauth.continueAuthorization(
+      started.transaction_id,
+      context.principal,
+    );
+    await expect(
+      context.oauth.authorizationContext(
+        started.transaction_id,
+        context.principal,
+      ),
+    ).resolves.toMatchObject({
+      selectedWorkspaceId: null,
+      workspaces: expect.arrayContaining([
+        expect.objectContaining({ id: context.workspaceId }),
+        expect.objectContaining({ id: secondWorkspaceId }),
+      ]),
+    });
+
+    const consent = await context.oauth.decideAuthorization(
+      started.transaction_id,
+      true,
+      context.principal,
+      secondWorkspaceId,
+    );
+    expect(new URL(consent.url).searchParams.get("state")).toBe(
+      "multi-workspace-state",
+    );
+    expect(context.state.codes[0]!.workspaceId).toBe(secondWorkspaceId);
+  });
+
   it("returns an OAuth access_denied redirect without issuing a code", async () => {
     const context = await fixture();
     const started = await context.oauth.beginAuthorization(
@@ -524,6 +634,26 @@ describe("OAuth authorization foundation", () => {
       code_verifier: context.verifier,
     });
     context.state.memberships.splice(0);
+    expect(await context.oauth.authenticate(token.access_token)).toBeNull();
+  });
+
+  it("revokes an OAuth access token without affecting other client credentials", async () => {
+    const context = await fixture();
+    const issued = await issueCode(context);
+    const token = await context.oauth.exchangeAuthorizationCode({
+      grant_type: "authorization_code",
+      client_id: context.registered.client_id,
+      code: issued.code,
+      redirect_uri: "https://claude.example.test/callback",
+      resource: MCP_RESOURCE,
+      code_verifier: context.verifier,
+    });
+    await expect(
+      context.oauth.revoke({
+        token: token.access_token,
+        client_id: context.registered.client_id,
+      }),
+    ).resolves.toEqual({ revoked: true });
     expect(await context.oauth.authenticate(token.access_token)).toBeNull();
   });
 });

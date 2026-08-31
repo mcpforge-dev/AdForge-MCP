@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Get,
@@ -69,6 +70,7 @@ export class LegacyMcpOAuthController {
 
   @Get("oauth/authorize/continue")
   @UseGuards(AuthenticationGuard)
+  @Redirect()
   public continueAuthorization(
     @CurrentPrincipal() principal: HumanPrincipal,
     @Query("transaction") transactionId: string,
@@ -81,10 +83,18 @@ export class LegacyMcpOAuthController {
     );
   }
 
+  @Get("oauth/authorize/transaction")
+  @UseGuards(AuthenticationGuard)
+  public authorizationContext(
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Query("transaction") transactionId: string,
+  ) {
+    return this.oauth.authorizationContext(transactionId, principal);
+  }
+
   @Post("oauth/authorize/consent")
   @UseGuards(AuthenticationGuard, CsrfGuard)
-  @Redirect()
-  public consent(
+  public async consent(
     @CurrentPrincipal() principal: HumanPrincipal,
     @Body() body: Record<string, unknown>,
   ) {
@@ -92,12 +102,16 @@ export class LegacyMcpOAuthController {
       typeof body.transaction_id === "string" ? body.transaction_id : "";
     const workspaceId =
       typeof body.workspace_id === "string" ? body.workspace_id : undefined;
-    return this.oauth.decideAuthorization(
+    if (body.decision !== "allow" && body.decision !== "deny") {
+      throw new BadRequestException("OAuth consent decision is invalid.");
+    }
+    const result = await this.oauth.decideAuthorization(
       transactionId,
       body.decision === "allow",
       principal,
       workspaceId,
     );
+    return { redirect_url: result.url };
   }
 
   @Post("oauth/token")
@@ -110,6 +124,11 @@ export class LegacyMcpOAuthController {
       return this.oauth.exchangeAuthorizationCode(body);
     }
     return this.clients.token(body, authorization);
+  }
+
+  @Post("oauth/revoke")
+  public revoke(@Body() body: Record<string, unknown>) {
+    return this.oauth.revoke(body);
   }
 
   private async optionalPrincipal(

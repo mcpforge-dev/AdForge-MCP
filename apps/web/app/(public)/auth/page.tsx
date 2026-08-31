@@ -91,9 +91,19 @@ export default function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [oauthTransaction, setOauthTransaction] = useState("");
 
   useEffect(() => {
-    const requested = new URLSearchParams(window.location.search).get("mode");
+    const query = new URLSearchParams(window.location.search);
+    const requested = query.get("mode");
+    const transaction = query.get("oauth_transaction") ?? "";
+    if (
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        transaction,
+      )
+    ) {
+      setOauthTransaction(transaction);
+    }
     if (requested === "signup" || requested === "forgot") setMode(requested);
   }, []);
 
@@ -118,8 +128,11 @@ export default function AuthPage() {
     setError("");
     setShowPassword(false);
     setShowConfirmPassword(false);
-    const url = next === "login" ? "/auth" : `/auth?mode=${next}`;
-    window.history.replaceState({}, "", url);
+    const query = new URLSearchParams();
+    if (next !== "login") query.set("mode", next);
+    if (oauthTransaction) query.set("oauth_transaction", oauthTransaction);
+    const suffix = query.toString();
+    window.history.replaceState({}, "", suffix ? `/auth?${suffix}` : "/auth");
   }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -166,7 +179,11 @@ export default function AuthPage() {
       } else {
         navigating = true;
         window.location.assign(
-          mode === "signup" ? "/onboarding" : "/dashboard",
+          mode === "signup"
+            ? "/onboarding"
+            : oauthTransaction
+              ? `${API}/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
+              : "/dashboard",
         );
       }
     } catch {
@@ -244,7 +261,7 @@ export default function AuthPage() {
           {mode !== "forgot" && (
             <a
               className="secondary-button google-login-button"
-              href={`${API}/auth/google/start`}
+              href={`${API}/auth/google/start${oauthTransaction ? `?oauth_transaction=${encodeURIComponent(oauthTransaction)}` : ""}`}
             >
               <GoogleIcon />
               {t.google}

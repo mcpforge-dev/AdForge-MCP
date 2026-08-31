@@ -28,7 +28,7 @@ export class CsrfGuard implements CanActivate {
     const url = String((request as unknown as { url?: string }).url ?? "");
     if (
       method === "POST" &&
-      ["/oauth/token", "/oauth/register"].some((path) =>
+      ["/oauth/token", "/oauth/register", "/oauth/revoke"].some((path) =>
         url.split("?")[0]?.endsWith(path),
       )
     ) {

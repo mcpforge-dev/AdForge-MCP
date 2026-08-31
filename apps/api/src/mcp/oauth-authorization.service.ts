@@ -17,6 +17,16 @@ const TRANSACTION_TTL_MS = 10 * 60_000;
 const CODE_TTL_MS = 3 * 60_000;
 const ACCESS_TOKEN_TTL_MS = 60 * 60_000;
 
+export type OAuthAuthorizationContextView = {
+  transactionId: string;
+  client: { id: string; name: string };
+  scope: string;
+  resource: string;
+  workspaces: Array<{ id: string; name: string; role: string }>;
+  selectedWorkspaceId: string | null;
+  expiresAt: string;
+};
+
 @Injectable()
 export class OAuthAuthorizationService {
   public constructor(
@@ -112,9 +122,11 @@ export class OAuthAuthorizationService {
       throw new BadRequestException("OAuth client or redirect URI is invalid.");
     }
     const scope = normalizeScope(stringValue(input.scope));
-    const workspaceId = principal
-      ? await this.firstWorkspaceId(principal.userId)
-      : null;
+    const availableWorkspaces = principal
+      ? await this.workspacesForUser(principal.userId)
+      : [];
+    const workspaceId =
+      availableWorkspaces.length === 1 ? availableWorkspaces[0]!.id : null;
     const transaction =
       await this.database.client.oAuthAuthorizationTransaction.create({
         data: {
@@ -143,31 +155,79 @@ export class OAuthAuthorizationService {
     workspaceId?: string,
   ) {
     const transaction = await this.activeTransaction(transactionId);
+    if (transaction.userId && transaction.userId !== principal.userId) {
+      throw new UnauthorizedException("OAuth transaction is not available.");
+    }
+    const workspaces = await this.workspacesForUser(principal.userId);
+    if (workspaces.length === 0) {
+      throw new BadRequestException("Workspace is not available.");
+    }
     const selectedWorkspaceId =
       workspaceId ||
       transaction.workspaceId ||
-      (await this.firstWorkspaceId(principal.userId));
-    await this.requireWorkspaceMembership(
-      principal.userId,
-      selectedWorkspaceId,
-    );
-    const bound =
-      await this.database.client.oAuthAuthorizationTransaction.update({
-        where: { id: transaction.id },
-        data: { userId: principal.userId, workspaceId: selectedWorkspaceId },
+      (workspaces.length === 1 ? workspaces[0]!.id : null);
+    if (selectedWorkspaceId) {
+      await this.requireWorkspaceMembership(
+        principal.userId,
+        selectedWorkspaceId,
+      );
+    }
+    await this.database.client.oAuthAuthorizationTransaction.update({
+      where: { id: transaction.id },
+      data: { userId: principal.userId, workspaceId: selectedWorkspaceId },
+    });
+    return {
+      url: `${OAUTH_ISSUER}/connect/claude?transaction=${encodeURIComponent(transaction.id)}`,
+      statusCode: 302,
+    };
+  }
+
+  public async authorizationContext(
+    transactionId: string,
+    principal: HumanPrincipal,
+  ): Promise<OAuthAuthorizationContextView> {
+    const transaction =
+      await this.database.client.oAuthAuthorizationTransaction.findFirst({
+        where: {
+          id: transactionId,
+          consumedAt: null,
+          expiresAt: { gt: new Date() },
+        },
         include: {
-          client: { select: { clientName: true, clientId: true } },
-          workspace: { select: { id: true, name: true } },
+          client: { select: { clientId: true, clientName: true } },
         },
       });
+    if (!transaction || transaction.userId !== principal.userId) {
+      throw new UnauthorizedException("OAuth transaction is not available.");
+    }
+    const workspaces = await this.workspacesForUser(principal.userId);
+    if (workspaces.length === 0) {
+      throw new BadRequestException("Workspace is not available.");
+    }
+    const selectedWorkspaceId =
+      transaction.workspaceId &&
+      workspaces.some((workspace) => workspace.id === transaction.workspaceId)
+        ? transaction.workspaceId
+        : workspaces.length === 1
+          ? workspaces[0]!.id
+          : null;
+    if (selectedWorkspaceId !== transaction.workspaceId) {
+      await this.database.client.oAuthAuthorizationTransaction.update({
+        where: { id: transaction.id },
+        data: { workspaceId: selectedWorkspaceId },
+      });
+    }
     return {
-      transaction_id: bound.id,
-      client_id: bound.client.clientId,
-      client_name: bound.client.clientName,
-      workspace: bound.workspace,
-      scope: bound.scope,
-      resource: bound.resource,
-      consent_required: true,
+      transactionId: transaction.id,
+      client: {
+        id: transaction.client.clientId,
+        name: transaction.client.clientName,
+      },
+      scope: transaction.scope,
+      resource: transaction.resource,
+      workspaces,
+      selectedWorkspaceId,
+      expiresAt: transaction.expiresAt.toISOString(),
     };
   }
 
@@ -181,17 +241,21 @@ export class OAuthAuthorizationService {
     if (transaction.userId && transaction.userId !== principal.userId) {
       throw new UnauthorizedException("OAuth transaction is not available.");
     }
-    const selectedWorkspaceId =
-      workspaceId ||
-      transaction.workspaceId ||
-      (await this.firstWorkspaceId(principal.userId));
-    await this.requireWorkspaceMembership(
-      principal.userId,
-      selectedWorkspaceId,
-    );
-
     const target = new URL(transaction.redirectUri);
     if (!allow) {
+      const availableWorkspaces = await this.workspacesForUser(
+        principal.userId,
+      );
+      const selectedWorkspaceId =
+        workspaceId ||
+        transaction.workspaceId ||
+        (availableWorkspaces.length === 1 ? availableWorkspaces[0]!.id : null);
+      if (selectedWorkspaceId) {
+        await this.requireWorkspaceMembership(
+          principal.userId,
+          selectedWorkspaceId,
+        );
+      }
       const denied =
         await this.database.client.oAuthAuthorizationTransaction.updateMany({
           where: {
@@ -215,6 +279,15 @@ export class OAuthAuthorizationService {
         target.searchParams.set("state", transaction.state);
       return { url: target.toString(), statusCode: 302 };
     }
+
+    const selectedWorkspaceId =
+      workspaceId ||
+      transaction.workspaceId ||
+      (await this.singleWorkspaceId(principal.userId));
+    await this.requireWorkspaceMembership(
+      principal.userId,
+      selectedWorkspaceId,
+    );
 
     const rawCode = `hm_code_${randomBytes(32).toString("base64url")}`;
     await this.database.client.$transaction(async (database) => {
@@ -372,6 +445,23 @@ export class OAuthAuthorizationService {
     };
   }
 
+  public async revoke(input: Record<string, unknown>) {
+    const rawToken = required(input.token, "token");
+    const clientId = stringValue(input.client_id);
+    const token = await this.database.client.oAuthAccessToken.findUnique({
+      where: { tokenDigest: digest(rawToken) },
+      include: { client: { select: { clientId: true } } },
+    });
+    if (!token || (clientId && token.client.clientId !== clientId)) {
+      return { revoked: true as const };
+    }
+    await this.database.client.oAuthAccessToken.updateMany({
+      where: { id: token.id, revokedAt: null },
+      data: { revokedAt: new Date() },
+    });
+    return { revoked: true as const };
+  }
+
   private async activeTransaction(transactionId: string) {
     const transaction =
       await this.database.client.oAuthAuthorizationTransaction.findFirst({
@@ -387,18 +477,30 @@ export class OAuthAuthorizationService {
     return transaction;
   }
 
-  private async firstWorkspaceId(userId: string): Promise<string> {
-    const membership = await this.database.client.workspaceMembership.findFirst(
+  private async singleWorkspaceId(userId: string): Promise<string> {
+    const workspaces = await this.workspacesForUser(userId);
+    if (workspaces.length !== 1) {
+      throw new BadRequestException("Workspace is not available.");
+    }
+    return workspaces[0]!.id;
+  }
+
+  private async workspacesForUser(userId: string) {
+    const memberships = await this.database.client.workspaceMembership.findMany(
       {
         where: { userId, workspace: { accessStatus: "ACTIVE" } },
         orderBy: { createdAt: "asc" },
-        select: { workspaceId: true },
+        select: {
+          role: true,
+          workspace: { select: { id: true, name: true } },
+        },
       },
     );
-    if (!membership) {
-      throw new BadRequestException("Workspace is not available.");
-    }
-    return membership.workspaceId;
+    return memberships.map((membership) => ({
+      id: membership.workspace.id,
+      name: membership.workspace.name,
+      role: String(membership.role),
+    }));
   }
 
   private async requireWorkspaceMembership(

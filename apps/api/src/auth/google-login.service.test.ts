@@ -59,6 +59,27 @@ describe("GoogleLoginService", () => {
     expect(stateModel.updateMany).toHaveBeenCalledOnce();
   });
 
+  it("preserves only a validated OAuth transaction continuation", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    const database = databaseMock();
+    const service = new GoogleLoginService(database as never);
+    const transaction = "11111111-1111-4111-8111-111111111111";
+
+    await service.start(`/oauth/authorize/continue?transaction=${transaction}`);
+    expect(database.client.googleLoginState.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        nextPath: `/oauth/authorize/continue?transaction=${transaction}`,
+      }),
+    });
+
+    await service.start("https://attacker.example/redirect");
+    expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ nextPath: "/dashboard" }),
+    });
+  });
+
   it("exchanges the code and returns only a normalized verified profile", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
