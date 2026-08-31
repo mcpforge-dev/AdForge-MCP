@@ -5,6 +5,7 @@ function controller(authenticate = vi.fn().mockResolvedValue(null)) {
   return new McpController(
     { tools: () => [], call: vi.fn() } as never,
     { authenticate } as never,
+    { authenticate: vi.fn().mockResolvedValue(null) } as never,
     { consumeMcpRequest: vi.fn() } as never,
     { record: vi.fn() } as never,
   );
@@ -13,9 +14,11 @@ function controller(authenticate = vi.fn().mockResolvedValue(null)) {
 function reply() {
   const value = {
     code: vi.fn(),
+    header: vi.fn(),
     send: vi.fn(),
   };
   value.code.mockReturnValue(value);
+  value.header.mockReturnValue(value);
   value.send.mockReturnValue(undefined);
   return value;
 }
@@ -57,34 +60,77 @@ describe("MCP bearer authentication", () => {
     expect(response.send).toHaveBeenCalledWith();
   });
 
+  it("keeps the existing Codex service-token initialize, initialized, and tools/list flow", async () => {
+    const authenticate = vi.fn().mockResolvedValue({
+      workspaceId: "workspace",
+      scopes: ["adforge:mcp:read"],
+      accountIds: [],
+    });
+    const instance = controller(authenticate);
+
+    const initialize = await instance.post(
+      {
+        headers: { authorization: "Bearer hmst_codex" },
+        body: { jsonrpc: "2.0", id: 1, method: "initialize" },
+      } as never,
+      reply() as never,
+    );
+    expect(initialize).toMatchObject({
+      result: { protocolVersion: "2025-03-26" },
+    });
+
+    const notification = reply();
+    await instance.post(
+      {
+        headers: { authorization: "Bearer hmst_codex" },
+        body: { jsonrpc: "2.0", method: "notifications/initialized" },
+      } as never,
+      notification as never,
+    );
+    expect(notification.code).toHaveBeenCalledWith(202);
+
+    const tools = await instance.post(
+      {
+        headers: { authorization: "Bearer hmst_codex" },
+        body: { jsonrpc: "2.0", id: 2, method: "tools/list" },
+      } as never,
+      reply() as never,
+    );
+    expect(tools).toEqual({ jsonrpc: "2.0", id: 2, result: { tools: [] } });
+    expect(authenticate).toHaveBeenCalledTimes(3);
+  });
+
   it("rejects missing, malformed, and invalid service tokens", async () => {
-    await expect(
-      controller().post(
-        {
-          headers: {},
-          body: { method: "initialize" },
-        } as never,
-        reply() as never,
-      ),
-    ).rejects.toMatchObject({ status: 401 });
-    await expect(
-      controller().post(
-        {
-          headers: { authorization: "Bearer Bearer hmst_invalid" },
-          body: { method: "initialize" },
-        } as never,
-        reply() as never,
-      ),
-    ).rejects.toMatchObject({ status: 401 });
-    await expect(
-      controller().post(
-        {
-          headers: { authorization: "Bearer hmst_invalid" },
-          body: { method: "initialize" },
-        } as never,
-        reply() as never,
-      ),
-    ).rejects.toMatchObject({ status: 401 });
+    const missing = reply();
+    await controller().post(
+      { headers: {}, body: { method: "initialize" } } as never,
+      missing as never,
+    );
+    expect(missing.code).toHaveBeenCalledWith(401);
+    expect(missing.header).toHaveBeenCalledWith(
+      "WWW-Authenticate",
+      'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource"',
+    );
+
+    const malformed = reply();
+    await controller().post(
+      {
+        headers: { authorization: "Bearer Bearer hmst_invalid" },
+        body: { method: "initialize" },
+      } as never,
+      malformed as never,
+    );
+    expect(malformed.code).toHaveBeenCalledWith(401);
+
+    const invalid = reply();
+    await controller().post(
+      {
+        headers: { authorization: "Bearer hmst_invalid" },
+        body: { method: "initialize" },
+      } as never,
+      invalid as never,
+    );
+    expect(invalid.code).toHaveBeenCalledWith(401);
   });
 
   it("authenticates a GET transport probe before returning the optional SSE response", async () => {
@@ -93,9 +139,12 @@ describe("MCP bearer authentication", () => {
       .mockResolvedValue({ workspaceId: "workspace" });
 
     await expect(
-      controller(authenticate).get({
-        headers: { authorization: "Bearer hmst_valid" },
-      } as never),
+      controller(authenticate).get(
+        {
+          headers: { authorization: "Bearer hmst_valid" },
+        } as never,
+        reply() as never,
+      ),
     ).rejects.toMatchObject({ status: 405 });
     expect(authenticate).toHaveBeenCalledWith("hmst_valid");
   });

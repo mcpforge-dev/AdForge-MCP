@@ -6,7 +6,6 @@ import {
   Post,
   Req,
   Res,
-  UnauthorizedException,
 } from "@nestjs/common";
 import type { FastifyReply, FastifyRequest } from "fastify";
 import { McpService } from "./mcp.service.js";
@@ -15,6 +14,7 @@ import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
 import { createLogger } from "@holymedia/observability";
+import { OAuthAuthorizationService } from "./oauth-authorization.service.js";
 
 type McpRequest = FastifyRequest & { body?: unknown };
 type JsonRpcRequest = {
@@ -31,24 +31,29 @@ export class McpController {
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
     @Inject(ServiceTokenService) private readonly tokens: ServiceTokenService,
+    @Inject(OAuthAuthorizationService)
+    private readonly oauthTokens: OAuthAuthorizationService,
     @Inject(BillingService) private readonly billing: BillingService,
     @Inject(AuditService) private readonly audit: AuditService,
   ) {}
 
   @Get("mcp")
-  public async get(@Req() request: McpRequest) {
+  public async get(
+    @Req() request: McpRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const rawAuthorization = request.headers.authorization;
     const authorization = Array.isArray(rawAuthorization)
       ? rawAuthorization[0]
       : rawAuthorization;
     const token = bearerToken(authorization);
-    const principal = token ? await this.tokens.authenticate(token) : null;
+    const principal = token ? await this.authenticate(token) : null;
     if (!principal) {
       this.logger.warn(
         { authReason: "missing_invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      throw new UnauthorizedException("MCP authorization required.");
+      return mcpUnauthorized(reply);
     }
 
     // Server-to-client SSE is optional in Streamable HTTP. A valid MCP client
@@ -73,15 +78,15 @@ export class McpController {
         { authReason: "missing_or_malformed_bearer" },
         "MCP authorization rejected",
       );
-      throw new UnauthorizedException("MCP authorization required.");
+      return mcpUnauthorized(reply);
     }
-    const principal = token ? await this.tokens.authenticate(token) : null;
+    const principal = token ? await this.authenticate(token) : null;
     if (!principal) {
       this.logger.warn(
         { authReason: "invalid_revoked_or_expired_service_token" },
         "MCP authorization rejected",
       );
-      throw new UnauthorizedException("MCP authorization required.");
+      return mcpUnauthorized(reply);
     }
 
     const input = (request.body ?? {}) as JsonRpcRequest;
@@ -164,6 +169,23 @@ export class McpController {
       error: { code: -32601, message: "Method not found." },
     };
   }
+
+  private async authenticate(token: string) {
+    return (
+      (await this.tokens.authenticate(token)) ??
+      (await this.oauthTokens.authenticate(token))
+    );
+  }
+}
+
+function mcpUnauthorized(reply: FastifyReply) {
+  return reply
+    .code(401)
+    .header(
+      "WWW-Authenticate",
+      'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource"',
+    )
+    .send({ statusCode: 401, message: "MCP authorization required." });
 }
 
 function bearerToken(authorization: string | undefined): string {
