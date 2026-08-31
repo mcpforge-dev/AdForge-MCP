@@ -5,9 +5,10 @@ import {
   MethodNotAllowedException,
   Post,
   Req,
+  Res,
   UnauthorizedException,
 } from "@nestjs/common";
-import type { FastifyRequest } from "fastify";
+import type { FastifyReply, FastifyRequest } from "fastify";
 import { McpService } from "./mcp.service.js";
 import { ServiceTokenService } from "../service-tokens/service-token.service.js";
 import { BillingService } from "../billing/billing.service.js";
@@ -58,7 +59,10 @@ export class McpController {
   }
 
   @Post("mcp")
-  public async post(@Req() request: McpRequest) {
+  public async post(
+    @Req() request: McpRequest,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
     const rawAuthorization = request.headers.authorization;
     const authorization = Array.isArray(rawAuthorization)
       ? rawAuthorization[0]
@@ -82,8 +86,26 @@ export class McpController {
 
     const input = (request.body ?? {}) as JsonRpcRequest;
     const id = input.id ?? null;
-    if (input.method === "notifications/initialized")
-      return { status: "accepted" };
+    if (input.method === "notifications/initialized") {
+      // Streamable HTTP notifications must not produce a JSON-RPC body. Codex
+      // closes the transport when it receives Nest's default 201 JSON response.
+      return reply.code(202).send();
+    }
+
+    // Nest defaults POST handlers to 201. MCP request/response messages must
+    // instead be acknowledged with a normal 200 response.
+    reply.code(200);
+    this.logger.info(
+      {
+        mcpMethod:
+          typeof input.method === "string"
+            ? input.method.slice(0, 120)
+            : "unknown",
+        requestId: request.id,
+      },
+      "MCP request authenticated",
+    );
+
     if (input.method === "initialize") {
       return {
         jsonrpc: "2.0",
