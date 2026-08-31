@@ -8,6 +8,10 @@ import {
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
+import {
+  OAuthClientMetadataService,
+  registrationMetadata,
+} from "./oauth-client-metadata.service.js";
 
 export const OAUTH_ISSUER = "https://mcp.holymedia.kz";
 export const MCP_RESOURCE = `${OAUTH_ISSUER}/mcp`;
@@ -31,53 +35,32 @@ export type OAuthAuthorizationContextView = {
 export class OAuthAuthorizationService {
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(OAuthClientMetadataService)
+    private readonly clientMetadata: OAuthClientMetadataService,
   ) {}
 
   public async registerPublicClient(input: Record<string, unknown>) {
-    const redirectUris = stringArray(input.redirect_uris);
-    if (
-      redirectUris.length === 0 ||
-      redirectUris.length > 10 ||
-      redirectUris.some((uri) => !validRedirectUri(uri))
-    ) {
-      throw new BadRequestException("OAuth redirect_uris are invalid.");
-    }
-    const authenticationMethod =
-      stringValue(input.token_endpoint_auth_method) || "none";
-    if (authenticationMethod !== "none") {
-      throw new BadRequestException(
-        "Public OAuth clients must use token_endpoint_auth_method=none.",
-      );
-    }
-    const grantTypes = stringArray(input.grant_types);
-    const responseTypes = stringArray(input.response_types);
-    if (
-      (grantTypes.length > 0 && !grantTypes.includes("authorization_code")) ||
-      (responseTypes.length > 0 && !responseTypes.includes("code"))
-    ) {
-      throw new BadRequestException(
-        "Only the authorization_code flow is supported.",
-      );
-    }
-    const clientName =
-      stringValue(input.client_name).slice(0, 160) || "Public MCP client";
+    const metadata = registrationMetadata(input);
     const clientId = `hm_public_${randomBytes(24).toString("base64url")}`;
     const client = await this.database.client.oAuthPublicClient.create({
       data: {
         clientId,
-        clientName,
-        redirectUris,
-        scope: normalizeScope(stringValue(input.scope)),
+        clientName: metadata.client_name,
+        redirectUris: metadata.redirect_uris,
+        scope: metadata.scope,
         tokenEndpointAuthMethod: "none",
+        applicationType: metadata.application_type,
+        registrationSource: "dcr",
       },
     });
     return {
       client_id: client.clientId,
       client_name: client.clientName,
-      redirect_uris: redirectUris,
+      redirect_uris: metadata.redirect_uris,
       grant_types: ["authorization_code"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
+      application_type: metadata.application_type,
       scope: client.scope,
       client_id_issued_at: Math.floor(client.createdAt.getTime() / 1000),
     };
@@ -85,12 +68,7 @@ export class OAuthAuthorizationService {
 
   public async isPublicClient(clientId: string): Promise<boolean> {
     if (!clientId) return false;
-    return Boolean(
-      await this.database.client.oAuthPublicClient.findFirst({
-        where: { clientId, status: "active", revokedAt: null },
-        select: { id: true },
-      }),
-    );
+    return Boolean(await this.publicClient(clientId));
   }
 
   public async beginAuthorization(
@@ -115,9 +93,7 @@ export class OAuthAuthorizationService {
     if (resource !== MCP_RESOURCE) {
       throw new BadRequestException("OAuth resource is invalid.");
     }
-    const client = await this.database.client.oAuthPublicClient.findFirst({
-      where: { clientId, status: "active", revokedAt: null },
-    });
+    const client = await this.publicClient(clientId);
     if (!client || !jsonStrings(client.redirectUris).includes(redirectUri)) {
       throw new BadRequestException("OAuth client or redirect URI is invalid.");
     }
@@ -340,14 +316,7 @@ export class OAuthAuthorizationService {
     if (!validPkceVerifier(verifier) || resource !== MCP_RESOURCE) {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
-    const client = await this.database.client.oAuthPublicClient.findFirst({
-      where: {
-        clientId,
-        status: "active",
-        revokedAt: null,
-        tokenEndpointAuthMethod: "none",
-      },
-    });
+    const client = await this.publicClient(clientId);
     const code = client
       ? await this.database.client.oAuthAuthorizationCode.findFirst({
           where: { codeDigest: digest(rawCode), clientId: client.id },
@@ -355,6 +324,7 @@ export class OAuthAuthorizationService {
       : null;
     if (
       !client ||
+      client.tokenEndpointAuthMethod !== "none" ||
       !code ||
       code.usedAt ||
       code.expiresAt <= new Date() ||
@@ -462,6 +432,14 @@ export class OAuthAuthorizationService {
     return { revoked: true as const };
   }
 
+  private async publicClient(clientId: string) {
+    const existing = await this.database.client.oAuthPublicClient.findFirst({
+      where: { clientId, status: "active", revokedAt: null },
+    });
+    if (existing?.registrationSource !== "cimd") return existing;
+    return this.clientMetadata.resolve(clientId);
+  }
+
   private async activeTransaction(transactionId: string) {
     const transaction =
       await this.database.client.oAuthAuthorizationTransaction.findFirst({
@@ -537,19 +515,6 @@ function stringValue(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value)
-    ? [
-        ...new Set(
-          value
-            .filter((item): item is string => typeof item === "string")
-            .map((item) => item.trim())
-            .filter(Boolean),
-        ),
-      ]
-    : [];
-}
-
 function jsonStrings(value: unknown): string[] {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === "string")
@@ -561,15 +526,6 @@ function normalizeScope(value: string): string {
     return MCP_READ_SCOPE;
   }
   throw new BadRequestException("Only read-only MCP scope is available.");
-}
-
-function validRedirectUri(value: string): boolean {
-  try {
-    const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password;
-  } catch {
-    return false;
-  }
 }
 
 function validPkceChallenge(value: string): boolean {

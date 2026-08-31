@@ -54,6 +54,7 @@ import { McpPreviewService } from "./mcp/mcp-preview.service.js";
 import { LegacyMcpOAuthController } from "./compat/legacy-mcp-oauth.controller.js";
 import { McpOAuthClientService } from "./mcp/mcp-oauth-client.service.js";
 import { OAuthAuthorizationService } from "./mcp/oauth-authorization.service.js";
+import { OAuthClientMetadataService } from "./mcp/oauth-client-metadata.service.js";
 import { OAuthMetadataController } from "./compat/oauth-metadata.controller.js";
 import { LegacyGoogleLoginController } from "./compat/legacy-google-login.controller.js";
 import { GoogleLoginService } from "./auth/google-login.service.js";
@@ -122,6 +123,7 @@ import { SupportRequestService } from "./support/support-request.service.js";
     McpPreviewService,
     McpOAuthClientService,
     OAuthAuthorizationService,
+    OAuthClientMetadataService,
     GoogleLoginService,
     ReportService,
     SiteAnalysisService,

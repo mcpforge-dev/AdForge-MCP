@@ -283,7 +283,9 @@ function reply() {
 
 async function fixture() {
   const { database, state } = fakeDatabase();
-  const oauth = new OAuthAuthorizationService(database);
+  const oauth = new OAuthAuthorizationService(database, {
+    resolve: async () => null,
+  } as never);
   const userId = randomUUID();
   const workspaceId = randomUUID();
   state.users.set(userId, { id: userId, status: "active" });
@@ -341,6 +343,28 @@ async function issueCode(context: Awaited<ReturnType<typeof fixture>>) {
 }
 
 describe("OAuth authorization foundation", () => {
+  it("registers a public native client with RFC 7591 response metadata", async () => {
+    const { oauth } = await fixture();
+    await expect(
+      oauth.registerPublicClient({
+        client_name: "Claude Desktop",
+        redirect_uris: ["http://127.0.0.1:32123/callback"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+        application_type: "native",
+      }),
+    ).resolves.toMatchObject({
+      client_id: expect.stringMatching(/^hm_public_/),
+      client_id_issued_at: expect.any(Number),
+      redirect_uris: ["http://127.0.0.1:32123/callback"],
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      application_type: "native",
+    });
+  });
+
   it("persists an anonymous transaction and resumes it with the authenticated workspace", async () => {
     const context = await fixture();
     const started = await context.oauth.beginAuthorization({

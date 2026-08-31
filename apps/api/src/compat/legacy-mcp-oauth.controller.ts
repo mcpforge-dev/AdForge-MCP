@@ -4,14 +4,19 @@ import {
   Controller,
   Get,
   Headers,
+  HttpCode,
+  HttpStatus,
   Inject,
   Post,
   Query,
   Redirect,
   Req,
+  Res,
   UnauthorizedException,
   UseGuards,
 } from "@nestjs/common";
+import { createLogger } from "@holymedia/observability";
+import type { FastifyReply } from "fastify";
 import { CurrentPrincipal } from "../auth/auth.decorators.js";
 import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
@@ -22,6 +27,7 @@ import { OAuthAuthorizationService } from "../mcp/oauth-authorization.service.js
 
 @Controller()
 export class LegacyMcpOAuthController {
+  private readonly logger = createLogger("holymedia-mcp-v2-oauth");
   public constructor(
     @Inject(McpOAuthClientService)
     private readonly clients: McpOAuthClientService,
@@ -64,8 +70,67 @@ export class LegacyMcpOAuthController {
   }
 
   @Post("oauth/register")
-  public register(@Body() body: Record<string, unknown>) {
-    return this.oauth.registerPublicClient(body);
+  @HttpCode(HttpStatus.CREATED)
+  public async register(
+    @Req() request: RequestWithAuth,
+    @Res({ passthrough: true }) reply: FastifyReply,
+    @Body() body: Record<string, unknown>,
+    @Headers("content-type") contentType?: string,
+    @Headers("user-agent") userAgent?: string,
+  ) {
+    try {
+      const result = await this.oauth.registerPublicClient(body);
+      this.logger.info(
+        {
+          requestId: request.requestId,
+          contentType: contentType?.split(";", 1)[0] ?? null,
+          userAgent: userAgent?.slice(0, 160) ?? null,
+          redirectUris: Array.isArray(body.redirect_uris)
+            ? body.redirect_uris.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
+          grantTypes: Array.isArray(body.grant_types)
+            ? body.grant_types.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
+          responseTypes: Array.isArray(body.response_types)
+            ? body.response_types.filter(
+                (value): value is string => typeof value === "string",
+              )
+            : [],
+          tokenEndpointAuthMethod:
+            typeof body.token_endpoint_auth_method === "string"
+              ? body.token_endpoint_auth_method
+              : "none",
+          applicationType:
+            typeof body.application_type === "string"
+              ? body.application_type
+              : null,
+          clientId: result.client_id.slice(0, 18),
+        },
+        "OAuth public client registered",
+      );
+      reply.header("cache-control", "no-store");
+      reply.header("pragma", "no-cache");
+      return result;
+    } catch (error) {
+      this.logger.warn(
+        {
+          requestId: request.requestId,
+          contentType: contentType?.split(";", 1)[0] ?? null,
+          userAgent: userAgent?.slice(0, 160) ?? null,
+          redirectUriCount: Array.isArray(body.redirect_uris)
+            ? body.redirect_uris.length
+            : 0,
+          errorType:
+            error instanceof Error ? error.constructor.name : "unknown",
+        },
+        "OAuth public client registration rejected",
+      );
+      throw error;
+    }
   }
 
   @Get("oauth/authorize/continue")

@@ -39,7 +39,9 @@ function reply() {
 
 describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
   const database = new DatabaseService();
-  const oauth = new OAuthAuthorizationService(database);
+  const oauth = new OAuthAuthorizationService(database, {
+    resolve: async () => null,
+  } as never);
   const serviceTokens = new ServiceTokenService(
     database,
     new AuditService(database),

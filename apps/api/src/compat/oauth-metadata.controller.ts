@@ -29,6 +29,7 @@ export class OAuthMetadataController {
         "client_secret_basic",
         "client_secret_post",
       ],
+      client_id_metadata_document_supported: true,
     };
   }
 }
