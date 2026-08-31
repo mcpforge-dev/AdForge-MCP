@@ -357,7 +357,9 @@ test.describe("restored HolyMedia client UX", () => {
       "aria-selected",
       "true",
     );
-    await expect(page.getByRole("tabpanel")).toContainText(
+    await expect(page.getByRole("tabpanel")).toContainText("Authorization");
+    await expect(page.getByRole("tabpanel")).toContainText("Bearer");
+    await expect(page.getByRole("tabpanel")).not.toContainText(
       "HOLYMEDIA_MCP_TOKEN",
     );
     await expect(page.getByRole("tabpanel")).toContainText(

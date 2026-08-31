@@ -2843,6 +2843,125 @@ pre {
   color: var(--text-muted);
   font-size: 13px;
 }
+.client-panel--codex {
+  padding: 0;
+  border-left: 0;
+  background: transparent;
+}
+.client-panel__intro {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+.client-panel .codex-steps {
+  counter-reset: codex-step;
+  gap: 10px;
+  padding: 0;
+  color: var(--text-muted);
+}
+.codex-steps li {
+  position: relative;
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  background: var(--surface);
+}
+.codex-steps li::before {
+  grid-row: span 3;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--border));
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface));
+  color: var(--accent);
+  content: counter(codex-step);
+  counter-increment: codex-step;
+  font-size: 12px;
+  font-weight: 750;
+}
+.codex-steps strong,
+.codex-steps > li > span,
+.codex-steps small,
+.codex-steps .codex-config {
+  grid-column: 2;
+}
+.codex-steps strong {
+  color: var(--text);
+  font-size: 13px;
+}
+.codex-steps > li > span {
+  margin-top: 3px;
+  line-height: 1.5;
+}
+.codex-steps small {
+  margin-top: 8px;
+  color: var(--text-faint);
+  line-height: 1.45;
+}
+.codex-config {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 0;
+}
+.codex-config > div {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.75fr) minmax(0, 1.5fr);
+  gap: 12px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface-inset);
+}
+.codex-config dt {
+  color: var(--text-faint);
+  font-size: 12px;
+}
+.codex-config dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+.codex-config code {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+.codex-config__empty {
+  border-color: color-mix(in srgb, var(--accent) 36%, var(--border)) !important;
+  background: color-mix(
+    in srgb,
+    var(--accent) 7%,
+    var(--surface-inset)
+  ) !important;
+}
+.codex-troubleshooting {
+  margin-top: 12px;
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-small);
+  background: var(--surface-inset);
+}
+.codex-troubleshooting h4,
+.codex-troubleshooting p {
+  margin: 0;
+}
+.codex-troubleshooting h4 {
+  color: var(--text);
+  font-size: 13px;
+}
+.codex-troubleshooting p {
+  margin-top: 8px;
+  color: var(--text-muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
 .report-panel {
   max-width: 820px;
 }
@@ -3363,6 +3482,18 @@ pre {
   .mcp-step {
     grid-template-columns: 28px minmax(0, 1fr);
     padding: 16px;
+  }
+  .codex-steps li {
+    grid-template-columns: 26px minmax(0, 1fr);
+    padding: 12px;
+  }
+  .codex-steps li::before {
+    width: 26px;
+    height: 26px;
+  }
+  .codex-config > div {
+    grid-template-columns: 1fr;
+    gap: 4px;
   }
   .copy-row,
   .token-row,

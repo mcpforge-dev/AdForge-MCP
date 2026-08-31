@@ -3055,7 +3055,9 @@ function ClientInstructions({
   client: Client;
   language: "ru" | "en";
 }) {
-  if (client === "codex")
+  if (client === "codex") return <CodexInstructions language={language} />;
+
+  if ((client as string) === "codex")
     return (
       <div className="client-panel" role="tabpanel">
         <h3>Codex</h3>
@@ -3146,6 +3148,164 @@ function ClientInstructions({
         <li>Выберите OAuth и автоматическую регистрацию клиента.</li>
         <li>Войдите в HolyMedia MCP и подтвердите подключение.</li>
       </ol>
+    </div>
+  );
+}
+
+function CodexInstructions({ language }: { language: "ru" | "en" }) {
+  const ru = language === "ru";
+  return (
+    <div className="client-panel client-panel--codex" role="tabpanel">
+      <h3>Codex</h3>
+      <p className="client-panel__intro">
+        {ru
+          ? "Подключение выполняется только в HolyMedia MCP и настройках Codex — без терминала и переменных среды."
+          : "Set up the connection entirely in HolyMedia MCP and Codex settings — no terminal or environment variables required."}
+      </p>
+      <ol className="codex-steps">
+        <li>
+          <strong>{ru ? "Создайте ключ Codex" : "Create a Codex key"}</strong>
+          <span>
+            {ru
+              ? "В разделе «AI-клиент» выше введите название "
+              : "In the AI client section above, name the key "}
+            <code>Codex</code>
+            {ru ? " и нажмите «Создать ключ»." : " and select Create key."}
+          </span>
+        </li>
+        <li>
+          <strong>{ru ? "Скопируйте ключ" : "Copy the key"}</strong>
+          <span>
+            {ru
+              ? "Нажмите «Скопировать» в одноразовом окне. Не закрывайте его, пока ключ не скопирован: повторно он не показывается."
+              : "Use Copy in the one-time dialog. Do not close it before copying: the key is not shown again."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Откройте настройки Codex" : "Open Codex settings"}
+          </strong>
+          <span>
+            {ru
+              ? "Перейдите: «Настройки» → «Плагины» → «MCP» → «Добавить сервер»."
+              : "Go to Settings → Plugins → MCP → Add server."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Выберите тип подключения" : "Choose the connection type"}
+          </strong>
+          <span>
+            {ru
+              ? "Выберите «Потоковая передача HTTP». Не выбирайте STDIO."
+              : "Choose Streaming HTTP. Do not select STDIO."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Заполните основные поля" : "Complete the main fields"}
+          </strong>
+          <dl className="codex-config">
+            <div>
+              <dt>{ru ? "Имя" : "Name"}</dt>
+              <dd>
+                <code>HolyMedia MCP</code>
+              </dd>
+            </div>
+            <div>
+              <dt>URL</dt>
+              <dd>
+                <code>{MCP_URL}</code>
+              </dd>
+            </div>
+            <div className="codex-config__empty">
+              <dt>
+                {ru
+                  ? "Переменная окружения токена Bearer"
+                  : "Bearer token environment variable"}
+              </dt>
+              <dd>{ru ? "Оставьте пустым." : "Leave empty."}</dd>
+            </div>
+          </dl>
+        </li>
+        <li>
+          <strong>
+            {ru
+              ? "Добавьте Authorization header"
+              : "Add the Authorization header"}
+          </strong>
+          <dl className="codex-config">
+            <div>
+              <dt>{ru ? "Ключ" : "Key"}</dt>
+              <dd>
+                <code>Authorization</code>
+              </dd>
+            </div>
+            <div>
+              <dt>{ru ? "Значение" : "Value"}</dt>
+              <dd>
+                <code>Bearer &lt;{ru ? "ваш ключ" : "your key"}&gt;</code>
+              </dd>
+            </div>
+          </dl>
+          <small>
+            {ru
+              ? "Между Bearer и ключом — один пробел. Не используйте кавычки и не повторяйте слово Bearer."
+              : "Use one space between Bearer and the key. Do not use quotes or repeat Bearer."}
+          </small>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Сохраните подключение" : "Save the connection"}
+          </strong>
+          <span>
+            {ru
+              ? "Проверьте имя, URL и заголовок Authorization, затем нажмите «Сохранить»."
+              : "Check the name, URL, and Authorization header, then select Save."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru
+              ? "Проверьте, что сервер включён"
+              : "Confirm the server is enabled"}
+          </strong>
+          <span>
+            {ru
+              ? "В списке MCP найдите HolyMedia MCP и включите переключатель справа, если он выключен."
+              : "Find HolyMedia MCP in the MCP list and turn on its switch if needed."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru
+              ? "Проверьте кабинеты в новом чате"
+              : "Verify accounts in a new chat"}
+          </strong>
+          <span>
+            {ru
+              ? "Напишите: «Покажи мои подключённые рекламные кабинеты», затем запросите активные кампании или расходы за последние 7 дней."
+              : "Ask: “Show my connected advertising accounts,” then request active campaigns or spend for the last 7 days."}
+          </span>
+        </li>
+      </ol>
+      <aside
+        className="codex-troubleshooting"
+        aria-label={ru ? "Если не работает" : "Troubleshooting"}
+      >
+        <h4>{ru ? "Если не работает" : "If it does not work"}</h4>
+        <p>
+          <strong>401.</strong>{" "}
+          {ru
+            ? "Проверьте, что ключ вставлен полностью, перед ним ровно один «Bearer », а сам ключ не отозван и не истёк. При необходимости создайте новый ключ в «AI-клиенте» и замените только значение заголовка Authorization."
+            : "Check that the complete key is pasted, it has exactly one “Bearer ” prefix, and the key is neither revoked nor expired. If needed, create a new key in AI client and replace only the Authorization header value."}
+        </p>
+        <p>
+          {ru
+            ? "Кабинетов нет? Откройте «Подключения»: рекламная платформа и её кабинеты должны быть подключены. Codex не требует повторной OAuth-авторизации только из-за ключа MCP."
+            : "No accounts? Open Connections: the advertising platform and its accounts must be connected. Codex does not require provider OAuth again merely because the MCP key changed."}
+        </p>
+      </aside>
     </div>
   );
 }
