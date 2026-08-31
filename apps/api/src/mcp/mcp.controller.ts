@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Inject,
+  MethodNotAllowedException,
   Post,
   Req,
   UnauthorizedException,
@@ -12,6 +13,7 @@ import { ServiceTokenService } from "../service-tokens/service-token.service.js"
 import { BillingService } from "../billing/billing.service.js";
 import { AuditService } from "../audit/audit.service.js";
 import { ProviderError } from "../providers/provider.errors.js";
+import { createLogger } from "@holymedia/observability";
 
 type McpRequest = FastifyRequest & { body?: unknown };
 type JsonRpcRequest = {
@@ -23,6 +25,8 @@ type JsonRpcRequest = {
 
 @Controller()
 export class McpController {
+  private readonly logger = createLogger("holymedia-mcp-v2-mcp");
+
   public constructor(
     @Inject(McpService) private readonly mcp: McpService,
     @Inject(ServiceTokenService) private readonly tokens: ServiceTokenService,
@@ -31,8 +35,26 @@ export class McpController {
   ) {}
 
   @Get("mcp")
-  public get() {
-    throw new UnauthorizedException("MCP authorization required.");
+  public async get(@Req() request: McpRequest) {
+    const rawAuthorization = request.headers.authorization;
+    const authorization = Array.isArray(rawAuthorization)
+      ? rawAuthorization[0]
+      : rawAuthorization;
+    const token = bearerToken(authorization);
+    const principal = token ? await this.tokens.authenticate(token) : null;
+    if (!principal) {
+      this.logger.warn(
+        { authReason: "missing_invalid_revoked_or_expired_service_token" },
+        "MCP authorization rejected",
+      );
+      throw new UnauthorizedException("MCP authorization required.");
+    }
+
+    // Server-to-client SSE is optional in Streamable HTTP. A valid MCP client
+    // continues with JSON-RPC POST requests after this explicit response.
+    throw new MethodNotAllowedException(
+      "This MCP endpoint does not provide an SSE stream.",
+    );
   }
 
   @Post("mcp")
@@ -41,12 +63,22 @@ export class McpController {
     const authorization = Array.isArray(rawAuthorization)
       ? rawAuthorization[0]
       : rawAuthorization;
-    const token = authorization?.startsWith("Bearer ")
-      ? authorization.slice(7).trim()
-      : "";
-    const principal = token ? await this.tokens.authenticate(token) : null;
-    if (!principal)
+    const token = bearerToken(authorization);
+    if (!token) {
+      this.logger.warn(
+        { authReason: "missing_or_malformed_bearer" },
+        "MCP authorization rejected",
+      );
       throw new UnauthorizedException("MCP authorization required.");
+    }
+    const principal = token ? await this.tokens.authenticate(token) : null;
+    if (!principal) {
+      this.logger.warn(
+        { authReason: "invalid_revoked_or_expired_service_token" },
+        "MCP authorization rejected",
+      );
+      throw new UnauthorizedException("MCP authorization required.");
+    }
 
     const input = (request.body ?? {}) as JsonRpcRequest;
     const id = input.id ?? null;
@@ -110,4 +142,11 @@ export class McpController {
       error: { code: -32601, message: "Method not found." },
     };
   }
+}
+
+function bearerToken(authorization: string | undefined): string {
+  // RFC 7235 authentication schemes are case-insensitive. This also rejects
+  // malformed values such as "Bearer Bearer <token>" without logging a secret.
+  const match = /^\s*Bearer\s+([^\s]+)\s*$/i.exec(authorization ?? "");
+  return match?.[1] ?? "";
 }

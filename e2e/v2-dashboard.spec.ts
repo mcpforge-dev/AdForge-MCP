@@ -357,6 +357,12 @@ test.describe("restored HolyMedia client UX", () => {
       "aria-selected",
       "true",
     );
+    await expect(page.getByRole("tabpanel")).toContainText(
+      "HOLYMEDIA_MCP_TOKEN",
+    );
+    await expect(page.getByRole("tabpanel")).toContainText(
+      "Переменная окружения токена Bearer",
+    );
     await page.getByRole("tab", { name: "Claude" }).click();
     await expect(page.getByRole("tabpanel")).toContainText("Settings");
 

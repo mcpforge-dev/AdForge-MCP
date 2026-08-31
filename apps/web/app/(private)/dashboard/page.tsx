@@ -3054,15 +3054,29 @@ function ClientInstructions({ client }: { client: Client }) {
       <div className="client-panel" role="tabpanel">
         <h3>Codex</h3>
         <ol>
-          <li>Откройте настройки Codex и раздел MCP Servers.</li>
           <li>
-            Добавьте HTTP-сервер с адресом <code>{MCP_URL}</code>.
+            <strong>Создайте ключ выше.</strong> Укажите название{" "}
+            <code>Codex</code> и скопируйте ключ один раз.
           </li>
           <li>
-            В заголовке Authorization укажите{" "}
-            <code>Bearer &lt;ваш ключ&gt;</code>.
+            В Windows создайте пользовательскую переменную среды{" "}
+            <code>HOLYMEDIA_MCP_TOKEN</code> и вставьте в её значение
+            скопированный ключ. Не добавляйте слово <code>Bearer</code>.
           </li>
-          <li>Сохраните и откройте новый чат.</li>
+          <li>
+            В Codex откройте{" "}
+            <strong>Настройки → Плагины → MCP → Добавить сервер</strong>.
+            Выберите <strong>Потоковая передача HTTP</strong>. Имя:{" "}
+            <code>HolyMedia MCP</code>; URL: <code>{MCP_URL}</code>; в поле{" "}
+            <strong>Переменная окружения токена Bearer</strong> укажите{" "}
+            <code>HOLYMEDIA_MCP_TOKEN</code>. В это поле вставляется имя
+            переменной, а не сам ключ. Заголовки оставьте пустыми.
+          </li>
+          <li>
+            Сохраните и <strong>полностью перезапустите Codex</strong>, чтобы
+            приложение получило новую переменную среды. Затем откройте новый чат
+            и попросите: «Покажи мои подключённые рекламные кабинеты».
+          </li>
         </ol>
       </div>
     );
