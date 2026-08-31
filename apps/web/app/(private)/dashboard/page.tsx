@@ -1942,7 +1942,7 @@ export default function DashboardPage() {
                       ),
                     )}
                   </div>
-                  <ClientInstructions client={client} />
+                  <ClientInstructions client={client} language={language} />
                 </div>
               </div>
             </section>
@@ -3048,34 +3048,75 @@ export default function DashboardPage() {
   );
 }
 
-function ClientInstructions({ client }: { client: Client }) {
+function ClientInstructions({
+  client,
+  language,
+}: {
+  client: Client;
+  language: "ru" | "en";
+}) {
   if (client === "codex")
     return (
       <div className="client-panel" role="tabpanel">
         <h3>Codex</h3>
         <ol>
           <li>
-            <strong>Создайте ключ выше.</strong> Укажите название{" "}
-            <code>Codex</code> и скопируйте ключ один раз.
+            <strong>
+              {language === "ru"
+                ? "Создайте ключ выше."
+                : "Create a key above."}
+            </strong>{" "}
+            {language === "ru" ? "Укажите название" : "Name it"}{" "}
+            <code>Codex</code>{" "}
+            {language === "ru"
+              ? "и скопируйте ключ один раз."
+              : "and copy it once."}
           </li>
           <li>
-            В Windows создайте пользовательскую переменную среды{" "}
-            <code>HOLYMEDIA_MCP_TOKEN</code> и вставьте в её значение
-            скопированный ключ. Не добавляйте слово <code>Bearer</code>.
+            {language === "ru"
+              ? "В Windows создайте пользовательскую переменную среды"
+              : "In Windows, create the user environment variable"}{" "}
+            <code>HOLYMEDIA_MCP_TOKEN</code>{" "}
+            {language === "ru"
+              ? "и вставьте в её значение скопированный ключ. Не добавляйте слово"
+              : "and set its value to the copied key. Do not add the word"}{" "}
+            <code>Bearer</code>.
           </li>
           <li>
-            В Codex откройте{" "}
-            <strong>Настройки → Плагины → MCP → Добавить сервер</strong>.
-            Выберите <strong>Потоковая передача HTTP</strong>. Имя:{" "}
-            <code>HolyMedia MCP</code>; URL: <code>{MCP_URL}</code>; в поле{" "}
-            <strong>Переменная окружения токена Bearer</strong> укажите{" "}
-            <code>HOLYMEDIA_MCP_TOKEN</code>. В это поле вставляется имя
-            переменной, а не сам ключ. Заголовки оставьте пустыми.
+            {language === "ru" ? "В Codex откройте" : "In Codex, open"}{" "}
+            <strong>
+              {language === "ru"
+                ? "Настройки → Плагины → MCP → Добавить сервер"
+                : "Settings → Plugins → MCP → Add server"}
+            </strong>
+            . {language === "ru" ? "Выберите" : "Select"}{" "}
+            <strong>
+              {language === "ru" ? "Потоковая передача HTTP" : "Streaming HTTP"}
+            </strong>
+            . {language === "ru" ? "Имя:" : "Name:"} <code>HolyMedia MCP</code>;{" "}
+            URL: <code>{MCP_URL}</code>;{" "}
+            {language === "ru" ? "в поле" : "in the"}{" "}
+            <strong>
+              {language === "ru"
+                ? "Переменная окружения токена Bearer"
+                : "Bearer token environment variable"}
+            </strong>{" "}
+            {language === "ru" ? "укажите" : "enter"}{" "}
+            <code>HOLYMEDIA_MCP_TOKEN</code>.{" "}
+            {language === "ru"
+              ? "В это поле вставляется имя переменной, а не сам ключ. Заголовки оставьте пустыми."
+              : "Enter the variable name here, not the raw key. Leave headers empty."}
           </li>
           <li>
-            Сохраните и <strong>полностью перезапустите Codex</strong>, чтобы
-            приложение получило новую переменную среды. Затем откройте новый чат
-            и попросите: «Покажи мои подключённые рекламные кабинеты».
+            {language === "ru" ? "Сохраните и" : "Save and"}{" "}
+            <strong>
+              {language === "ru"
+                ? "полностью перезапустите Codex"
+                : "fully restart Codex"}
+            </strong>
+            {language === "ru"
+              ? ", чтобы приложение получило новую переменную среды. Затем откройте новый чат и попросите: «Покажи мои подключённые рекламные кабинеты»."
+              : ", so it inherits the environment variable. Then open a new chat and ask: “Show my connected advertising accounts.”"}
           </li>
         </ol>
       </div>
