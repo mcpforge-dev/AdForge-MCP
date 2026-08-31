@@ -791,20 +791,15 @@ test.describe("restored HolyMedia client UX", () => {
       .filter({ hasText: "90-day client" });
     await expect(ninetyDayToken.getByText("Действует до")).toBeVisible();
 
-    await thirtyDayToken.getByRole("button", { name: "Отозвать" }).click();
+    await thirtyDayToken.getByRole("button", { name: "Удалить ключ" }).click();
     await expect(page.getByRole("dialog")).toContainText("30-day client");
-    await page.getByRole("button", { name: "Отозвать" }).last().click();
-    await expect(
-      thirtyDayToken.getByText("Отозван", { exact: true }),
-    ).toBeVisible();
+    await page.getByRole("button", { name: "Удалить ключ" }).last().click();
+    await expect(thirtyDayToken).toHaveCount(0);
     await page.reload();
     await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
     await expect(
-      page
-        .locator(".token-row")
-        .filter({ hasText: "30-day client" })
-        .getByText("Отозван", { exact: true }),
-    ).toBeVisible();
+      page.locator(".token-row").filter({ hasText: "30-day client" }),
+    ).toHaveCount(0);
 
     const codexToken = page.locator(".token-row").filter({ hasText: "Codex" });
     await codexToken.getByRole("button", { name: "Обновить" }).click();

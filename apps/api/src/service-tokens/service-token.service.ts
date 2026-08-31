@@ -129,7 +129,9 @@ export class ServiceTokenService {
 
   public async list(workspaceId: string) {
     const tokens = await this.database.client.serviceToken.findMany({
-      where: { serviceIdentity: { workspaceId } },
+      // Revoked keys remain in the audit trail, but no longer clutter the
+      // customer's active-key list.
+      where: { revokedAt: null, serviceIdentity: { workspaceId } },
       include: { serviceIdentity: { select: { id: true } } },
       orderBy: { createdAt: "desc" },
     });
@@ -143,7 +145,7 @@ export class ServiceTokenService {
     request: RequestWithAuth,
   ) {
     const token = await this.database.client.serviceToken.findFirst({
-      where: { id: tokenId, serviceIdentity: { workspaceId } },
+      where: { id: tokenId, revokedAt: null, serviceIdentity: { workspaceId } },
     });
     if (!token) throw new NotFoundException("Service token not found.");
     await this.database.client.serviceToken.update({

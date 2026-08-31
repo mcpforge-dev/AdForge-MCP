@@ -686,7 +686,10 @@ export async function installMockApi(
     )
       return json(route, { success: true });
     if (path.endsWith("/service-tokens") && request.method() === "GET")
-      return json(route, tokens);
+      return json(
+        route,
+        tokens.filter((token) => !token.revokedAt),
+      );
     if (path.endsWith("/service-tokens") && request.method() === "POST") {
       const input = request.postDataJSON() as {
         name: string;

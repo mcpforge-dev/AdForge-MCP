@@ -363,6 +363,24 @@ function tokenLifecycle(
 
 export default function DashboardPage() {
   const language = useLanguage();
+  const deleteKeyCopy =
+    language === "en"
+      ? {
+          action: "Delete key",
+          success: "Key deleted.",
+          failure: "Couldn't delete the key.",
+          title: (name: string) => `Delete key “${name}”?`,
+          description:
+            "The AI client will lose access with this key. It can't be restored.",
+        }
+      : {
+          action: "Удалить ключ",
+          success: "Ключ удалён.",
+          failure: "Не удалось удалить ключ.",
+          title: (name: string) => `Удалить ключ «${name}»?`,
+          description:
+            "AI-клиент с этим ключом потеряет доступ. Восстановить ключ нельзя.",
+        };
   const [active, setActive] = useState<Workspace | null>(null);
   const [providers, setProviders] = useState<Provider[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -979,7 +997,7 @@ export default function DashboardPage() {
     }
   }
 
-  async function revokeToken(token: ServiceToken) {
+  async function deleteToken(token: ServiceToken) {
     if (!active) return;
     setTokenActionId(token.id);
     try {
@@ -993,9 +1011,9 @@ export default function DashboardPage() {
       );
       if (!response.ok) throw new Error();
       await loadTokens(active);
-      notify("Ключ отозван.");
+      notify(deleteKeyCopy.success);
     } catch {
-      fail("Не удалось отозвать ключ.");
+      fail(deleteKeyCopy.failure);
     } finally {
       setTokenActionId(null);
     }
@@ -1869,39 +1887,42 @@ export default function DashboardPage() {
                                     ? "Назвать"
                                     : "Переименовать"}
                                 </button>
-                                {!token.revokedAt && !isExpired && (
+                                {!token.revokedAt && (
                                   <>
-                                    <button
-                                      className="token-action"
-                                      type="button"
-                                      disabled={actionPending}
-                                      onClick={() =>
-                                        setConfirm({
-                                          title: `Обновить ключ «${displayName}»?`,
-                                          description:
-                                            "Текущее значение сразу перестанет работать. Новый ключ будет показан один раз.",
-                                          confirmLabel: "Обновить",
-                                          run: () => rotateToken(token),
-                                        })
-                                      }
-                                    >
-                                      Обновить
-                                    </button>
+                                    {!isExpired && (
+                                      <button
+                                        className="token-action"
+                                        type="button"
+                                        disabled={actionPending}
+                                        onClick={() =>
+                                          setConfirm({
+                                            title: `Обновить ключ «${displayName}»?`,
+                                            description:
+                                              "Текущее значение сразу перестанет работать. Новый ключ будет показан один раз.",
+                                            confirmLabel: "Обновить",
+                                            run: () => rotateToken(token),
+                                          })
+                                        }
+                                      >
+                                        Обновить
+                                      </button>
+                                    )}
                                     <button
                                       className="token-action token-action--danger"
                                       type="button"
                                       disabled={actionPending}
                                       onClick={() =>
                                         setConfirm({
-                                          title: `Отозвать ключ «${displayName}»?`,
+                                          title:
+                                            deleteKeyCopy.title(displayName),
                                           description:
-                                            "AI-клиент с этим ключом потеряет доступ. Вернуть этот ключ нельзя.",
-                                          confirmLabel: "Отозвать",
-                                          run: () => revokeToken(token),
+                                            deleteKeyCopy.description,
+                                          confirmLabel: deleteKeyCopy.action,
+                                          run: () => deleteToken(token),
                                         })
                                       }
                                     >
-                                      Отозвать
+                                      {deleteKeyCopy.action}
                                     </button>
                                   </>
                                 )}
@@ -3289,23 +3310,6 @@ function CodexInstructions({ language }: { language: "ru" | "en" }) {
           </span>
         </li>
       </ol>
-      <aside
-        className="codex-troubleshooting"
-        aria-label={ru ? "Если не работает" : "Troubleshooting"}
-      >
-        <h4>{ru ? "Если не работает" : "If it does not work"}</h4>
-        <p>
-          <strong>401.</strong>{" "}
-          {ru
-            ? "Проверьте, что ключ вставлен полностью, перед ним ровно один «Bearer », а сам ключ не отозван и не истёк. При необходимости создайте новый ключ в «AI-клиенте» и замените только значение заголовка Authorization."
-            : "Check that the complete key is pasted, it has exactly one “Bearer ” prefix, and the key is neither revoked nor expired. If needed, create a new key in AI client and replace only the Authorization header value."}
-        </p>
-        <p>
-          {ru
-            ? "Кабинетов нет? Откройте «Подключения»: рекламная платформа и её кабинеты должны быть подключены. Codex не требует повторной OAuth-авторизации только из-за ключа MCP."
-            : "No accounts? Open Connections: the advertising platform and its accounts must be connected. Codex does not require provider OAuth again merely because the MCP key changed."}
-        </p>
-      </aside>
     </div>
   );
 }
