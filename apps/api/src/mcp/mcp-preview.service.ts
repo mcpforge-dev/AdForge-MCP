@@ -403,7 +403,11 @@ export class McpPreviewService {
       where: {
         workspaceId: principal.workspaceId,
         enabled: true,
-        connection: { status: "CONNECTED" },
+        // A DEGRADED connection can still have a valid credential. It may be
+        // read and pre-checked, while every mutation remains subject to the
+        // policy enforced in commit(). Disconnected/revoked connections stay
+        // unavailable.
+        connection: { status: { in: ["CONNECTED", "DEGRADED"] } },
         ...(principal.accountIds.length
           ? { id: { in: principal.accountIds } }
           : {}),
