@@ -1,6 +1,7 @@
 import {
   Controller,
   Get,
+  HttpException,
   Inject,
   MethodNotAllowedException,
   Post,
@@ -148,11 +149,19 @@ export class McpController {
           result: { content: [{ type: "text", text: JSON.stringify(result) }] },
         };
       } catch (error) {
-        const message =
-          error instanceof ProviderError &&
-          error.code === "insufficient_permissions"
-            ? "У подключения Meta недостаточно разрешений для этой операции."
-            : "Запрос к рекламной платформе не выполнен.";
+        this.logger.warn(
+          {
+            tool: name.slice(0, 120),
+            errorType:
+              error && typeof error === "object" && "constructor" in error
+                ? error.constructor?.name
+                : "unknown",
+            httpStatus:
+              error instanceof HttpException ? error.getStatus() : undefined,
+          },
+          "MCP tool execution failed",
+        );
+        const message = mcpFailureMessage(error);
         return {
           jsonrpc: "2.0",
           id,
@@ -176,6 +185,28 @@ export class McpController {
       (await this.oauthTokens.authenticate(token))
     );
   }
+}
+
+function mcpFailureMessage(error: unknown): string {
+  if (
+    error instanceof ProviderError &&
+    error.code === "insufficient_permissions"
+  )
+    return "У подключения Meta недостаточно разрешений для этой операции.";
+  if (error instanceof HttpException) {
+    const message = error.message;
+    if (message === "Account is not available to this service token.")
+      return "Указанный рекламный кабинет недоступен этому ключу доступа.";
+    if (message === "Service token does not have read access.")
+      return "У ключа доступа нет разрешения на чтение данных.";
+    if (message === "Write scope is required for commit.")
+      return "Для подтверждённого изменения требуется ключ с правом записи.";
+    if (message === "new_name is required.")
+      return "Укажите новое название кампании.";
+    if (message === "Preview token is invalid.")
+      return "Подтверждение изменения устарело или недействительно.";
+  }
+  return "Запрос к рекламной платформе не выполнен.";
 }
 
 function mcpUnauthorized(reply: FastifyReply) {

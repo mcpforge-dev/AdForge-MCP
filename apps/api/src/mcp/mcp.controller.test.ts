@@ -1,3 +1,4 @@
+import { ForbiddenException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { McpController } from "./mcp.controller.js";
 
@@ -147,5 +148,56 @@ describe("MCP bearer authentication", () => {
       ),
     ).rejects.toMatchObject({ status: 405 });
     expect(authenticate).toHaveBeenCalledWith("hmst_valid");
+  });
+
+  it("returns a safe actionable message when a preview account is unavailable", async () => {
+    const authenticate = vi.fn().mockResolvedValue({
+      workspaceId: "workspace",
+      scopes: ["adforge:mcp:read"],
+      accountIds: [],
+    });
+    const instance = new McpController(
+      {
+        tools: () => [],
+        call: vi
+          .fn()
+          .mockRejectedValue(
+            new ForbiddenException(
+              "Account is not available to this service token.",
+            ),
+          ),
+      } as never,
+      { authenticate } as never,
+      { authenticate: vi.fn().mockResolvedValue(null) } as never,
+      { consumeMcpRequest: vi.fn() } as never,
+      { record: vi.fn() } as never,
+    );
+
+    const result = await instance.post(
+      {
+        headers: { authorization: "Bearer hmst_valid" },
+        body: {
+          jsonrpc: "2.0",
+          id: 3,
+          method: "tools/call",
+          params: { name: "preview_change_campaign_name", arguments: {} },
+        },
+      } as never,
+      reply() as never,
+    );
+
+    expect(result).toMatchObject({
+      result: {
+        isError: true,
+        content: [
+          {
+            text: JSON.stringify({
+              message:
+                "Указанный рекламный кабинет недоступен этому ключу доступа.",
+            }),
+          },
+        ],
+      },
+    });
   });
 });
