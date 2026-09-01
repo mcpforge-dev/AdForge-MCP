@@ -399,6 +399,13 @@ export class McpPreviewService {
 
   private async account(principal: ServiceTokenPrincipal, accountId: string) {
     const normalized = accountId.trim();
+    // PostgreSQL validates the UUID branch of an OR expression even when the
+    // external account-id branch would match. Never pass a Meta `act_*` id to
+    // the UUID column: MCP accepts both internal UUIDs and provider IDs.
+    const identifiers: Array<Record<string, string>> = [
+      { externalAccountId: normalized },
+    ];
+    if (isUuid(normalized)) identifiers.unshift({ id: normalized });
     const account = await this.database.client.providerAccount.findFirst({
       where: {
         workspaceId: principal.workspaceId,
@@ -411,7 +418,7 @@ export class McpPreviewService {
         ...(principal.accountIds.length
           ? { id: { in: principal.accountIds } }
           : {}),
-        OR: [{ id: normalized }, { externalAccountId: normalized }],
+        OR: identifiers,
       },
     });
     if (!account)
@@ -516,6 +523,12 @@ export class McpPreviewService {
 
 function digest(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
 }
 
 function payloadRecord(value: unknown): Record<string, unknown> {

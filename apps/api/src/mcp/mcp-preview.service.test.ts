@@ -2,6 +2,55 @@ import { describe, expect, it } from "vitest";
 import { McpPreviewService } from "./mcp-preview.service.js";
 
 describe("MCP preview lifecycle", () => {
+  it("uses an external provider account identifier without querying the UUID column", async () => {
+    let where: unknown;
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async (input: { where: unknown }) => {
+            where = input.where;
+            return {
+              id: "account-a",
+              connectionId: "connection-a",
+              externalAccountId: "act_1423247033195473",
+              provider: "META_ADS",
+            };
+          },
+        },
+        mcpPreview: {
+          create: async () => ({ id: "preview-a" }),
+        },
+      },
+    } as never;
+    const service = new McpPreviewService(
+      database,
+      { record: async () => undefined } as never,
+      {} as never,
+    );
+
+    await service.create(
+      {
+        kind: "service",
+        tokenId: "token-a",
+        serviceIdentityId: "identity-a",
+        workspaceId: "workspace-a",
+        scopes: ["adforge:mcp:read"],
+        accountIds: ["account-a"],
+      },
+      {
+        provider: "META_ADS",
+        accountId: "act_1423247033195473",
+        objectId: "campaign-a",
+        operation: "change_name",
+        payload: { new_name: "Renamed campaign" },
+      },
+    );
+
+    expect(where).toMatchObject({
+      OR: [{ externalAccountId: "act_1423247033195473" }],
+    });
+  });
+
   it("consumes a confirmed preview on commit and blocks replay", async () => {
     const preview = {
       id: "preview-a",
