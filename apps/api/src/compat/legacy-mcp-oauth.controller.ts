@@ -186,7 +186,7 @@ export class LegacyMcpOAuthController {
   ) {
     const clientId = typeof body.client_id === "string" ? body.client_id : "";
     if (await this.oauth.isPublicClient(clientId)) {
-      return this.oauth.exchangeAuthorizationCode(body);
+      return this.oauth.exchangeToken(body);
     }
     return this.clients.token(body, authorization);
   }

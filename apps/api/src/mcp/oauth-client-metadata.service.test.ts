@@ -47,11 +47,50 @@ describe("OAuth client metadata documents", () => {
     ).toMatchObject({
       client_id: anthropicClientId,
       redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
       scope: "adforge:mcp:read",
     });
+  });
+
+  it("accepts ChatGPT CIMD capabilities by selecting the public none method", () => {
+    const chatGptClientId =
+      "https://chatgpt.com/oauth/4CPt0xAKQRoU/client.json";
+    expect(
+      parseClientMetadata(chatGptClientId, {
+        client_id: chatGptClientId,
+        client_name: "ChatGPT",
+        client_uri: "https://chatgpt.com/",
+        redirect_uris: ["https://chatgpt.com/connector/oauth/4CPt0xAKQRoU"],
+        grant_types: ["authorization_code", "refresh_token"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "private_key_jwt",
+        token_endpoint_auth_methods_supported: ["none", "private_key_jwt"],
+        token_endpoint_auth_signing_alg: "RS256",
+      }),
+    ).toMatchObject({
+      client_id: chatGptClientId,
+      redirect_uris: ["https://chatgpt.com/connector/oauth/4CPt0xAKQRoU"],
+      grant_types: ["authorization_code", "refresh_token"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      scope: "adforge:mcp:read",
+    });
+  });
+
+  it("rejects CIMD metadata without a supported token authentication intersection", () => {
+    expect(() =>
+      parseClientMetadata(clientId, {
+        client_id: clientId,
+        client_name: "Confidential only",
+        redirect_uris: ["https://client.example.test/callback"],
+        grant_types: ["authorization_code"],
+        response_types: ["code"],
+        token_endpoint_auth_method: "private_key_jwt",
+        token_endpoint_auth_methods_supported: ["private_key_jwt"],
+      }),
+    ).toThrow("OAuth client metadata is invalid.");
   });
 
   it("rejects mismatched identity, private client IDs, confidential metadata, and unsafe redirects", () => {
@@ -92,7 +131,7 @@ describe("OAuth client metadata documents", () => {
       }),
     ).toMatchObject({
       application_type: "native",
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
     });
   });

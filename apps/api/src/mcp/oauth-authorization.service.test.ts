@@ -36,6 +36,7 @@ function fakeDatabase() {
   const transactions: Row[] = [];
   const codes: Row[] = [];
   const accessTokens: Row[] = [];
+  const refreshTokens: Row[] = [];
   const memberships: Row[] = [];
   const workspaces = new Map<
     string,
@@ -208,6 +209,51 @@ function fakeDatabase() {
         return { count: rows.length };
       },
     },
+    oAuthRefreshToken: {
+      create: async ({ data }: { data: Record<string, unknown> }) => {
+        const row = {
+          id: randomUUID(),
+          createdAt: new Date(),
+          usedAt: null,
+          revokedAt: null,
+          ...data,
+        };
+        refreshTokens.push(row);
+        return row;
+      },
+      findUnique: async ({ where }: { where: { tokenDigest: string } }) => {
+        const row = refreshTokens.find(
+          (item) => item.tokenDigest === where.tokenDigest,
+        );
+        if (!row) return null;
+        const registered = publicClients.find(
+          (item) => item.id === row.clientId,
+        )!;
+        return {
+          ...row,
+          client: {
+            clientId: registered.clientId,
+            status: registered.status,
+            revokedAt: registered.revokedAt,
+          },
+          workspace: {
+            accessStatus: workspaces.get(String(row.workspaceId))?.accessStatus,
+          },
+          user: { status: users.get(String(row.userId))?.status },
+        };
+      },
+      updateMany: async ({
+        where,
+        data,
+      }: {
+        where: Record<string, unknown>;
+        data: Record<string, unknown>;
+      }) => {
+        const rows = refreshTokens.filter((row) => whereMatches(row, where));
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
+      },
+    },
     workspaceMembership: {
       findFirst: async ({ where }: { where: Record<string, unknown> }) => {
         return (
@@ -255,6 +301,7 @@ function fakeDatabase() {
       transactions,
       codes,
       accessTokens,
+      refreshTokens,
       memberships,
       workspaces,
       users,
@@ -374,7 +421,7 @@ describe("OAuth authorization foundation", () => {
       client_id: expect.stringMatching(/^hm_public_/),
       client_id_issued_at: expect.any(Number),
       redirect_uris: ["http://127.0.0.1:32123/callback"],
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
       application_type: "native",
@@ -420,6 +467,22 @@ describe("OAuth authorization foundation", () => {
       selectedWorkspaceId: context.workspaceId,
       workspaces: [{ id: context.workspaceId }],
     });
+  });
+
+  it("accepts ui_locales as a non-security authorization hint", async () => {
+    const context = await fixture();
+    await expect(
+      context.oauth.beginAuthorization({
+        client_id: context.registered.client_id,
+        redirect_uri: "https://claude.example.test/callback",
+        response_type: "code",
+        scope: "adforge:mcp:read",
+        resource: MCP_RESOURCE,
+        code_challenge: pkce(context.verifier),
+        code_challenge_method: "S256",
+        ui_locales: "ru-RU",
+      }),
+    ).resolves.toMatchObject({ statusCode: 302 });
   });
 
   it("exchanges a one-time code with S256 PKCE and authenticates MCP", async () => {
@@ -536,6 +599,60 @@ describe("OAuth authorization foundation", () => {
     ).rejects.toMatchObject({
       status: 401,
     });
+  });
+
+  it("rotates refresh tokens and revokes the token family on replay", async () => {
+    const context = await fixture();
+    const issued = await issueCode(context);
+    const first = await context.oauth.exchangeToken({
+      grant_type: "authorization_code",
+      client_id: context.registered.client_id,
+      code: issued.code,
+      redirect_uri: "https://claude.example.test/callback",
+      resource: MCP_RESOURCE,
+      code_verifier: context.verifier,
+    });
+    const rotated = await context.oauth.exchangeToken({
+      grant_type: "refresh_token",
+      client_id: context.registered.client_id,
+      refresh_token: first.refresh_token,
+      resource: MCP_RESOURCE,
+    });
+    expect(rotated.refresh_token).not.toBe(first.refresh_token);
+    expect(
+      await context.oauth.authenticate(rotated.access_token),
+    ).toMatchObject({ workspaceId: context.workspaceId });
+
+    await expect(
+      context.oauth.exchangeToken({
+        grant_type: "refresh_token",
+        client_id: context.registered.client_id,
+        refresh_token: first.refresh_token,
+        resource: MCP_RESOURCE,
+      }),
+    ).rejects.toMatchObject({ status: 401 });
+    expect(await context.oauth.authenticate(rotated.access_token)).toBeNull();
+    expect(context.state.refreshTokens.every((token) => token.revokedAt)).toBe(
+      true,
+    );
+  });
+
+  it("revokes a refresh-token family without affecting provider data", async () => {
+    const context = await fixture();
+    const issued = await issueCode(context);
+    const token = await context.oauth.exchangeToken({
+      grant_type: "authorization_code",
+      client_id: context.registered.client_id,
+      code: issued.code,
+      redirect_uri: "https://claude.example.test/callback",
+      resource: MCP_RESOURCE,
+      code_verifier: context.verifier,
+    });
+    await context.oauth.revoke({
+      token: token.refresh_token,
+      client_id: context.registered.client_id,
+    });
+    expect(await context.oauth.authenticate(token.access_token)).toBeNull();
   });
 
   it("rejects expired transactions and foreign workspace binding", async () => {

@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import {
   BadRequestException,
   Inject,
@@ -20,6 +20,7 @@ export const MCP_READ_SCOPE = "adforge:mcp:read";
 const TRANSACTION_TTL_MS = 10 * 60_000;
 const CODE_TTL_MS = 3 * 60_000;
 const ACCESS_TOKEN_TTL_MS = 60 * 60_000;
+const REFRESH_TOKEN_TTL_MS = 30 * 24 * 60 * 60_000;
 
 export type OAuthAuthorizationContextView = {
   transactionId: string;
@@ -57,7 +58,7 @@ export class OAuthAuthorizationService {
       client_id: client.clientId,
       client_name: client.clientName,
       redirect_uris: metadata.redirect_uris,
-      grant_types: ["authorization_code"],
+      grant_types: metadata.grant_types,
       response_types: ["code"],
       token_endpoint_auth_method: "none",
       application_type: metadata.application_type,
@@ -335,8 +336,11 @@ export class OAuthAuthorizationService {
       throw new UnauthorizedException("OAuth authorization code is invalid.");
     }
 
+    const familyId = randomUUID();
     const rawToken = `hm_oauth_${randomBytes(32).toString("base64url")}`;
+    const rawRefreshToken = `hm_refresh_${randomBytes(32).toString("base64url")}`;
     const expiresAt = new Date(Date.now() + ACCESS_TOKEN_TTL_MS);
+    const refreshExpiresAt = new Date(Date.now() + REFRESH_TOKEN_TTL_MS);
     await this.database.client.$transaction(async (database) => {
       const consumed = await database.oAuthAuthorizationCode.updateMany({
         where: { id: code.id, usedAt: null, expiresAt: { gt: new Date() } },
@@ -354,7 +358,21 @@ export class OAuthAuthorizationService {
           userId: code.userId,
           scope: code.scope,
           resource: code.resource,
+          refreshFamilyId: familyId,
           expiresAt,
+        },
+      });
+      await database.oAuthRefreshToken.create({
+        data: {
+          tokenDigest: digest(rawRefreshToken),
+          tokenPrefix: rawRefreshToken.slice(0, 20),
+          familyId,
+          clientId: client.id,
+          workspaceId: code.workspaceId,
+          userId: code.userId,
+          scope: code.scope,
+          resource: code.resource,
+          expiresAt: refreshExpiresAt,
         },
       });
     });
@@ -363,6 +381,127 @@ export class OAuthAuthorizationService {
       token_type: "Bearer",
       expires_in: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
       scope: code.scope,
+      refresh_token: rawRefreshToken,
+    };
+  }
+
+  public async exchangeToken(input: Record<string, unknown>) {
+    const grantType = required(input.grant_type, "grant_type");
+    if (grantType === "authorization_code") {
+      return this.exchangeAuthorizationCode(input);
+    }
+    if (grantType === "refresh_token") return this.exchangeRefreshToken(input);
+    throw new BadRequestException("Unsupported OAuth grant type.");
+  }
+
+  public async exchangeRefreshToken(input: Record<string, unknown>) {
+    const clientId = required(input.client_id, "client_id");
+    const rawRefreshToken = required(input.refresh_token, "refresh_token");
+    const resource = stringValue(input.resource) || MCP_RESOURCE;
+    if (resource !== MCP_RESOURCE) {
+      throw new UnauthorizedException("OAuth refresh token is invalid.");
+    }
+    const client = await this.publicClient(clientId);
+    const refresh = client
+      ? await this.database.client.oAuthRefreshToken.findUnique({
+          where: { tokenDigest: digest(rawRefreshToken) },
+          include: {
+            client: { select: { status: true, revokedAt: true } },
+            workspace: { select: { accessStatus: true } },
+            user: { select: { status: true } },
+          },
+        })
+      : null;
+    if (
+      !client ||
+      client.tokenEndpointAuthMethod !== "none" ||
+      !refresh ||
+      refresh.clientId !== client.id ||
+      refresh.resource !== resource
+    ) {
+      throw new UnauthorizedException("OAuth refresh token is invalid.");
+    }
+    if (
+      refresh.usedAt ||
+      refresh.revokedAt ||
+      refresh.expiresAt <= new Date()
+    ) {
+      if (refresh.usedAt) await this.revokeRefreshFamily(refresh.familyId);
+      throw new UnauthorizedException("OAuth refresh token is invalid.");
+    }
+    if (
+      refresh.client.status !== "active" ||
+      refresh.client.revokedAt ||
+      refresh.workspace.accessStatus !== "ACTIVE" ||
+      refresh.user.status !== "active"
+    ) {
+      await this.revokeRefreshFamily(refresh.familyId);
+      throw new UnauthorizedException("OAuth refresh token is invalid.");
+    }
+    try {
+      await this.requireWorkspaceMembership(
+        refresh.userId,
+        refresh.workspaceId,
+      );
+    } catch {
+      await this.revokeRefreshFamily(refresh.familyId);
+      throw new UnauthorizedException("OAuth refresh token is invalid.");
+    }
+
+    const rawToken = `hm_oauth_${randomBytes(32).toString("base64url")}`;
+    const rotatedRefresh = `hm_refresh_${randomBytes(32).toString("base64url")}`;
+    const expiresAt = new Date(Date.now() + ACCESS_TOKEN_TTL_MS);
+    try {
+      await this.database.client.$transaction(async (database) => {
+        const consumed = await database.oAuthRefreshToken.updateMany({
+          where: {
+            id: refresh.id,
+            usedAt: null,
+            revokedAt: null,
+            expiresAt: { gt: new Date() },
+          },
+          data: { usedAt: new Date() },
+        });
+        if (consumed.count !== 1) {
+          throw new UnauthorizedException("OAuth refresh token is invalid.");
+        }
+        await database.oAuthAccessToken.create({
+          data: {
+            tokenDigest: digest(rawToken),
+            tokenPrefix: rawToken.slice(0, 20),
+            clientId: refresh.clientId,
+            workspaceId: refresh.workspaceId,
+            userId: refresh.userId,
+            scope: refresh.scope,
+            resource: refresh.resource,
+            refreshFamilyId: refresh.familyId,
+            expiresAt,
+          },
+        });
+        await database.oAuthRefreshToken.create({
+          data: {
+            tokenDigest: digest(rotatedRefresh),
+            tokenPrefix: rotatedRefresh.slice(0, 20),
+            familyId: refresh.familyId,
+            clientId: refresh.clientId,
+            workspaceId: refresh.workspaceId,
+            userId: refresh.userId,
+            scope: refresh.scope,
+            resource: refresh.resource,
+            expiresAt: new Date(Date.now() + REFRESH_TOKEN_TTL_MS),
+          },
+        });
+      });
+    } catch (error) {
+      await this.revokeRefreshFamily(refresh.familyId);
+      throw error;
+    }
+    return {
+      access_token: rawToken,
+      token_type: "Bearer",
+      expires_in: Math.floor(ACCESS_TOKEN_TTL_MS / 1000),
+      scope: refresh.scope,
+      refresh_token: rotatedRefresh,
     };
   }
 
@@ -422,14 +561,35 @@ export class OAuthAuthorizationService {
       where: { tokenDigest: digest(rawToken) },
       include: { client: { select: { clientId: true } } },
     });
-    if (!token || (clientId && token.client.clientId !== clientId)) {
+    if (token && (!clientId || token.client.clientId === clientId)) {
+      await this.database.client.oAuthAccessToken.updateMany({
+        where: { id: token.id, revokedAt: null },
+        data: { revokedAt: new Date() },
+      });
       return { revoked: true as const };
     }
-    await this.database.client.oAuthAccessToken.updateMany({
-      where: { id: token.id, revokedAt: null },
-      data: { revokedAt: new Date() },
+    const refresh = await this.database.client.oAuthRefreshToken.findUnique({
+      where: { tokenDigest: digest(rawToken) },
+      include: { client: { select: { clientId: true } } },
     });
+    if (refresh && (!clientId || refresh.client.clientId === clientId)) {
+      await this.revokeRefreshFamily(refresh.familyId);
+    }
     return { revoked: true as const };
+  }
+
+  private async revokeRefreshFamily(familyId: string): Promise<void> {
+    const now = new Date();
+    await this.database.client.$transaction(async (database) => {
+      await database.oAuthRefreshToken.updateMany({
+        where: { familyId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+      await database.oAuthAccessToken.updateMany({
+        where: { refreshFamilyId: familyId, revokedAt: null },
+        data: { revokedAt: now },
+      });
+    });
   }
 
   private async publicClient(clientId: string) {

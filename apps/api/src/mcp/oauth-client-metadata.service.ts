@@ -21,6 +21,12 @@ type ClientMetadata = {
   scope: string;
 };
 
+class OAuthClientMetadataValidationError extends BadRequestException {
+  public constructor(public readonly validationReason: string) {
+    super("OAuth client metadata is invalid.");
+  }
+}
+
 @Injectable()
 export class OAuthClientMetadataService {
   private readonly logger = createLogger("holymedia-mcp-v2-oauth-cimd");
@@ -64,6 +70,10 @@ export class OAuthClientMetadataService {
           contentType: fetched.contentType,
           documentBytes: fetched.documentBytes,
           validationStage: "document_schema",
+          validationReason:
+            error instanceof OAuthClientMetadataValidationError
+              ? error.validationReason
+              : "unexpected_validation_error",
           errorType:
             error instanceof Error ? error.constructor.name : "unknown",
         },
@@ -233,36 +243,44 @@ export function parseClientMetadata(
   value: unknown,
 ): ClientMetadata {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
-    throw new BadRequestException("OAuth client metadata is invalid.");
+    throw new OAuthClientMetadataValidationError("document_not_object");
   }
   const input = value as Record<string, unknown>;
   if (input.client_id !== clientId) {
-    throw new BadRequestException("OAuth client metadata is invalid.");
+    throw new OAuthClientMetadataValidationError("client_id_mismatch");
   }
   const redirectUris = strings(input.redirect_uris);
   const grants = strings(input.grant_types);
   const responses = strings(input.response_types);
-  const authentication = string(input.token_endpoint_auth_method) || "none";
+  const authentication = compatiblePublicAuthMethod(input);
   const applicationType =
     string(input.application_type) || inferApplicationType(redirectUris);
+  if (!string(input.client_name))
+    throw new OAuthClientMetadataValidationError("client_name_missing");
+  if (redirectUris.length === 0 || redirectUris.length > 10)
+    throw new OAuthClientMetadataValidationError("redirect_uris_invalid");
+  if (grants.length > 0 && !grants.includes("authorization_code"))
+    throw new OAuthClientMetadataValidationError(
+      "authorization_code_not_supported",
+    );
   if (
-    !string(input.client_name) ||
-    redirectUris.length === 0 ||
-    redirectUris.length > 10 ||
-    (grants.length > 0 && !grants.includes("authorization_code")) ||
     (responses.length > 0 && !responses.includes("code")) ||
-    !responses.every((type) => type === "code") ||
-    authentication !== "none" ||
-    (applicationType !== "web" && applicationType !== "native") ||
-    redirectUris.some((uri) => !validRedirectUri(uri, applicationType))
-  ) {
-    throw new BadRequestException("OAuth client metadata is invalid.");
-  }
+    !responses.every((type) => type === "code")
+  )
+    throw new OAuthClientMetadataValidationError("response_types_invalid");
+  if (authentication !== "none")
+    throw new OAuthClientMetadataValidationError(
+      "public_token_auth_not_supported",
+    );
+  if (applicationType !== "web" && applicationType !== "native")
+    throw new OAuthClientMetadataValidationError("application_type_invalid");
+  if (redirectUris.some((uri) => !validRedirectUri(uri, applicationType)))
+    throw new OAuthClientMetadataValidationError("redirect_uri_unsafe");
   return {
     client_id: clientId,
     client_name: string(input.client_name).slice(0, 160),
     redirect_uris: redirectUris,
-    grant_types: ["authorization_code"],
+    grant_types: normalizedGrantTypes(grants),
     response_types: ["code"],
     token_endpoint_auth_method: "none",
     application_type: applicationType,
@@ -293,12 +311,31 @@ export function registrationMetadata(
   return {
     client_name: string(input.client_name).slice(0, 160) || "Public MCP client",
     redirect_uris: redirectUris,
-    grant_types: ["authorization_code"],
+    grant_types: normalizedGrantTypes(grants),
     response_types: ["code"],
     token_endpoint_auth_method: "none",
     application_type: applicationType,
     scope: normalizeScope(string(input.scope)),
   };
+}
+
+function compatiblePublicAuthMethod(input: Record<string, unknown>): "none" {
+  const capabilities = strings(input.token_endpoint_auth_methods_supported);
+  const legacyPreference = string(input.token_endpoint_auth_method);
+  if (capabilities.length > 0) {
+    if (capabilities.includes("none")) return "none";
+    throw new OAuthClientMetadataValidationError(
+      "token_auth_methods_no_supported_intersection",
+    );
+  }
+  if (!legacyPreference || legacyPreference === "none") return "none";
+  throw new OAuthClientMetadataValidationError("token_auth_method_not_public");
+}
+
+function normalizedGrantTypes(grants: string[]): string[] {
+  return grants.includes("refresh_token")
+    ? ["authorization_code", "refresh_token"]
+    : ["authorization_code"];
 }
 
 function string(value: unknown): string {

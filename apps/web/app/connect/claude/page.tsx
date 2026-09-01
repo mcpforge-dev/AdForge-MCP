@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { FormEvent } from "react";
 import { BrandLockup } from "../../components/brand-lockup";
 import {
@@ -24,60 +24,78 @@ type AuthorizationContext = {
   expiresAt: string;
 };
 
-const copy = {
-  ru: {
-    eyebrow: "БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ",
-    title: "Подключить Claude",
-    lead: "Claude запрашивает доступ к вашему HolyMedia MCP.",
-    company: "Компания",
-    chooseCompany: "К какой компании подключить Claude?",
-    canTitle: "Claude сможет",
-    can: [
-      "видеть подключённые рекламные кабинеты этой компании;",
-      "читать доступные рекламные данные;",
-      "использовать разрешённые MCP-инструменты.",
-    ],
-    cannotTitle: "Claude не получает",
-    cannot: [
-      "пароль HolyMedia MCP;",
-      "OAuth-токены Google, Meta, Яндекс или TikTok;",
-      "данные других компаний.",
-    ],
-    allow: "Разрешить",
-    deny: "Отмена",
-    working: "Подключаем…",
-    loading: "Проверяем запрос Claude…",
-    invalid:
-      "Запрос подключения недействителен или истёк. Вернитесь в Claude и начните подключение заново.",
-    failed: "Не удалось продолжить подключение. Попробуйте ещё раз.",
-  },
-  en: {
-    eyebrow: "SECURE CONNECTION",
-    title: "Connect Claude",
-    lead: "Claude is requesting access to your HolyMedia MCP.",
-    company: "Company",
-    chooseCompany: "Which company should Claude connect to?",
-    canTitle: "Claude can",
-    can: [
-      "see the connected advertising accounts of this company;",
-      "read available advertising data;",
-      "use permitted MCP tools.",
-    ],
-    cannotTitle: "Claude does not receive",
-    cannot: [
-      "your HolyMedia MCP password;",
-      "Google, Meta, Yandex, or TikTok OAuth tokens;",
-      "data from other companies.",
-    ],
-    allow: "Allow",
-    deny: "Cancel",
-    working: "Connecting…",
-    loading: "Checking Claude’s request…",
-    invalid:
-      "This connection request is invalid or expired. Return to Claude and start again.",
-    failed: "Could not continue the connection. Please try again.",
-  },
-};
+function copyFor(clientName: string) {
+  return {
+    ru: {
+      eyebrow: "БЕЗОПАСНОЕ ПОДКЛЮЧЕНИЕ",
+      title: `Подключить ${clientName}`,
+      lead: `${clientName} запрашивает доступ к вашему HolyMedia MCP.`,
+      company: "Компания",
+      chooseCompany: `К какой компании подключить ${clientName}?`,
+      canTitle: `${clientName} сможет`,
+      can: [
+        "видеть подключённые рекламные кабинеты этой компании;",
+        "читать доступные рекламные данные;",
+        "использовать разрешённые MCP-инструменты.",
+      ],
+      cannotTitle: `${clientName} не получает`,
+      cannot: [
+        "пароль HolyMedia MCP;",
+        "OAuth-токены Google, Meta, Яндекс или TikTok;",
+        "данные других компаний.",
+      ],
+      allow: "Разрешить",
+      deny: "Отмена",
+      working: "Подключаем…",
+      loading: `Проверяем запрос ${clientName}…`,
+      invalid:
+        "Запрос подключения недействителен или истёк. Вернитесь в AI-клиент и начните подключение заново.",
+      failed: "Не удалось продолжить подключение. Попробуйте ещё раз.",
+    },
+    en: {
+      eyebrow: "SECURE CONNECTION",
+      title: `Connect ${clientName}`,
+      lead: `${clientName} is requesting access to your HolyMedia MCP.`,
+      company: "Company",
+      chooseCompany: `Which company should ${clientName} connect to?`,
+      canTitle: `${clientName} can`,
+      can: [
+        "see the connected advertising accounts of this company;",
+        "read available advertising data;",
+        "use permitted MCP tools.",
+      ],
+      cannotTitle: `${clientName} does not receive`,
+      cannot: [
+        "your HolyMedia MCP password;",
+        "Google, Meta, Yandex, or TikTok OAuth tokens;",
+        "data from other companies.",
+      ],
+      allow: "Allow",
+      deny: "Cancel",
+      working: "Connecting…",
+      loading: `Checking ${clientName}’s request…`,
+      invalid:
+        "This connection request is invalid or expired. Return to your AI client and start again.",
+      failed: "Could not continue the connection. Please try again.",
+    },
+  };
+}
+
+function verifiedClientLabel(context: AuthorizationContext | null): string {
+  if (!context) return "AI-клиент";
+  try {
+    const hostname = new URL(context.client.id).hostname.toLowerCase();
+    if (hostname === "chatgpt.com" || hostname.endsWith(".chatgpt.com")) {
+      return "ChatGPT";
+    }
+    if (hostname === "claude.ai" || hostname.endsWith(".claude.ai")) {
+      return "Claude";
+    }
+  } catch {
+    // DCR client IDs are opaque; the verified server-side client name is safe.
+  }
+  return context.client.name.trim().slice(0, 80) || "AI-клиент";
+}
 
 async function csrf(): Promise<string> {
   const response = await fetch(`${API}/api/v1/auth/csrf`, {
@@ -91,12 +109,15 @@ async function csrf(): Promise<string> {
 
 export default function ClaudeConsentPage() {
   const language = useLanguage();
-  const t = copy[language];
   const [transactionId, setTransactionId] = useState("");
   const [context, setContext] = useState<AuthorizationContext | null>(null);
   const [workspaceId, setWorkspaceId] = useState("");
   const [busy, setBusy] = useState<"allow" | "deny" | null>(null);
   const [error, setError] = useState("");
+  const t = useMemo(
+    () => copyFor(verifiedClientLabel(context))[language],
+    [context, language],
+  );
 
   useEffect(() => {
     document.title = `${t.title} — HolyMedia MCP`;

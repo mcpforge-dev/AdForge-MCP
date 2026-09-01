@@ -94,7 +94,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
     const registered = await oauth.registerPublicClient({
       client_name: "Claude integration",
       redirect_uris: ["https://claude.example.test/oauth/callback"],
-      grant_types: ["authorization_code"],
+      grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
       token_endpoint_auth_method: "none",
     });
@@ -129,7 +129,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
     const code = new URL(consent.url).searchParams.get("code");
     expect(code).toBeTruthy();
 
-    const exchanged = await oauth.exchangeAuthorizationCode({
+    const exchanged = await oauth.exchangeToken({
       grant_type: "authorization_code",
       client_id: registered.client_id,
       code,
@@ -139,6 +139,16 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
     });
     expect(
       (await oauth.authenticate(exchanged.access_token))?.workspaceId,
+    ).toBe(workspaceId);
+    const refreshed = await oauth.exchangeToken({
+      grant_type: "refresh_token",
+      client_id: registered.client_id,
+      refresh_token: exchanged.refresh_token,
+      resource: MCP_RESOURCE,
+    });
+    expect(refreshed.refresh_token).not.toBe(exchanged.refresh_token);
+    expect(
+      (await oauth.authenticate(refreshed.access_token))?.workspaceId,
     ).toBe(workspaceId);
 
     const mcp = new McpController(
@@ -150,7 +160,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
     );
     const initialize = await mcp.post(
       {
-        headers: { authorization: `Bearer ${exchanged.access_token}` },
+        headers: { authorization: `Bearer ${refreshed.access_token}` },
         body: { jsonrpc: "2.0", id: 1, method: "initialize" },
       } as never,
       reply() as never,
@@ -161,7 +171,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
     const initializedReply = reply();
     await mcp.post(
       {
-        headers: { authorization: `Bearer ${exchanged.access_token}` },
+        headers: { authorization: `Bearer ${refreshed.access_token}` },
         body: { jsonrpc: "2.0", method: "notifications/initialized" },
       } as never,
       initializedReply as never,
@@ -169,7 +179,7 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
     expect(initializedReply.status).toBe(202);
     const tools = await mcp.post(
       {
-        headers: { authorization: `Bearer ${exchanged.access_token}` },
+        headers: { authorization: `Bearer ${refreshed.access_token}` },
         body: { jsonrpc: "2.0", id: 2, method: "tools/list" },
       } as never,
       reply() as never,
@@ -180,11 +190,11 @@ describe.skipIf(!integrationEnabled)("OAuth MCP backend integration", () => {
 
     await expect(
       oauth.revoke({
-        token: exchanged.access_token,
+        token: refreshed.refresh_token,
         client_id: registered.client_id,
       }),
     ).resolves.toEqual({ revoked: true });
-    expect(await oauth.authenticate(exchanged.access_token)).toBeNull();
+    expect(await oauth.authenticate(refreshed.access_token)).toBeNull();
 
     const rawServiceToken = `hmst_integration_${randomUUID()}`;
     const identity = await database.client.serviceIdentity.create({

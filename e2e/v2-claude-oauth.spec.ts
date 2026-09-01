@@ -5,7 +5,13 @@ const transaction = "11111111-1111-4111-8111-111111111111";
 const primaryWorkspace = "22222222-2222-4222-8222-222222222222";
 const secondWorkspace = "33333333-3333-4333-8333-333333333333";
 
-async function installConsentApi(page: Page) {
+async function installConsentApi(
+  page: Page,
+  client: { id: string; name: string } = {
+    id: "hm_public_test",
+    name: "Claude",
+  },
+) {
   let consentBody: Record<string, unknown> | null = null;
   await page.route("**/oauth/authorize/transaction?**", async (route) => {
     await route.fulfill({
@@ -13,7 +19,7 @@ async function installConsentApi(page: Page) {
       contentType: "application/json",
       body: JSON.stringify({
         transactionId: transaction,
-        client: { id: "hm_public_test", name: "Claude" },
+        client,
         scope: "adforge:mcp:read",
         resource: "https://mcp.holymedia.kz/mcp",
         selectedWorkspaceId: null,
@@ -52,6 +58,22 @@ async function installConsentApi(page: Page) {
   });
   return { consentBody: () => consentBody };
 }
+
+test("ChatGPT CIMD consent uses verified client branding", async ({ page }) => {
+  await installConsentApi(page, {
+    id: "https://chatgpt.com/oauth/4CPt0xAKQRoU/client.json",
+    name: "ChatGPT",
+  });
+  await page.goto(`/connect/claude?transaction=${transaction}`);
+  await expect(
+    page.getByRole("heading", { name: "Подключить ChatGPT" }),
+  ).toBeVisible();
+  await expect(
+    page.getByText("ChatGPT запрашивает доступ к вашему HolyMedia MCP."),
+  ).toBeVisible();
+  await expect(page.getByText("ChatGPT сможет")).toBeVisible();
+  await expect(page.getByText("ChatGPT не получает")).toBeVisible();
+});
 
 test("Claude consent is accessible, theme-aware and binds the selected company", async ({
   page,

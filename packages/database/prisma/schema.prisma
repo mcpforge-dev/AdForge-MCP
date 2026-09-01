@@ -131,21 +131,21 @@ enum SiteAuditArtifactKind {
 }
 
 model User {
-  id                       String                      @id @default(uuid()) @db.Uuid
-  email                    String                      @unique @db.VarChar(320)
-  name                     String                      @db.VarChar(160)
-  passwordHash             String                      @map("password_hash") @db.VarChar(255)
-  status                   String                      @default("active") @db.VarChar(32)
-  emailVerifiedAt          DateTime?                   @map("email_verified_at")
-  avatarData               Bytes?                      @map("avatar_data")
-  avatarMimeType           String?                     @map("avatar_mime_type") @db.VarChar(32)
-  createdAt                DateTime                    @default(now()) @map("created_at")
-  updatedAt                DateTime                    @updatedAt @map("updated_at")
+  id                       String                          @id @default(uuid()) @db.Uuid
+  email                    String                          @unique @db.VarChar(320)
+  name                     String                          @db.VarChar(160)
+  passwordHash             String                          @map("password_hash") @db.VarChar(255)
+  status                   String                          @default("active") @db.VarChar(32)
+  emailVerifiedAt          DateTime?                       @map("email_verified_at")
+  avatarData               Bytes?                          @map("avatar_data")
+  avatarMimeType           String?                         @map("avatar_mime_type") @db.VarChar(32)
+  createdAt                DateTime                        @default(now()) @map("created_at")
+  updatedAt                DateTime                        @updatedAt @map("updated_at")
   memberships              WorkspaceMembership[]
   sessions                 Session[]
   emailVerifications       EmailVerification[]
   passwordResets           PasswordReset[]
-  invitationsSent          WorkspaceInvitation[]       @relation("inviter")
+  invitationsSent          WorkspaceInvitation[]           @relation("inviter")
   auditEvents              AuditEvent[]
   connections              ProviderConnection[]
   oauthStates              OAuthState[]
@@ -159,9 +159,10 @@ model User {
   oauthTransactions        OAuthAuthorizationTransaction[]
   oauthAuthorizationCodes  OAuthAuthorizationCode[]
   oauthAccessTokens        OAuthAccessToken[]
+  oauthRefreshTokens       OAuthRefreshToken[]
   serviceIdentities        ServiceIdentity[]
-  directPermissionGrants   UserPermissionGrant[]       @relation("permission_grantee")
-  issuedPermissionGrants   UserPermissionGrant[]       @relation("permission_grantor")
+  directPermissionGrants   UserPermissionGrant[]           @relation("permission_grantee")
+  issuedPermissionGrants   UserPermissionGrant[]           @relation("permission_grantor")
   productEvents            ProductEvent[]
 
   @@index([email])
@@ -185,20 +186,20 @@ model AdminSession {
 }
 
 model Workspace {
-  id                       String                      @id @default(uuid()) @db.Uuid
-  name                     String                      @db.VarChar(160)
-  slug                     String                      @unique @db.VarChar(120)
-  accessStatus             WorkspaceAccessStatus       @default(PENDING) @map("access_status")
-  legalName                String?                     @map("legal_name") @db.VarChar(255)
-  registrationNumber       String?                     @map("registration_number") @db.VarChar(64)
-  registrationCountry      String                      @default("KZ") @map("registration_country") @db.VarChar(2)
-  legalAddress             String?                     @map("legal_address") @db.VarChar(500)
-  companyPhone             String?                     @map("company_phone") @db.VarChar(64)
-  companyEmail             String?                     @map("company_email") @db.VarChar(320)
-  websiteUrl               String?                     @map("website_url") @db.VarChar(500)
-  onboardingCompletedAt    DateTime?                   @map("onboarding_completed_at")
-  createdAt                DateTime                    @default(now()) @map("created_at")
-  updatedAt                DateTime                    @updatedAt @map("updated_at")
+  id                       String                          @id @default(uuid()) @db.Uuid
+  name                     String                          @db.VarChar(160)
+  slug                     String                          @unique @db.VarChar(120)
+  accessStatus             WorkspaceAccessStatus           @default(PENDING) @map("access_status")
+  legalName                String?                         @map("legal_name") @db.VarChar(255)
+  registrationNumber       String?                         @map("registration_number") @db.VarChar(64)
+  registrationCountry      String                          @default("KZ") @map("registration_country") @db.VarChar(2)
+  legalAddress             String?                         @map("legal_address") @db.VarChar(500)
+  companyPhone             String?                         @map("company_phone") @db.VarChar(64)
+  companyEmail             String?                         @map("company_email") @db.VarChar(320)
+  websiteUrl               String?                         @map("website_url") @db.VarChar(500)
+  onboardingCompletedAt    DateTime?                       @map("onboarding_completed_at")
+  createdAt                DateTime                        @default(now()) @map("created_at")
+  updatedAt                DateTime                        @updatedAt @map("updated_at")
   memberships              WorkspaceMembership[]
   invitations              WorkspaceInvitation[]
   auditEvents              AuditEvent[]
@@ -221,6 +222,7 @@ model Workspace {
   oauthTransactions        OAuthAuthorizationTransaction[]
   oauthAuthorizationCodes  OAuthAuthorizationCode[]
   oauthAccessTokens        OAuthAccessToken[]
+  oauthRefreshTokens       OAuthRefreshToken[]
   productEvents            ProductEvent[]
 
   @@index([createdAt])
@@ -445,27 +447,28 @@ model OAuthPublicClient {
   transactions            OAuthAuthorizationTransaction[]
   authorizationCodes      OAuthAuthorizationCode[]
   accessTokens            OAuthAccessToken[]
+  refreshTokens           OAuthRefreshToken[]
 
   @@map("oauth_public_clients")
 }
 
 model OAuthAuthorizationTransaction {
-  id                  String             @id @default(uuid()) @db.Uuid
-  clientId            String             @map("client_id") @db.Uuid
-  redirectUri         String             @map("redirect_uri") @db.VarChar(2000)
-  state               String?            @db.VarChar(1000)
-  scope               String             @db.VarChar(120)
-  resource            String             @db.VarChar(2000)
-  codeChallenge       String             @map("code_challenge") @db.VarChar(200)
-  codeChallengeMethod String             @default("S256") @map("code_challenge_method") @db.VarChar(16)
-  userId              String?            @map("user_id") @db.Uuid
-  workspaceId         String?            @map("workspace_id") @db.Uuid
-  createdAt           DateTime           @default(now()) @map("created_at")
-  expiresAt           DateTime           @map("expires_at")
-  consumedAt          DateTime?          @map("consumed_at")
-  client              OAuthPublicClient  @relation(fields: [clientId], references: [id], onDelete: Cascade)
-  user                User?              @relation(fields: [userId], references: [id], onDelete: Cascade)
-  workspace           Workspace?         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  id                  String            @id @default(uuid()) @db.Uuid
+  clientId            String            @map("client_id") @db.Uuid
+  redirectUri         String            @map("redirect_uri") @db.VarChar(2000)
+  state               String?           @db.VarChar(1000)
+  scope               String            @db.VarChar(120)
+  resource            String            @db.VarChar(2000)
+  codeChallenge       String            @map("code_challenge") @db.VarChar(200)
+  codeChallengeMethod String            @default("S256") @map("code_challenge_method") @db.VarChar(16)
+  userId              String?           @map("user_id") @db.Uuid
+  workspaceId         String?           @map("workspace_id") @db.Uuid
+  createdAt           DateTime          @default(now()) @map("created_at")
+  expiresAt           DateTime          @map("expires_at")
+  consumedAt          DateTime?         @map("consumed_at")
+  client              OAuthPublicClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user                User?             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  workspace           Workspace?        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   @@index([clientId, expiresAt, consumedAt])
   @@index([userId, workspaceId, expiresAt])
@@ -496,9 +499,34 @@ model OAuthAuthorizationCode {
 }
 
 model OAuthAccessToken {
+  id              String            @id @default(uuid()) @db.Uuid
+  tokenDigest     String            @unique @map("token_digest") @db.VarChar(128)
+  tokenPrefix     String            @map("token_prefix") @db.VarChar(32)
+  clientId        String            @map("client_id") @db.Uuid
+  workspaceId     String            @map("workspace_id") @db.Uuid
+  userId          String            @map("user_id") @db.Uuid
+  scope           String            @db.VarChar(120)
+  resource        String            @db.VarChar(2000)
+  refreshFamilyId String?           @map("refresh_family_id") @db.Uuid
+  createdAt       DateTime          @default(now()) @map("created_at")
+  expiresAt       DateTime          @map("expires_at")
+  revokedAt       DateTime?         @map("revoked_at")
+  lastUsedAt      DateTime?         @map("last_used_at")
+  client          OAuthPublicClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  workspace       Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user            User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, revokedAt, expiresAt])
+  @@index([clientId, userId])
+  @@index([refreshFamilyId, revokedAt])
+  @@map("oauth_access_tokens")
+}
+
+model OAuthRefreshToken {
   id          String            @id @default(uuid()) @db.Uuid
   tokenDigest String            @unique @map("token_digest") @db.VarChar(128)
   tokenPrefix String            @map("token_prefix") @db.VarChar(32)
+  familyId    String            @map("family_id") @db.Uuid
   clientId    String            @map("client_id") @db.Uuid
   workspaceId String            @map("workspace_id") @db.Uuid
   userId      String            @map("user_id") @db.Uuid
@@ -506,15 +534,15 @@ model OAuthAccessToken {
   resource    String            @db.VarChar(2000)
   createdAt   DateTime          @default(now()) @map("created_at")
   expiresAt   DateTime          @map("expires_at")
+  usedAt      DateTime?         @map("used_at")
   revokedAt   DateTime?         @map("revoked_at")
-  lastUsedAt  DateTime?         @map("last_used_at")
   client      OAuthPublicClient @relation(fields: [clientId], references: [id], onDelete: Cascade)
   workspace   Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
   user        User              @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([workspaceId, revokedAt, expiresAt])
-  @@index([clientId, userId])
-  @@map("oauth_access_tokens")
+  @@index([familyId, revokedAt, expiresAt])
+  @@index([clientId, userId, workspaceId])
+  @@map("oauth_refresh_tokens")
 }
 
 model McpPreview {
