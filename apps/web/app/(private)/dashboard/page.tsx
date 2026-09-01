@@ -1676,7 +1676,11 @@ export default function DashboardPage() {
                 <p className="eyebrow">AI-клиент</p>
                 <h1 id="mcp-title">Подключите HolyMedia MCP</h1>
                 <p className="section-head__sub">
-                  Скопируйте адрес, создайте личный ключ и выберите инструкцию.
+                  {client === "claude"
+                    ? language === "ru"
+                      ? "Скопируйте адрес и подключите Claude через безопасную авторизацию HolyMedia MCP."
+                      : "Copy the URL and connect Claude through secure HolyMedia MCP authorization."
+                    : "Скопируйте адрес, создайте личный ключ и выберите инструкцию."}
                 </p>
               </div>
             </div>
@@ -1700,238 +1704,277 @@ export default function DashboardPage() {
               <div className="mcp-step">
                 <span>2</span>
                 <div className="mcp-step__body">
-                  <h2>Создайте ключ доступа</h2>
-                  {canManage ? (
-                    <form className="token-form" onSubmit={createToken}>
-                      <div className="form-row">
-                        <label>
-                          Название
-                          <input
-                            name="name"
-                            required
-                            minLength={2}
-                            value={tokenName}
-                            onChange={(event) =>
-                              setTokenName(event.target.value)
-                            }
-                            placeholder={`Например, ${
-                              client === "chatgpt"
-                                ? "ChatGPT"
-                                : client === "claude"
-                                  ? "Claude"
-                                  : "Codex"
-                            }`}
-                          />
-                        </label>
-                        <label>
-                          Срок действия
-                          <ProjectSelect
-                            ariaLabel="Срок действия"
-                            name="expires_in_days"
-                            defaultValue="90"
-                            options={[
-                              { value: "30", label: "30 дней" },
-                              { value: "90", label: "90 дней" },
-                              { value: "365", label: "1 год" },
-                            ]}
-                          />
-                        </label>
+                  {client === "claude" ? (
+                    <div
+                      className="claude-key-note"
+                      role="note"
+                      data-language-static
+                    >
+                      <div className="claude-key-note__icon" aria-hidden="true">
+                        ✓
                       </div>
-                      <p className="scope-note">
-                        Ключ получит доступ ко всем подключённым кабинетам из
-                        раздела «Подключения» текущей компании.
-                      </p>
-                      <details className="advanced-settings">
-                        <summary>Дополнительные настройки</summary>
-                        <label className="check-row">
-                          <input type="checkbox" name="write" />
-                          <span>Разрешить подтверждённые изменения</span>
-                          <small>
-                            Любое изменение потребует предварительного просмотра
-                            и подтверждения.
-                          </small>
-                        </label>
-                      </details>
-                      <button
-                        className="primary-button"
-                        type="submit"
-                        disabled={busy}
-                      >
-                        Создать ключ
-                      </button>
-                    </form>
+                      <div>
+                        <h2>
+                          {language === "ru"
+                            ? "Ключ доступа не требуется"
+                            : "No access key required"}
+                        </h2>
+                        <p>
+                          {language === "ru"
+                            ? "Claude подключается к HolyMedia MCP через безопасную OAuth-авторизацию. Создавать и копировать MCP-ключ для Claude не нужно."
+                            : "Claude connects to HolyMedia MCP through secure OAuth authorization. You do not need to create or copy an MCP key for Claude."}
+                        </p>
+                        <small>
+                          {language === "ru"
+                            ? "После добавления подключения Claude откроет страницу HolyMedia MCP для входа и подтверждения доступа."
+                            : "After adding the connector, Claude opens HolyMedia MCP so you can sign in and approve access."}
+                        </small>
+                      </div>
+                    </div>
                   ) : (
-                    <div className="empty-state">
-                      <p>
-                        Создать ключ может владелец аккаунта. Попросите его
-                        выдать вам доступ.
-                      </p>
-                    </div>
-                  )}
-                  {createdToken && (
-                    <div className="one-time-secret" role="status">
-                      <strong>Сохраните ключ сейчас</strong>
-                      <p>
-                        После закрытия страницы полный ключ больше не
-                        показывается.
-                      </p>
-                      <div className="copy-row">
-                        <code>{createdToken}</code>
-                        <button
-                          className="secondary-button btn--small"
-                          type="button"
-                          onClick={() =>
-                            void copy(createdToken, "Ключ скопирован.")
-                          }
-                        >
-                          Скопировать
-                        </button>
-                      </div>
-                      <button
-                        className="ghost-button btn--small"
-                        type="button"
-                        onClick={() => setCreatedToken("")}
-                      >
-                        Скрыть
-                      </button>
-                    </div>
-                  )}
-                  {canManage && tokens.length > 0 && (
-                    <div className="token-list" aria-live="polite">
-                      <h3>Ваши ключи</h3>
-                      {tokens.map((token) => {
-                        const lifecycle = tokenLifecycle(token, language);
-                        const displayName = tokenDisplayName(token, language);
-                        const isEditing = editingTokenId === token.id;
-                        const actionPending = tokenActionId === token.id;
-                        const isExpired = lifecycle.tone === "expired";
-                        return (
-                          <article className="token-row" key={token.id}>
-                            <div className="token-row__identity">
-                              {isEditing ? (
-                                <form
-                                  className="token-name-editor"
-                                  onSubmit={(event) => {
-                                    event.preventDefault();
-                                    void renameToken(token);
-                                  }}
-                                >
-                                  <label>
-                                    <span className="sr-only">
-                                      Название ключа
-                                    </span>
-                                    <input
-                                      autoFocus
-                                      value={tokenNameDraft}
-                                      minLength={2}
-                                      maxLength={160}
-                                      required
-                                      aria-label="Название ключа"
-                                      onChange={(event) =>
-                                        setTokenNameDraft(event.target.value)
-                                      }
-                                    />
-                                  </label>
-                                  <button
-                                    className="token-action"
-                                    type="submit"
-                                    disabled={actionPending}
-                                  >
-                                    {actionPending ? "Сохраняем…" : "Сохранить"}
-                                  </button>
-                                  <button
-                                    className="token-action"
-                                    type="button"
-                                    disabled={actionPending}
-                                    onClick={() => {
-                                      setEditingTokenId(null);
-                                      setTokenNameDraft("");
-                                    }}
-                                  >
-                                    Отмена
-                                  </button>
-                                </form>
-                              ) : (
-                                <>
-                                  <div className="token-row__title">
-                                    <strong>{displayName}</strong>
-                                    <span
-                                      className={`token-status token-status--${lifecycle.tone}`}
+                    <>
+                      <h2>Создайте ключ доступа</h2>
+                      {canManage ? (
+                        <form className="token-form" onSubmit={createToken}>
+                          <div className="form-row">
+                            <label>
+                              Название
+                              <input
+                                name="name"
+                                required
+                                minLength={2}
+                                value={tokenName}
+                                onChange={(event) =>
+                                  setTokenName(event.target.value)
+                                }
+                                placeholder={`Например, ${
+                                  client === "chatgpt" ? "ChatGPT" : "Codex"
+                                }`}
+                              />
+                            </label>
+                            <label>
+                              Срок действия
+                              <ProjectSelect
+                                ariaLabel="Срок действия"
+                                name="expires_in_days"
+                                defaultValue="90"
+                                options={[
+                                  { value: "30", label: "30 дней" },
+                                  { value: "90", label: "90 дней" },
+                                  { value: "365", label: "1 год" },
+                                ]}
+                              />
+                            </label>
+                          </div>
+                          <p className="scope-note">
+                            Ключ получит доступ ко всем подключённым кабинетам
+                            из раздела «Подключения» текущей компании.
+                          </p>
+                          <details className="advanced-settings">
+                            <summary>Дополнительные настройки</summary>
+                            <label className="check-row">
+                              <input type="checkbox" name="write" />
+                              <span>Разрешить подтверждённые изменения</span>
+                              <small>
+                                Любое изменение потребует предварительного
+                                просмотра и подтверждения.
+                              </small>
+                            </label>
+                          </details>
+                          <button
+                            className="primary-button"
+                            type="submit"
+                            disabled={busy}
+                          >
+                            Создать ключ
+                          </button>
+                        </form>
+                      ) : (
+                        <div className="empty-state">
+                          <p>
+                            Создать ключ может владелец аккаунта. Попросите его
+                            выдать вам доступ.
+                          </p>
+                        </div>
+                      )}
+                      {createdToken && (
+                        <div className="one-time-secret" role="status">
+                          <strong>Сохраните ключ сейчас</strong>
+                          <p>
+                            После закрытия страницы полный ключ больше не
+                            показывается.
+                          </p>
+                          <div className="copy-row">
+                            <code>{createdToken}</code>
+                            <button
+                              className="secondary-button btn--small"
+                              type="button"
+                              onClick={() =>
+                                void copy(createdToken, "Ключ скопирован.")
+                              }
+                            >
+                              Скопировать
+                            </button>
+                          </div>
+                          <button
+                            className="ghost-button btn--small"
+                            type="button"
+                            onClick={() => setCreatedToken("")}
+                          >
+                            Скрыть
+                          </button>
+                        </div>
+                      )}
+                      {canManage && tokens.length > 0 && (
+                        <div className="token-list" aria-live="polite">
+                          <h3>Ваши ключи</h3>
+                          {tokens.map((token) => {
+                            const lifecycle = tokenLifecycle(token, language);
+                            const displayName = tokenDisplayName(
+                              token,
+                              language,
+                            );
+                            const isEditing = editingTokenId === token.id;
+                            const actionPending = tokenActionId === token.id;
+                            const isExpired = lifecycle.tone === "expired";
+                            return (
+                              <article className="token-row" key={token.id}>
+                                <div className="token-row__identity">
+                                  {isEditing ? (
+                                    <form
+                                      className="token-name-editor"
+                                      onSubmit={(event) => {
+                                        event.preventDefault();
+                                        void renameToken(token);
+                                      }}
                                     >
-                                      {lifecycle.label}
-                                    </span>
-                                  </div>
-                                  <div className="token-row__meta">
-                                    <small>{lifecycle.createdLabel}</small>
-                                    <small>{lifecycle.expiryLabel}</small>
-                                  </div>
-                                </>
-                              )}
-                            </div>
-                            {!isEditing && (
-                              <div className="token-row__actions">
-                                <button
-                                  className="token-action"
-                                  type="button"
-                                  disabled={actionPending}
-                                  onClick={() => {
-                                    setEditingTokenId(token.id);
-                                    setTokenNameDraft(
-                                      /^personal mcp token$/i.test(token.name)
-                                        ? ""
-                                        : token.name,
-                                    );
-                                  }}
-                                >
-                                  {/^personal mcp token$/i.test(token.name)
-                                    ? "Назвать"
-                                    : "Переименовать"}
-                                </button>
-                                {!token.revokedAt && (
-                                  <>
-                                    {!isExpired && (
+                                      <label>
+                                        <span className="sr-only">
+                                          Название ключа
+                                        </span>
+                                        <input
+                                          autoFocus
+                                          value={tokenNameDraft}
+                                          minLength={2}
+                                          maxLength={160}
+                                          required
+                                          aria-label="Название ключа"
+                                          onChange={(event) =>
+                                            setTokenNameDraft(
+                                              event.target.value,
+                                            )
+                                          }
+                                        />
+                                      </label>
+                                      <button
+                                        className="token-action"
+                                        type="submit"
+                                        disabled={actionPending}
+                                      >
+                                        {actionPending
+                                          ? "Сохраняем…"
+                                          : "Сохранить"}
+                                      </button>
                                       <button
                                         className="token-action"
                                         type="button"
                                         disabled={actionPending}
-                                        onClick={() =>
-                                          setConfirm({
-                                            title: `Обновить ключ «${displayName}»?`,
-                                            description:
-                                              "Текущее значение сразу перестанет работать. Новый ключ будет показан один раз.",
-                                            confirmLabel: "Обновить",
-                                            run: () => rotateToken(token),
-                                          })
-                                        }
+                                        onClick={() => {
+                                          setEditingTokenId(null);
+                                          setTokenNameDraft("");
+                                        }}
                                       >
-                                        Обновить
+                                        Отмена
                                       </button>
-                                    )}
+                                    </form>
+                                  ) : (
+                                    <>
+                                      <div className="token-row__title">
+                                        <strong>{displayName}</strong>
+                                        <span
+                                          className={`token-status token-status--${lifecycle.tone}`}
+                                        >
+                                          {lifecycle.label}
+                                        </span>
+                                      </div>
+                                      <div className="token-row__meta">
+                                        <small>{lifecycle.createdLabel}</small>
+                                        <small>{lifecycle.expiryLabel}</small>
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                                {!isEditing && (
+                                  <div className="token-row__actions">
                                     <button
-                                      className="token-action token-action--danger"
+                                      className="token-action"
                                       type="button"
                                       disabled={actionPending}
-                                      onClick={() =>
-                                        setConfirm({
-                                          title:
-                                            deleteKeyCopy.title(displayName),
-                                          description:
-                                            deleteKeyCopy.description,
-                                          confirmLabel: deleteKeyCopy.action,
-                                          run: () => deleteToken(token),
-                                        })
-                                      }
+                                      onClick={() => {
+                                        setEditingTokenId(token.id);
+                                        setTokenNameDraft(
+                                          /^personal mcp token$/i.test(
+                                            token.name,
+                                          )
+                                            ? ""
+                                            : token.name,
+                                        );
+                                      }}
                                     >
-                                      {deleteKeyCopy.action}
+                                      {/^personal mcp token$/i.test(token.name)
+                                        ? "Назвать"
+                                        : "Переименовать"}
                                     </button>
-                                  </>
+                                    {!token.revokedAt && (
+                                      <>
+                                        {!isExpired && (
+                                          <button
+                                            className="token-action"
+                                            type="button"
+                                            disabled={actionPending}
+                                            onClick={() =>
+                                              setConfirm({
+                                                title: `Обновить ключ «${displayName}»?`,
+                                                description:
+                                                  "Текущее значение сразу перестанет работать. Новый ключ будет показан один раз.",
+                                                confirmLabel: "Обновить",
+                                                run: () => rotateToken(token),
+                                              })
+                                            }
+                                          >
+                                            Обновить
+                                          </button>
+                                        )}
+                                        <button
+                                          className="token-action token-action--danger"
+                                          type="button"
+                                          disabled={actionPending}
+                                          onClick={() =>
+                                            setConfirm({
+                                              title:
+                                                deleteKeyCopy.title(
+                                                  displayName,
+                                                ),
+                                              description:
+                                                deleteKeyCopy.description,
+                                              confirmLabel:
+                                                deleteKeyCopy.action,
+                                              run: () => deleteToken(token),
+                                            })
+                                          }
+                                        >
+                                          {deleteKeyCopy.action}
+                                        </button>
+                                      </>
+                                    )}
+                                  </div>
                                 )}
-                              </div>
-                            )}
-                          </article>
-                        );
-                      })}
-                    </div>
+                              </article>
+                            );
+                          })}
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -1963,7 +2006,11 @@ export default function DashboardPage() {
                       ),
                     )}
                   </div>
-                  <ClientInstructions client={client} language={language} />
+                  <ClientInstructions
+                    client={client}
+                    language={language}
+                    onCopyUrl={() => void copy(MCP_URL, "MCP URL скопирован.")}
+                  />
                 </div>
               </div>
             </section>
@@ -3072,9 +3119,11 @@ export default function DashboardPage() {
 function ClientInstructions({
   client,
   language,
+  onCopyUrl,
 }: {
   client: Client;
   language: "ru" | "en";
+  onCopyUrl: () => void;
 }) {
   if (client === "codex") return <CodexInstructions language={language} />;
 
@@ -3145,19 +3194,7 @@ function ClientInstructions({
       </div>
     );
   if (client === "claude")
-    return (
-      <div className="client-panel" role="tabpanel">
-        <h3>Claude</h3>
-        <ol>
-          <li>Откройте Settings → Connectors.</li>
-          <li>Добавьте custom connector «HolyMedia MCP».</li>
-          <li>
-            Укажите адрес <code>{MCP_URL}</code>.
-          </li>
-          <li>Пройдите вход в HolyMedia MCP, когда Claude его откроет.</li>
-        </ol>
-      </div>
-    );
+    return <ClaudeInstructions language={language} onCopyUrl={onCopyUrl} />;
   return (
     <div className="client-panel" role="tabpanel">
       <h3>ChatGPT</h3>
@@ -3169,6 +3206,244 @@ function ClientInstructions({
         <li>Выберите OAuth и автоматическую регистрацию клиента.</li>
         <li>Войдите в HolyMedia MCP и подтвердите подключение.</li>
       </ol>
+    </div>
+  );
+}
+
+function ClaudeInstructions({
+  language,
+  onCopyUrl,
+}: {
+  language: "ru" | "en";
+  onCopyUrl: () => void;
+}) {
+  const ru = language === "ru";
+  return (
+    <div
+      className="client-panel client-panel--codex client-panel--claude"
+      role="tabpanel"
+      data-language-static
+    >
+      <h3>Claude</h3>
+      <p className="client-panel__intro">
+        {ru
+          ? "Подключение выполняется через OAuth. Ключ доступа создавать и копировать не нужно."
+          : "Claude connects through OAuth. You do not need to create or copy an access key."}
+      </p>
+      <ol className="codex-steps claude-steps">
+        <li>
+          <strong>
+            {ru ? "Откройте настройки Claude" : "Open Claude settings"}
+          </strong>
+          <span>
+            {ru
+              ? "Откройте Claude Desktop и перейдите: File → Settings."
+              : "Open Claude Desktop and go to File → Settings."}
+          </span>
+        </li>
+        <li>
+          <strong>{ru ? "Откройте Connectors" : "Open Connectors"}</strong>
+          <span>
+            {ru
+              ? "В левом меню откройте: Customize → Connectors."
+              : "In the left menu, open Customize → Connectors."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Добавьте custom connector" : "Add a custom connector"}
+          </strong>
+          <span>
+            {ru
+              ? "В правом верхнем углу нажмите Add → Add custom connector."
+              : "In the upper-right corner, select Add → Add custom connector."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru
+              ? "Заполните данные HolyMedia MCP"
+              : "Enter the HolyMedia MCP details"}
+          </strong>
+          <dl className="codex-config claude-config">
+            <div>
+              <dt>Name</dt>
+              <dd>
+                <code>HolyMedia MCP</code>
+              </dd>
+            </div>
+            <div>
+              <dt>Remote MCP server URL</dt>
+              <dd className="claude-config__url">
+                <code>{MCP_URL}</code>
+                <button
+                  className="token-action claude-config__copy"
+                  type="button"
+                  onClick={onCopyUrl}
+                >
+                  {ru ? "Скопировать" : "Copy"}
+                </button>
+              </dd>
+            </div>
+          </dl>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Настройте авторизацию" : "Configure authorization"}
+          </strong>
+          <dl className="codex-config">
+            <div>
+              <dt>Authentication</dt>
+              <dd>
+                <code>Always required</code>
+              </dd>
+            </div>
+            <div>
+              <dt>OAuth client</dt>
+              <dd>
+                <code>No client ID — register one automatically</code>
+              </dd>
+            </div>
+          </dl>
+          <small>{ru ? "После этого нажмите Add." : "Then select Add."}</small>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Подключите HolyMedia MCP" : "Connect HolyMedia MCP"}
+          </strong>
+          <span>
+            {ru
+              ? "После добавления HolyMedia MCP нажмите Connect."
+              : "After adding HolyMedia MCP, select Connect."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Войдите в HolyMedia MCP" : "Sign in to HolyMedia MCP"}
+          </strong>
+          <span>
+            {ru
+              ? "Claude откроет страницу HolyMedia MCP в браузере. Войдите в свой аккаунт."
+              : "Claude opens HolyMedia MCP in your browser. Sign in to your account."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Разрешите доступ Claude" : "Allow Claude access"}
+          </strong>
+          <span>
+            {ru
+              ? "На странице «Подключить Claude» нажмите «Разрешить»."
+              : "On the Connect Claude page, select Allow."}
+          </span>
+          <small>
+            {ru
+              ? "Claude получит доступ только к данным вашей текущей компании и подключённым в HolyMedia MCP рекламным кабинетам."
+              : "Claude receives access only to your current company and its advertising accounts connected in HolyMedia MCP."}
+          </small>
+        </li>
+        <li>
+          <strong>{ru ? "Вернитесь в Claude" : "Return to Claude"}</strong>
+          <span>
+            {ru
+              ? "После успешной авторизации вернитесь в Claude. HolyMedia MCP должен отображаться со статусом Connected."
+              : "After authorization, return to Claude. HolyMedia MCP should show the Connected status."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Проверьте подключение" : "Verify the connection"}
+          </strong>
+          <span>
+            {ru ? "Откройте новый чат и напишите:" : "Open a new chat and ask:"}
+          </span>
+          <div className="claude-prompts">
+            <code>
+              {ru
+                ? "Покажи мои подключённые рекламные кабинеты."
+                : "Show my connected advertising accounts."}
+            </code>
+            <code>
+              {ru
+                ? "Покажи активные кампании Google Ads."
+                : "Show active Google Ads campaigns."}
+            </code>
+          </div>
+        </li>
+      </ol>
+
+      <aside
+        className="claude-callout"
+        aria-labelledby="claude-important-title"
+      >
+        <strong id="claude-important-title">
+          {ru ? "Важно" : "Important"}
+        </strong>
+        <p>
+          {ru
+            ? "Для Claude MCP-ключ не используется. Не создавайте отдельный ключ в разделе «AI-клиент» специально для Claude — авторизация выполняется через ваш аккаунт HolyMedia MCP."
+            : "Claude does not use an MCP key. Do not create a separate AI client key for Claude — authorization uses your HolyMedia MCP account."}
+        </p>
+      </aside>
+
+      <section
+        className="claude-troubleshooting"
+        aria-labelledby="claude-troubleshooting-title"
+      >
+        <h4 id="claude-troubleshooting-title">
+          {ru ? "Если не работает" : "If it does not work"}
+        </h4>
+        <dl>
+          <div>
+            <dt>
+              {ru
+                ? "Не появляется подключение"
+                : "The connection does not appear"}
+            </dt>
+            <dd>
+              {ru
+                ? `Проверьте, что указан URL ${MCP_URL} и connector добавлен в разделе Customize → Connectors.`
+                : `Check that the URL is ${MCP_URL} and the connector was added in Customize → Connectors.`}
+            </dd>
+          </div>
+          <div>
+            <dt>
+              {ru
+                ? "Claude просит авторизоваться"
+                : "Claude asks you to sign in"}
+            </dt>
+            <dd>
+              {ru
+                ? "Нажмите Connect и войдите в HolyMedia MCP."
+                : "Select Connect and sign in to HolyMedia MCP."}
+            </dd>
+          </div>
+          <div>
+            <dt>
+              {ru
+                ? "Рекламных кабинетов нет"
+                : "No advertising accounts appear"}
+            </dt>
+            <dd>
+              {ru
+                ? "Откройте HolyMedia MCP → Подключения и убедитесь, что нужная рекламная платформа и кабинеты подключены."
+                : "Open HolyMedia MCP → Connections and confirm that the required platform and accounts are connected."}
+            </dd>
+          </div>
+          <div>
+            <dt>
+              {ru
+                ? "Отдельная рекламная платформа требует повторного входа"
+                : "One advertising platform asks you to reconnect"}
+            </dt>
+            <dd>
+              {ru
+                ? "Переподключите только эту платформу в разделе «Подключения». Повторно подключать Claude не требуется."
+                : "Reconnect only that platform in Connections. You do not need to reconnect Claude."}
+            </dd>
+          </div>
+        </dl>
+      </section>
     </div>
   );
 }

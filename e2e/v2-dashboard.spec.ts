@@ -366,7 +366,28 @@ test.describe("restored HolyMedia client UX", () => {
       "Переменная окружения токена Bearer",
     );
     await page.getByRole("tab", { name: "Claude" }).click();
-    await expect(page.getByRole("tabpanel")).toContainText("Settings");
+    await expect(page.getByRole("tabpanel")).toContainText(
+      "Подключение выполняется через OAuth",
+    );
+    await expect(page.getByRole("tabpanel")).toContainText(
+      "Customize → Connectors",
+    );
+    await expect(page.getByRole("tabpanel")).toContainText("Always required");
+    await expect(page.getByRole("tabpanel")).toContainText(
+      "No client ID — register one automatically",
+    );
+    await expect(page.getByRole("tabpanel")).toContainText("Connected");
+    await expect(page.getByRole("tabpanel")).toContainText(
+      "Покажи активные кампании Google Ads.",
+    );
+    await expect(page.getByText("Ключ доступа не требуется")).toBeVisible();
+    await expect(page.locator("form.token-form")).toHaveCount(0);
+    await expect(
+      page.getByRole("button", { name: "Создать ключ" }),
+    ).toHaveCount(0);
+
+    await page.getByRole("tab", { name: "Codex" }).click();
+    await expect(page.getByText("Ключ доступа не требуется")).toHaveCount(0);
 
     const tokenForm = page.locator("form.token-form");
     await tokenForm.locator('input[name="name"]').fill("Playwright client");
@@ -535,6 +556,56 @@ test.describe("restored HolyMedia client UX", () => {
     expect(inviteButton!.height).toBeGreaterThanOrEqual(44);
     await page.screenshot({
       path: testInfo.outputPath("profile.png"),
+      fullPage: true,
+    });
+    expect(failures, failures.join("\n")).toEqual([]);
+  });
+
+  test("Claude onboarding is keyless, responsive and accessible in both themes", async ({
+    page,
+  }, testInfo) => {
+    await installMockApi(page);
+    const failures = collectClientFailures(page);
+    await login(page);
+    await page.getByRole("button", { name: "AI-клиент", exact: true }).click();
+    await page.getByRole("tab", { name: "Claude" }).click();
+
+    const panel = page.getByRole("tabpanel");
+    await expect(page.getByText("Ключ доступа не требуется")).toBeVisible();
+    await expect(page.locator("form.token-form")).toHaveCount(0);
+    await expect(panel).toContainText("File → Settings");
+    await expect(panel).toContainText("Customize → Connectors");
+    await expect(panel).toContainText("Always required");
+    await expect(panel).toContainText(
+      "No client ID — register one automatically",
+    );
+    await expect(
+      panel.getByRole("button", { name: "Скопировать" }),
+    ).toBeVisible();
+    await panel.getByRole("button", { name: "Скопировать" }).focus();
+    await expect(
+      panel.getByRole("button", { name: "Скопировать" }),
+    ).toBeFocused();
+
+    const dimensions = await page.evaluate(() => ({
+      viewport: document.documentElement.clientWidth,
+      document: document.documentElement.scrollWidth,
+    }));
+    expect(dimensions.document).toBeLessThanOrEqual(dimensions.viewport + 1);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({
+      path: testInfo.outputPath("claude-dark.png"),
+      fullPage: true,
+    });
+
+    await page.getByRole("radio", { name: "Light" }).click();
+    await expect(page.getByRole("radio", { name: "Light" })).toHaveAttribute(
+      "aria-checked",
+      "true",
+    );
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+    await page.screenshot({
+      path: testInfo.outputPath("claude-light.png"),
       fullPage: true,
     });
     expect(failures, failures.join("\n")).toEqual([]);
