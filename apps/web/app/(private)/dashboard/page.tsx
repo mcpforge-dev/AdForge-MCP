@@ -1676,10 +1676,14 @@ export default function DashboardPage() {
                 <p className="eyebrow">AI-клиент</p>
                 <h1 id="mcp-title">Подключите HolyMedia MCP</h1>
                 <p className="section-head__sub">
-                  {client === "claude"
+                  {client === "claude" || client === "chatgpt"
                     ? language === "ru"
-                      ? "Скопируйте адрес и подключите Claude через безопасную авторизацию HolyMedia MCP."
-                      : "Copy the URL and connect Claude through secure HolyMedia MCP authorization."
+                      ? `Скопируйте адрес и подключите ${
+                          client === "claude" ? "Claude" : "ChatGPT"
+                        } через безопасную авторизацию HolyMedia MCP.`
+                      : `Copy the URL and connect ${
+                          client === "claude" ? "Claude" : "ChatGPT"
+                        } through secure HolyMedia MCP authorization.`
                     : "Скопируйте адрес, создайте личный ключ и выберите инструкцию."}
                 </p>
               </div>
@@ -1704,33 +1708,8 @@ export default function DashboardPage() {
               <div className="mcp-step">
                 <span>2</span>
                 <div className="mcp-step__body">
-                  {client === "claude" ? (
-                    <div
-                      className="claude-key-note"
-                      role="note"
-                      data-language-static
-                    >
-                      <div className="claude-key-note__icon" aria-hidden="true">
-                        ✓
-                      </div>
-                      <div>
-                        <h2>
-                          {language === "ru"
-                            ? "Ключ доступа не требуется"
-                            : "No access key required"}
-                        </h2>
-                        <p>
-                          {language === "ru"
-                            ? "Claude подключается к HolyMedia MCP через безопасную OAuth-авторизацию. Создавать и копировать MCP-ключ для Claude не нужно."
-                            : "Claude connects to HolyMedia MCP through secure OAuth authorization. You do not need to create or copy an MCP key for Claude."}
-                        </p>
-                        <small>
-                          {language === "ru"
-                            ? "После добавления подключения Claude откроет страницу HolyMedia MCP для входа и подтверждения доступа."
-                            : "After adding the connector, Claude opens HolyMedia MCP so you can sign in and approve access."}
-                        </small>
-                      </div>
-                    </div>
+                  {client !== "codex" ? (
+                    <OAuthKeyNote client={client} language={language} />
                   ) : (
                     <>
                       <h2>Создайте ключ доступа</h2>
@@ -1747,9 +1726,7 @@ export default function DashboardPage() {
                                 onChange={(event) =>
                                   setTokenName(event.target.value)
                                 }
-                                placeholder={`Например, ${
-                                  client === "chatgpt" ? "ChatGPT" : "Codex"
-                                }`}
+                                placeholder="Например, Codex"
                               />
                             </label>
                             <label>
@@ -3126,86 +3103,38 @@ function ClientInstructions({
   onCopyUrl: () => void;
 }) {
   if (client === "codex") return <CodexInstructions language={language} />;
-
-  if ((client as string) === "codex")
-    return (
-      <div className="client-panel" role="tabpanel">
-        <h3>Codex</h3>
-        <ol>
-          <li>
-            <strong>
-              {language === "ru"
-                ? "Создайте ключ выше."
-                : "Create a key above."}
-            </strong>{" "}
-            {language === "ru" ? "Укажите название" : "Name it"}{" "}
-            <code>Codex</code>{" "}
-            {language === "ru"
-              ? "и скопируйте ключ один раз."
-              : "and copy it once."}
-          </li>
-          <li>
-            {language === "ru"
-              ? "В Windows создайте пользовательскую переменную среды"
-              : "In Windows, create the user environment variable"}{" "}
-            <code>HOLYMEDIA_MCP_TOKEN</code>{" "}
-            {language === "ru"
-              ? "и вставьте в её значение скопированный ключ. Не добавляйте слово"
-              : "and set its value to the copied key. Do not add the word"}{" "}
-            <code>Bearer</code>.
-          </li>
-          <li>
-            {language === "ru" ? "В Codex откройте" : "In Codex, open"}{" "}
-            <strong>
-              {language === "ru"
-                ? "Настройки → Плагины → MCP → Добавить сервер"
-                : "Settings → Plugins → MCP → Add server"}
-            </strong>
-            . {language === "ru" ? "Выберите" : "Select"}{" "}
-            <strong>
-              {language === "ru" ? "Потоковая передача HTTP" : "Streaming HTTP"}
-            </strong>
-            . {language === "ru" ? "Имя:" : "Name:"} <code>HolyMedia MCP</code>;{" "}
-            URL: <code>{MCP_URL}</code>;{" "}
-            {language === "ru" ? "в поле" : "in the"}{" "}
-            <strong>
-              {language === "ru"
-                ? "Переменная окружения токена Bearer"
-                : "Bearer token environment variable"}
-            </strong>{" "}
-            {language === "ru" ? "укажите" : "enter"}{" "}
-            <code>HOLYMEDIA_MCP_TOKEN</code>.{" "}
-            {language === "ru"
-              ? "В это поле вставляется имя переменной, а не сам ключ. Заголовки оставьте пустыми."
-              : "Enter the variable name here, not the raw key. Leave headers empty."}
-          </li>
-          <li>
-            {language === "ru" ? "Сохраните и" : "Save and"}{" "}
-            <strong>
-              {language === "ru"
-                ? "полностью перезапустите Codex"
-                : "fully restart Codex"}
-            </strong>
-            {language === "ru"
-              ? ", чтобы приложение получило новую переменную среды. Затем откройте новый чат и попросите: «Покажи мои подключённые рекламные кабинеты»."
-              : ", so it inherits the environment variable. Then open a new chat and ask: “Show my connected advertising accounts.”"}
-          </li>
-        </ol>
-      </div>
-    );
   if (client === "claude")
     return <ClaudeInstructions language={language} onCopyUrl={onCopyUrl} />;
+  return <ChatGPTInstructions language={language} onCopyUrl={onCopyUrl} />;
+}
+
+function OAuthKeyNote({
+  client,
+  language,
+}: {
+  client: Exclude<Client, "codex">;
+  language: "ru" | "en";
+}) {
+  const ru = language === "ru";
+  const clientName = client === "claude" ? "Claude" : "ChatGPT";
   return (
-    <div className="client-panel" role="tabpanel">
-      <h3>ChatGPT</h3>
-      <ol>
-        <li>Откройте настройки подключений ChatGPT.</li>
-        <li>
-          Создайте connector с полным адресом <code>{MCP_URL}</code>.
-        </li>
-        <li>Выберите OAuth и автоматическую регистрацию клиента.</li>
-        <li>Войдите в HolyMedia MCP и подтвердите подключение.</li>
-      </ol>
+    <div className="oauth-key-note" role="note" data-language-static>
+      <div className="oauth-key-note__icon" aria-hidden="true">
+        ✓
+      </div>
+      <div>
+        <h2>{ru ? "Ключ доступа не требуется" : "No access key required"}</h2>
+        <p>
+          {ru
+            ? `${clientName} подключается к HolyMedia MCP через безопасную OAuth-авторизацию. Создавать и копировать MCP-ключ для ${clientName} не нужно.`
+            : `${clientName} connects to HolyMedia MCP through secure OAuth authorization. You do not need to create or copy an MCP key for ${clientName}.`}
+        </p>
+        <small>
+          {ru
+            ? `После создания подключения ${clientName} откроет страницу HolyMedia MCP для входа и подтверждения доступа.`
+            : `After adding the connector, ${clientName} opens HolyMedia MCP so you can sign in and approve access.`}
+        </small>
+      </div>
     </div>
   );
 }
@@ -3265,7 +3194,7 @@ function ClaudeInstructions({
               ? "Заполните данные HolyMedia MCP"
               : "Enter the HolyMedia MCP details"}
           </strong>
-          <dl className="codex-config claude-config">
+          <dl className="codex-config oauth-config">
             <div>
               <dt>Name</dt>
               <dd>
@@ -3274,10 +3203,10 @@ function ClaudeInstructions({
             </div>
             <div>
               <dt>Remote MCP server URL</dt>
-              <dd className="claude-config__url">
+              <dd className="oauth-config__url">
                 <code>{MCP_URL}</code>
                 <button
-                  className="token-action claude-config__copy"
+                  className="token-action oauth-config__copy"
                   type="button"
                   onClick={onCopyUrl}
                 >
@@ -3357,7 +3286,7 @@ function ClaudeInstructions({
           <span>
             {ru ? "Откройте новый чат и напишите:" : "Open a new chat and ask:"}
           </span>
-          <div className="claude-prompts">
+          <div className="oauth-prompts">
             <code>
               {ru
                 ? "Покажи мои подключённые рекламные кабинеты."
@@ -3372,10 +3301,7 @@ function ClaudeInstructions({
         </li>
       </ol>
 
-      <aside
-        className="claude-callout"
-        aria-labelledby="claude-important-title"
-      >
+      <aside className="oauth-callout" aria-labelledby="claude-important-title">
         <strong id="claude-important-title">
           {ru ? "Важно" : "Important"}
         </strong>
@@ -3387,7 +3313,7 @@ function ClaudeInstructions({
       </aside>
 
       <section
-        className="claude-troubleshooting"
+        className="oauth-troubleshooting"
         aria-labelledby="claude-troubleshooting-title"
       >
         <h4 id="claude-troubleshooting-title">
@@ -3440,6 +3366,293 @@ function ClaudeInstructions({
               {ru
                 ? "Переподключите только эту платформу в разделе «Подключения». Повторно подключать Claude не требуется."
                 : "Reconnect only that platform in Connections. You do not need to reconnect Claude."}
+            </dd>
+          </div>
+        </dl>
+      </section>
+    </div>
+  );
+}
+
+function ChatGPTInstructions({
+  language,
+  onCopyUrl,
+}: {
+  language: "ru" | "en";
+  onCopyUrl: () => void;
+}) {
+  const ru = language === "ru";
+  return (
+    <div
+      className="client-panel client-panel--codex client-panel--chatgpt"
+      role="tabpanel"
+      data-language-static
+    >
+      <h3>ChatGPT</h3>
+      <p className="client-panel__intro">
+        {ru
+          ? "Подключение выполняется через OAuth. Ключ доступа создавать и копировать не нужно."
+          : "ChatGPT connects through OAuth. You do not need to create or copy an access key."}
+      </p>
+      <ol className="codex-steps chatgpt-steps">
+        <li>
+          <strong>
+            {ru ? "Откройте настройки ChatGPT" : "Open ChatGPT settings"}
+          </strong>
+          <span>
+            {ru
+              ? "Откройте меню профиля ChatGPT и нажмите «Настройки»."
+              : "Open the ChatGPT profile menu and select Settings."}
+          </span>
+        </li>
+        <li>
+          <strong>{ru ? "Откройте раздел «Плагины»" : "Open Plugins"}</strong>
+          <span>
+            {ru
+              ? "В левом меню настроек выберите «Плагины»."
+              : "In the settings sidebar, select Plugins."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Откройте список плагинов" : "Open the plugins list"}
+          </strong>
+          <span>
+            {ru
+              ? "Прокрутите страницу вниз и нажмите «Просмотреть плагины»."
+              : "Scroll down and select Browse plugins."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Создайте новый плагин" : "Create a new plugin"}
+          </strong>
+          <span>
+            {ru
+              ? "В правом верхнем углу нажмите кнопку «+». Откроется окно «Новый плагин»."
+              : "Select the + button in the upper-right corner. The New plugin dialog opens."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru
+              ? "Заполните данные HolyMedia MCP"
+              : "Enter the HolyMedia MCP details"}
+          </strong>
+          <dl className="codex-config oauth-config">
+            <div>
+              <dt>{ru ? "Название" : "Name"}</dt>
+              <dd>
+                <code>HolyMedia MCP</code>
+              </dd>
+            </div>
+            <div>
+              <dt>{ru ? "Описание" : "Description"}</dt>
+              <dd>
+                {ru
+                  ? "Работа с подключёнными рекламными кабинетами через HolyMedia MCP"
+                  : "Work with connected advertising accounts through HolyMedia MCP"}
+              </dd>
+            </div>
+            <div>
+              <dt>{ru ? "Подключение" : "Connection"}</dt>
+              <dd>
+                <code>{ru ? "URL-адрес сервера" : "Server URL"}</code>
+              </dd>
+            </div>
+            <div>
+              <dt>URL</dt>
+              <dd className="oauth-config__url">
+                <code>{MCP_URL}</code>
+                <button
+                  className="token-action oauth-config__copy"
+                  type="button"
+                  onClick={onCopyUrl}
+                >
+                  {ru ? "Скопировать" : "Copy"}
+                </button>
+              </dd>
+            </div>
+            <div>
+              <dt>{ru ? "Аутентификация" : "Authentication"}</dt>
+              <dd>
+                <code>OAuth</code>
+              </dd>
+            </div>
+          </dl>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Подтвердите подключение" : "Confirm the connection"}
+          </strong>
+          <span>
+            {ru
+              ? "Поставьте галочку «Я понимаю и хочу продолжить» и нажмите «Создать»."
+              : "Select “I understand and want to continue”, then select Create."}
+          </span>
+          <small>
+            {ru
+              ? "ChatGPT автоматически определит параметры OAuth HolyMedia MCP. Расширенные настройки менять не нужно."
+              : "ChatGPT automatically discovers HolyMedia MCP OAuth settings. You do not need to change advanced settings."}
+          </small>
+        </li>
+        <li>
+          <strong>
+            {ru
+              ? "Войдите через HolyMedia MCP"
+              : "Sign in through HolyMedia MCP"}
+          </strong>
+          <span>
+            {ru
+              ? "После создания нажмите «Войти через HolyMedia MCP». ChatGPT откроет страницу HolyMedia MCP в браузере."
+              : "After creating it, select “Sign in through HolyMedia MCP”. ChatGPT opens HolyMedia MCP in your browser."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Войдите в аккаунт" : "Sign in to your account"}
+          </strong>
+          <span>
+            {ru
+              ? "Войдите в свой аккаунт HolyMedia MCP, если вы ещё не авторизованы. При активной сессии этот шаг пропустится автоматически."
+              : "Sign in to your HolyMedia MCP account if needed. An active session continues automatically."}
+          </span>
+        </li>
+        <li>
+          <strong>
+            {ru ? "Разрешите доступ ChatGPT" : "Allow ChatGPT access"}
+          </strong>
+          <span>
+            {ru
+              ? "На странице «Подключить ChatGPT» нажмите «Разрешить»."
+              : "On the Connect ChatGPT page, select Allow."}
+          </span>
+          <small>
+            {ru
+              ? "ChatGPT получит доступ только к данным вашей текущей компании и подключённым в HolyMedia MCP рекламным кабинетам."
+              : "ChatGPT receives access only to your current company and its advertising accounts connected in HolyMedia MCP."}
+          </small>
+        </li>
+        <li>
+          <strong>{ru ? "Вернитесь в ChatGPT" : "Return to ChatGPT"}</strong>
+          <span>
+            {ru
+              ? "После успешной авторизации вернитесь в ChatGPT. HolyMedia MCP должен отображаться как подключённый плагин."
+              : "After authorization, return to ChatGPT. HolyMedia MCP should appear as a connected plugin."}
+          </span>
+        </li>
+        <li>
+          <strong>{ru ? "Проверьте работу" : "Verify the connection"}</strong>
+          <span>
+            {ru
+              ? "Откройте новый чат ChatGPT и включите HolyMedia MCP, если он не активирован автоматически."
+              : "Open a new ChatGPT chat and enable HolyMedia MCP if it is not active automatically."}
+          </span>
+          <div className="oauth-prompts">
+            <code>
+              {ru
+                ? "Покажи мои подключённые рекламные кабинеты."
+                : "Show my connected advertising accounts."}
+            </code>
+            <code>
+              {ru
+                ? "Покажи активные кампании Google Ads."
+                : "Show active Google Ads campaigns."}
+            </code>
+            <code>
+              {ru
+                ? "Покажи расходы за последние 7 дней."
+                : "Show spend for the last 7 days."}
+            </code>
+          </div>
+        </li>
+      </ol>
+
+      <aside
+        className="oauth-callout"
+        aria-labelledby="chatgpt-important-title"
+      >
+        <strong id="chatgpt-important-title">
+          {ru ? "Важно" : "Important"}
+        </strong>
+        <p>
+          {ru
+            ? "Для ChatGPT MCP-ключ не используется. Не создавайте отдельный ключ в разделе «AI-клиент» специально для ChatGPT — авторизация выполняется через ваш аккаунт HolyMedia MCP."
+            : "ChatGPT does not use an MCP key. Do not create a separate AI client key for ChatGPT — authorization uses your HolyMedia MCP account."}
+        </p>
+        <p>
+          {ru
+            ? "Расширенные настройки OAuth обычно менять не требуется: ChatGPT определяет параметры подключения автоматически."
+            : "You normally do not need to change advanced OAuth settings: ChatGPT discovers connection settings automatically."}
+        </p>
+      </aside>
+
+      <section
+        className="oauth-troubleshooting"
+        aria-labelledby="chatgpt-troubleshooting-title"
+      >
+        <h4 id="chatgpt-troubleshooting-title">
+          {ru ? "Если не работает" : "If it does not work"}
+        </h4>
+        <dl>
+          <div>
+            <dt>
+              {ru
+                ? "Не удаётся создать подключение"
+                : "Cannot create the connection"}
+            </dt>
+            <dd>
+              {ru
+                ? `Проверьте URL ${MCP_URL} и убедитесь, что выбрана аутентификация OAuth.`
+                : `Check the URL ${MCP_URL} and confirm OAuth authentication is selected.`}
+            </dd>
+          </div>
+          <div>
+            <dt>
+              {ru
+                ? "Не появляется окно входа"
+                : "The sign-in window does not appear"}
+            </dt>
+            <dd>
+              {ru
+                ? "Откройте HolyMedia MCP в списке подключённых плагинов и нажмите «Войти через HolyMedia MCP» или «Подключить»."
+                : "Open HolyMedia MCP in the connected plugins list and select “Sign in through HolyMedia MCP” or Connect."}
+            </dd>
+          </div>
+          <div>
+            <dt>
+              {ru
+                ? "Рекламных кабинетов нет"
+                : "No advertising accounts appear"}
+            </dt>
+            <dd>
+              {ru
+                ? "Откройте HolyMedia MCP → Подключения и убедитесь, что нужная рекламная платформа и кабинеты подключены."
+                : "Open HolyMedia MCP → Connections and confirm that the required platform and accounts are connected."}
+            </dd>
+          </div>
+          <div>
+            <dt>
+              {ru
+                ? "Отдельная рекламная платформа требует повторного входа"
+                : "One advertising platform asks you to reconnect"}
+            </dt>
+            <dd>
+              {ru
+                ? "Переподключите только эту рекламную платформу в разделе «Подключения». Повторно создавать ChatGPT plugin не требуется."
+                : "Reconnect only that advertising platform in Connections. You do not need to create the ChatGPT plugin again."}
+            </dd>
+          </div>
+          <div>
+            <dt>
+              {ru
+                ? "ChatGPT просит OAuth Client ID / Secret"
+                : "ChatGPT asks for an OAuth Client ID / Secret"}
+            </dt>
+            <dd>
+              {ru
+                ? "Обычному пользователю это не требуется. Не вводите их вручную, если стандартное OAuth-подключение работает."
+                : "Regular users do not need these. Do not enter them manually when standard OAuth setup works."}
             </dd>
           </div>
         </dl>
