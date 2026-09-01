@@ -436,7 +436,8 @@ export class OAuthAuthorizationService {
     const existing = await this.database.client.oAuthPublicClient.findFirst({
       where: { clientId, status: "active", revokedAt: null },
     });
-    if (existing?.registrationSource !== "cimd") return existing;
+    if (!existing) return this.clientMetadata.resolve(clientId);
+    if (existing.registrationSource !== "cimd") return existing;
     return this.clientMetadata.resolve(clientId);
   }
 

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { HumanPrincipal } from "../auth/auth.types.js";
 import { McpController } from "./mcp.controller.js";
 import {
@@ -315,6 +315,22 @@ async function fixture() {
   const verifier = "v".repeat(64);
   return { oauth, state, principal, workspaceId, registered, verifier };
 }
+
+it("discovers a previously unseen hosted CIMD client before authorization", async () => {
+  const { database } = fakeDatabase();
+  const clientId = "https://claude.ai/oauth/mcp-oauth-client-metadata";
+  const resolve = vi.fn().mockResolvedValue({
+    id: randomUUID(),
+    clientId,
+    registrationSource: "cimd",
+    status: "active",
+    revokedAt: null,
+  });
+  const oauth = new OAuthAuthorizationService(database, { resolve } as never);
+
+  await expect(oauth.isPublicClient(clientId)).resolves.toBe(true);
+  expect(resolve).toHaveBeenCalledWith(clientId);
+});
 
 async function issueCode(context: Awaited<ReturnType<typeof fixture>>) {
   const started = await context.oauth.beginAuthorization({

@@ -46,12 +46,22 @@ async function bootstrap(): Promise<void> {
   });
   fastify.addHook("onResponse", async (request, reply) => {
     const requestWithId = request as typeof request & RequestWithId;
+    const path = requestPath(request.url);
     logger.info(
       {
         requestId: requestWithId.requestId,
         method: request.method,
-        path: requestPath(request.url),
+        path,
         status: reply.statusCode,
+        ...(path === "/mcp"
+          ? {
+              contentType: request.headers["content-type"] ?? null,
+              accept: request.headers.accept ?? null,
+              userAgent: request.headers["user-agent"]?.slice(0, 160) ?? null,
+              origin: request.headers.origin ?? null,
+              authorizationPresent: Boolean(request.headers.authorization),
+            }
+          : {}),
       },
       "request complete",
     );
@@ -90,6 +100,10 @@ async function bootstrap(): Promise<void> {
       { path: "auth/google/callback", method: RequestMethod.GET },
       {
         path: ".well-known/oauth-protected-resource",
+        method: RequestMethod.GET,
+      },
+      {
+        path: ".well-known/oauth-protected-resource/mcp",
         method: RequestMethod.GET,
       },
       {

@@ -109,7 +109,7 @@ describe("MCP bearer authentication", () => {
     expect(missing.code).toHaveBeenCalledWith(401);
     expect(missing.header).toHaveBeenCalledWith(
       "WWW-Authenticate",
-      'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource"',
+      'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read"',
     );
 
     const malformed = reply();

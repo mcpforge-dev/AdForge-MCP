@@ -27,6 +27,33 @@ describe("OAuth client metadata documents", () => {
     });
   });
 
+  it("accepts Anthropic's hosted CIMD capabilities while selecting the supported code flow", () => {
+    const anthropicClientId =
+      "https://claude.ai/oauth/mcp-oauth-client-metadata";
+    expect(
+      parseClientMetadata(anthropicClientId, {
+        client_id: anthropicClientId,
+        client_name: "Claude",
+        client_uri: "https://claude.ai",
+        redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+        grant_types: [
+          "authorization_code",
+          "refresh_token",
+          "urn:ietf:params:oauth:grant-type:jwt-bearer",
+        ],
+        response_types: ["code"],
+        token_endpoint_auth_method: "none",
+      }),
+    ).toMatchObject({
+      client_id: anthropicClientId,
+      redirect_uris: ["https://claude.ai/api/mcp/auth_callback"],
+      grant_types: ["authorization_code"],
+      response_types: ["code"],
+      token_endpoint_auth_method: "none",
+      scope: "adforge:mcp:read",
+    });
+  });
+
   it("rejects mismatched identity, private client IDs, confidential metadata, and unsafe redirects", () => {
     expect(isClientMetadataUrl("https://client.example.test/")).toBe(false);
     expect(

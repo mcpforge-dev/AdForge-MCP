@@ -60,6 +60,20 @@ describe("CsrfGuard", () => {
     ).toBe(true);
   });
 
+  it("allows an unauthenticated MCP POST to reach its OAuth challenge", () => {
+    const guard = new CsrfGuard();
+    expect(
+      guard.canActivate(
+        context({
+          method: "POST",
+          url: "/mcp",
+          headers: {},
+          cookies: {},
+        }),
+      ),
+    ).toBe(true);
+  });
+
   it("rejects an origin outside the configured allowlist", () => {
     const guard = new CsrfGuard();
     expect(() =>

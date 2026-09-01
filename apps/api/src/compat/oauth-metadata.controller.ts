@@ -12,6 +12,11 @@ export class OAuthMetadataController {
     };
   }
 
+  @Get(".well-known/oauth-protected-resource/mcp")
+  public protectedMcpResource() {
+    return this.protectedResource();
+  }
+
   @Get(".well-known/oauth-authorization-server")
   public authorizationServer() {
     return {

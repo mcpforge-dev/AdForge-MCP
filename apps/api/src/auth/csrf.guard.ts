@@ -26,11 +26,13 @@ export class CsrfGuard implements CanActivate {
     // machine endpoints. They do not use browser session cookies; their
     // protections are redirect URI binding, one-time codes and PKCE.
     const url = String((request as unknown as { url?: string }).url ?? "");
+    const requestPath = url.split("?")[0];
     if (
       method === "POST" &&
-      ["/oauth/token", "/oauth/register", "/oauth/revoke"].some((path) =>
-        url.split("?")[0]?.endsWith(path),
-      )
+      (requestPath === "/mcp" ||
+        ["/oauth/token", "/oauth/register", "/oauth/revoke"].some((path) =>
+          requestPath?.endsWith(path),
+        ))
     ) {
       return true;
     }

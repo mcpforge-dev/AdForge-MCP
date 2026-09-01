@@ -183,7 +183,7 @@ function mcpUnauthorized(reply: FastifyReply) {
     .code(401)
     .header(
       "WWW-Authenticate",
-      'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource"',
+      'Bearer resource_metadata="https://mcp.holymedia.kz/.well-known/oauth-protected-resource/mcp", scope="adforge:mcp:read"',
     )
     .send({ statusCode: 401, message: "MCP authorization required." });
 }

@@ -11,6 +11,9 @@ describe("OAuth discovery metadata", () => {
       scopes_supported: ["adforge:mcp:read"],
       bearer_methods_supported: ["header"],
     });
+    expect(controller.protectedMcpResource()).toEqual(
+      controller.protectedResource(),
+    );
   });
 
   it("publishes matching public-client Authorization Code metadata", () => {

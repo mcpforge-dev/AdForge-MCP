@@ -1,12 +1,14 @@
 import { lookup } from "node:dns/promises";
 import { isIP } from "node:net";
 import { BadRequestException, Inject, Injectable } from "@nestjs/common";
+import { createLogger } from "@holymedia/observability";
 import { DatabaseService } from "../infrastructure/database.service.js";
 
 const MAX_METADATA_BYTES = 64 * 1024;
 const FETCH_TIMEOUT_MS = 4_000;
 const MIN_CACHE_SECONDS = 300;
 const MAX_CACHE_SECONDS = 86_400;
+const MAX_REDIRECTS = 3;
 
 type ClientMetadata = {
   client_id: string;
@@ -21,6 +23,8 @@ type ClientMetadata = {
 
 @Injectable()
 export class OAuthClientMetadataService {
+  private readonly logger = createLogger("holymedia-mcp-v2-oauth-cimd");
+
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
   ) {}
@@ -48,7 +52,40 @@ export class OAuthClientMetadataService {
         },
       });
     }
-    const metadata = parseClientMetadata(clientId, fetched.body);
+    let metadata: ClientMetadata;
+    try {
+      metadata = parseClientMetadata(clientId, fetched.body);
+    } catch (error) {
+      this.logger.warn(
+        {
+          clientId,
+          finalUrl: fetched.finalUrl,
+          status: fetched.status,
+          contentType: fetched.contentType,
+          documentBytes: fetched.documentBytes,
+          validationStage: "document_schema",
+          errorType:
+            error instanceof Error ? error.constructor.name : "unknown",
+        },
+        "OAuth CIMD rejected",
+      );
+      throw error;
+    }
+    this.logger.info(
+      {
+        clientId,
+        finalUrl: fetched.finalUrl,
+        status: fetched.status,
+        contentType: fetched.contentType,
+        documentBytes: fetched.documentBytes,
+        clientName: metadata.client_name,
+        redirectUris: metadata.redirect_uris,
+        grantTypes: metadata.grant_types,
+        responseTypes: metadata.response_types,
+        tokenEndpointAuthMethod: metadata.token_endpoint_auth_method,
+      },
+      "OAuth CIMD resolved",
+    );
     return this.database.client.oAuthPublicClient.upsert({
       where: { clientId },
       create: {
@@ -87,25 +124,53 @@ export class OAuthClientMetadataService {
     etag: string | null;
     expiresAt: Date;
     notModified: boolean;
+    finalUrl: string;
+    status: number;
+    contentType: string;
+    documentBytes: number;
   }> {
-    const url = new URL(clientId);
-    await assertPublicHostname(url.hostname);
+    let url = new URL(clientId);
     let response: Response;
     try {
-      response = await fetch(url, {
-        headers: {
-          accept: "application/json",
-          ...(etag ? { "if-none-match": etag } : {}),
-        },
-        redirect: "error",
-        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
-      });
+      response = await fetchMetadata(url, etag);
+      for (let redirects = 0; isRedirect(response.status); redirects += 1) {
+        if (redirects >= MAX_REDIRECTS) {
+          throw new Error("redirect_limit");
+        }
+        const location = response.headers.get("location");
+        if (!location) throw new Error("redirect_location");
+        const next = new URL(location, url);
+        if (
+          next.protocol !== "https:" ||
+          next.username ||
+          next.password ||
+          next.port ||
+          next.hash
+        ) {
+          throw new Error("redirect_target");
+        }
+        url = next;
+        response = await fetchMetadata(url, null);
+      }
     } catch {
+      this.logger.warn(
+        { clientId, validationStage: "fetch_or_ssrf" },
+        "OAuth CIMD unavailable",
+      );
       throw new BadRequestException("OAuth client metadata is unavailable.");
     }
     const expiresAt = metadataExpiry(response.headers.get("cache-control"));
     if (response.status === 304 && etag) {
-      return { body: null, etag, expiresAt, notModified: true };
+      return {
+        body: null,
+        etag,
+        expiresAt,
+        notModified: true,
+        finalUrl: url.toString(),
+        status: response.status,
+        contentType: response.headers.get("content-type") ?? "",
+        documentBytes: 0,
+      };
     }
     const contentType = response.headers.get("content-type") ?? "";
     if (
@@ -114,14 +179,34 @@ export class OAuthClientMetadataService {
     ) {
       throw new BadRequestException("OAuth client metadata is invalid.");
     }
-    const body = await limitedJson(response);
+    const document = await limitedJson(response);
     return {
-      body,
+      body: document.value,
       etag: response.headers.get("etag"),
       expiresAt,
       notModified: false,
+      finalUrl: url.toString(),
+      status: response.status,
+      contentType,
+      documentBytes: document.bytes,
     };
   }
+}
+
+async function fetchMetadata(url: URL, etag: string | null): Promise<Response> {
+  await assertPublicHostname(url.hostname);
+  return fetch(url, {
+    headers: {
+      accept: "application/json",
+      ...(etag ? { "if-none-match": etag } : {}),
+    },
+    redirect: "manual",
+    signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+  });
+}
+
+function isRedirect(status: number): boolean {
+  return [301, 302, 303, 307, 308].includes(status);
 }
 
 export function isClientMetadataUrl(value: string): boolean {
@@ -327,7 +412,9 @@ function metadataExpiry(cacheControl: string | null): Date {
   return new Date(Date.now() + seconds * 1_000);
 }
 
-async function limitedJson(response: Response): Promise<unknown> {
+async function limitedJson(
+  response: Response,
+): Promise<{ value: unknown; bytes: number }> {
   const length = Number(response.headers.get("content-length") ?? 0);
   if (length > MAX_METADATA_BYTES) {
     throw new BadRequestException("OAuth client metadata is invalid.");
@@ -348,7 +435,10 @@ async function limitedJson(response: Response): Promise<unknown> {
     chunks.push(value);
   }
   try {
-    return JSON.parse(new TextDecoder().decode(concat(chunks, total)));
+    return {
+      value: JSON.parse(new TextDecoder().decode(concat(chunks, total))),
+      bytes: total,
+    };
   } catch {
     throw new BadRequestException("OAuth client metadata is invalid.");
   }
