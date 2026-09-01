@@ -130,7 +130,39 @@ export interface ProviderMutationAdapter {
   mutateCampaign(
     context: ProviderReadContext,
     mutation: ProviderCampaignMutation,
-  ): Promise<{ externalObjectId: string }>;
+  ): Promise<{ externalObjectId: string; providerAccepted: boolean }>;
+}
+
+export type MetaControlledCampaignState = {
+  id: string;
+  accountId: string;
+  name: string;
+  status: string;
+  effectiveStatus: string | null;
+  objective: string | null;
+  dailyBudget: string | null;
+  lifetimeBudget: string | null;
+  buyingType: string | null;
+  startTime: string | null;
+  stopTime: string | null;
+};
+
+/** A direct Graph read used to verify the single App Review mutation. */
+export interface MetaControlledCampaignReadAdapter {
+  readControlledCampaign(
+    context: ProviderReadContext,
+    campaignId: string,
+  ): Promise<MetaControlledCampaignState>;
+}
+
+export function isMetaControlledCampaignReadAdapter(
+  value: unknown,
+): value is ProviderOAuthAdapter & MetaControlledCampaignReadAdapter {
+  return Boolean(
+    value &&
+    typeof (value as MetaControlledCampaignReadAdapter)
+      .readControlledCampaign === "function",
+  );
 }
 
 export function isProviderMutationAdapter(

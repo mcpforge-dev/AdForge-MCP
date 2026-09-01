@@ -66,6 +66,13 @@ const rawConfigSchema = z.object({
   V2_WRITE_ACCOUNT_ALLOWLIST: z.string().default(""),
   V2_WRITE_OBJECT_ALLOWLIST: z.string().default(""),
   V2_WRITE_OPERATION_ALLOWLIST: z.string().default(""),
+  // Deliberately narrower than the legacy confirmed-write allowlists. This is
+  // an opt-in, one-resource policy used solely for a Meta App Review demo.
+  V2_META_APP_REVIEW_RENAME_ENABLED: booleanFromEnv.default(false),
+  V2_META_APP_REVIEW_RENAME_ACCOUNT_ID: z.string().default(""),
+  V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: z.string().default(""),
+  V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: z.string().default(""),
+  V2_META_APP_REVIEW_RENAME_TARGET_NAME: z.string().default(""),
   PROVIDER_TIKTOK_CLIENT_ID: z.string().optional(),
   PROVIDER_TIKTOK_CLIENT_SECRET: z.string().optional(),
   PROVIDER_TIKTOK_REDIRECT_URI: z.string().url().optional(),
@@ -181,6 +188,11 @@ export type AppConfig = {
   writeAccountAllowlist: string[];
   writeObjectAllowlist: string[];
   writeOperationAllowlist: string[];
+  metaAppReviewRenameEnabled: boolean;
+  metaAppReviewRenameAccountId: string;
+  metaAppReviewRenameCampaignId: string;
+  metaAppReviewRenameExpectedName: string;
+  metaAppReviewRenameTargetName: string;
   providerTikTokClientId: string | undefined;
   providerTikTokClientSecret: string | undefined;
   providerTikTokRedirectUri: string | undefined;
@@ -410,6 +422,15 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     writeOperationAllowlist: value.V2_WRITE_OPERATION_ALLOWLIST.split(",")
       .map((item) => item.trim())
       .filter(Boolean),
+    metaAppReviewRenameEnabled: value.V2_META_APP_REVIEW_RENAME_ENABLED,
+    metaAppReviewRenameAccountId:
+      value.V2_META_APP_REVIEW_RENAME_ACCOUNT_ID.trim(),
+    metaAppReviewRenameCampaignId:
+      value.V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID.trim(),
+    metaAppReviewRenameExpectedName:
+      value.V2_META_APP_REVIEW_RENAME_EXPECTED_NAME.trim(),
+    metaAppReviewRenameTargetName:
+      value.V2_META_APP_REVIEW_RENAME_TARGET_NAME.trim(),
     providerTikTokClientId: value.PROVIDER_TIKTOK_CLIENT_ID,
     providerTikTokClientSecret: value.PROVIDER_TIKTOK_CLIENT_SECRET,
     providerTikTokRedirectUri: value.PROVIDER_TIKTOK_REDIRECT_URI,

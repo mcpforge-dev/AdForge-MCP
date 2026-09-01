@@ -21,6 +21,8 @@ import {
 } from "../provider-normalization.js";
 import type {
   MetaBusiness,
+  MetaControlledCampaignReadAdapter,
+  MetaControlledCampaignState,
   MetaPage,
   NormalizedProviderAccount,
   OAuthExchangeContext,
@@ -62,7 +64,11 @@ export const metaAdsDefinition = (
 type MetaResponse = Record<string, unknown>;
 
 export class MetaAdsAdapter
-  implements ProviderOAuthAdapter, ProviderReadAdapter, ProviderMutationAdapter
+  implements
+    ProviderOAuthAdapter,
+    ProviderReadAdapter,
+    ProviderMutationAdapter,
+    MetaControlledCampaignReadAdapter
 {
   public readonly definition: ProviderDefinition;
   private readonly config: AppConfig;
@@ -361,7 +367,7 @@ export class MetaAdsAdapter
   public async mutateCampaign(
     context: ProviderReadContext,
     mutation: ProviderCampaignMutation,
-  ): Promise<{ externalObjectId: string }> {
+  ): Promise<{ externalObjectId: string; providerAccepted: boolean }> {
     if (!context.credentials.scopes.includes("ads_management"))
       throw new ProviderError(
         "insufficient_permissions",
@@ -382,7 +388,7 @@ export class MetaAdsAdapter
     } else {
       body.set("status", mutation.operation === "pause" ? "PAUSED" : "ACTIVE");
     }
-    await providerJson<MetaResponse>(
+    const response = await providerJson<MetaResponse>(
       this.graphUrl(objectId, {}),
       {
         method: "POST",
@@ -391,7 +397,59 @@ export class MetaAdsAdapter
       },
       this.config.providerHttpTimeoutMs,
     );
-    return { externalObjectId: objectId };
+    if (response.success !== true)
+      throw new ProviderError(
+        "provider_response_invalid",
+        "Meta did not confirm the campaign rename.",
+      );
+    return { externalObjectId: objectId, providerAccepted: true };
+  }
+
+  public async readControlledCampaign(
+    context: ProviderReadContext,
+    campaignId: string,
+  ): Promise<MetaControlledCampaignState> {
+    const id = assertExternalId(campaignId, "campaign id");
+    const row = await this.get(
+      this.graphUrl(id, {
+        fields:
+          "id,account_id,name,status,effective_status,objective,daily_budget,lifetime_budget,buying_type,start_time,stop_time",
+        access_token: context.credentials.accessToken,
+      }),
+    );
+    const accountId = metaAccountPath(
+      String(row.account_id ?? row.accountId ?? ""),
+    );
+    if (
+      id !== String(row.id ?? "") ||
+      accountId !== metaAccountPath(context.accountId)
+    )
+      throw new ProviderError(
+        "invalid_account",
+        "Campaign does not belong to the selected Meta ad account.",
+      );
+    const name = String(row.name ?? "").trim();
+    const status = String(row.status ?? "").trim();
+    if (!name || !status)
+      throw new ProviderError(
+        "provider_response_invalid",
+        "Meta did not return the campaign state required for verification.",
+      );
+    return {
+      id,
+      accountId,
+      name,
+      status,
+      effectiveStatus: optionalString(
+        row.effective_status ?? row.effectiveStatus,
+      ),
+      objective: optionalString(row.objective),
+      dailyBudget: optionalString(row.daily_budget ?? row.dailyBudget),
+      lifetimeBudget: optionalString(row.lifetime_budget ?? row.lifetimeBudget),
+      buyingType: optionalString(row.buying_type ?? row.buyingType),
+      startTime: optionalString(row.start_time ?? row.startTime),
+      stopTime: optionalString(row.stop_time ?? row.stopTime),
+    };
   }
 
   public async listBusinesses(

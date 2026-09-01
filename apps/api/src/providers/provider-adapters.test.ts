@@ -188,6 +188,36 @@ describe("Meta Ads v2 adapter", () => {
     expect(url).not.toContain("user-token");
     expect(String(init.body)).toContain("name=Review+test");
     expect(String(init.body)).toContain("access_token=user-token");
+    expect(String(init.body)).not.toContain("status=");
+  });
+
+  it("reads an exact campaign directly from Meta for controlled verification", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: "120251139085310324",
+        account_id: "1423247033195473",
+        name: "hm_saqta_traffic_inst",
+        status: "PAUSED",
+        effective_status: "PAUSED",
+        objective: "OUTCOME_TRAFFIC",
+        buying_type: "AUCTION",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new MetaAdsAdapter(config);
+    await expect(
+      adapter.readControlledCampaign(
+        {
+          credentials: { accessToken: "user-token", scopes: ["ads_read"] },
+          accountId: "act_1423247033195473",
+        },
+        "120251139085310324",
+      ),
+    ).resolves.toMatchObject({
+      accountId: "act_1423247033195473",
+      name: "hm_saqta_traffic_inst",
+      status: "PAUSED",
+    });
   });
 
   it("rejects mutation without ads_management", async () => {

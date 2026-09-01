@@ -81,6 +81,23 @@ describe("v2 configuration", () => {
     expect(config.writeOperationAllowlist).toEqual(["change_name"]);
   });
 
+  it("keeps the Meta App Review rename policy disabled unless explicitly configured", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      V2_META_APP_REVIEW_RENAME_ENABLED: "true",
+      V2_META_APP_REVIEW_RENAME_ACCOUNT_ID: "act_1423247033195473",
+      V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: "120251139085310324",
+      V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: "hm_saqta_traffic_inst",
+      V2_META_APP_REVIEW_RENAME_TARGET_NAME: "hm_saqta_traffic_inst_rename",
+    });
+    expect(config).toMatchObject({
+      metaAppReviewRenameEnabled: true,
+      metaAppReviewRenameAccountId: "act_1423247033195473",
+      metaAppReviewRenameCampaignId: "120251139085310324",
+      metaAppReviewRenameTargetName: "hm_saqta_traffic_inst_rename",
+    });
+  });
+
   it("enforces strict configuration for production-like environments", () => {
     expect(() =>
       loadConfig({

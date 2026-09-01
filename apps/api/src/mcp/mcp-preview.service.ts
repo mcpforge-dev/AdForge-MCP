@@ -6,6 +6,11 @@ import { AuditService } from "../audit/audit.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
 import { ProviderService } from "../providers/provider.service.js";
+import {
+  evaluateMetaAppReviewPrecondition,
+  evaluateMetaAppReviewRenamePolicy,
+  invariantChanges,
+} from "./meta-app-review-write.policy.js";
 
 const READ_SCOPE = "adforge:mcp:read";
 const WRITE_SCOPE = "adforge:mcp:write";
@@ -145,7 +150,18 @@ export class McpPreviewService {
       );
 
     const account = await this.account(principal, preview.accountId);
-    const policyReason = this.commitPolicyReason(preview, account);
+    const payload = payloadRecord(preview.payload);
+    const appReviewPolicy = evaluateMetaAppReviewRenamePolicy(
+      this.config,
+      preview,
+      account,
+    );
+    const policyReason =
+      appReviewPolicy.kind === "allowed"
+        ? null
+        : appReviewPolicy.kind === "blocked"
+          ? appReviewPolicy.reason
+          : this.commitPolicyReason(preview, account);
     const consumed = await this.database.client.mcpPreview.updateMany({
       where: { id: preview.id, consumedAt: null },
       data: { consumedAt: new Date() },
@@ -160,7 +176,16 @@ export class McpPreviewService {
         targetType: "mcp_preview",
         targetId: preview.id,
         success: false,
-        metadata: { reason: policyReason },
+        metadata: {
+          reason: policyReason,
+          provider: preview.provider,
+          accountId: account.externalAccountId,
+          campaignId: preview.externalObjectId,
+          operation: preview.operation,
+          requestedName:
+            typeof payload.new_name === "string" ? payload.new_name : null,
+          serviceTokenId: principal.tokenId,
+        },
       });
       return {
         status: "blocked",
@@ -170,16 +195,19 @@ export class McpPreviewService {
         provider_write_enabled: false,
         reread: null,
         message:
-          "HolyMedia MCP работает в режиме чтения и не изменяет рекламные кампании.",
+          appReviewPolicy.kind === "blocked"
+            ? appReviewPolicy.message
+            : "HolyMedia MCP работает в режиме чтения и не изменяет рекламные кампании.",
       };
     }
     try {
-      const payload =
-        preview.payload &&
-        typeof preview.payload === "object" &&
-        !Array.isArray(preview.payload)
-          ? (preview.payload as Record<string, unknown>)
-          : {};
+      if (appReviewPolicy.kind === "allowed")
+        return this.commitMetaAppReviewRename(
+          principal,
+          preview,
+          account,
+          payload,
+        );
       const committed = await this.providers.mutateCampaign(
         principal.workspaceId,
         account.connectionId,
@@ -239,6 +267,134 @@ export class McpPreviewService {
     if (!["change_name", "pause", "resume"].includes(preview.operation))
       return "operation_not_supported";
     return null;
+  }
+
+  private async commitMetaAppReviewRename(
+    principal: ServiceTokenPrincipal,
+    preview: {
+      id: string;
+      provider: string;
+      operation: string;
+      externalObjectId: string;
+    },
+    account: { id: string; connectionId: string; externalAccountId: string },
+    payload: Record<string, unknown>,
+  ) {
+    const before = await this.providers.readMetaControlledCampaign(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      preview.externalObjectId,
+    );
+    const precondition = evaluateMetaAppReviewPrecondition(this.config, before);
+    const metadata = {
+      provider: "META_ADS",
+      accountId: account.externalAccountId,
+      campaignId: preview.externalObjectId,
+      operation: "change_name",
+      previousName: before.name,
+      requestedName: String(payload.new_name ?? ""),
+      campaignStatus: before.status,
+      serviceTokenId: principal.tokenId,
+    };
+    if (precondition.kind === "blocked") {
+      await this.audit.record({
+        eventType: "meta_app_review_rename_blocked",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        success: false,
+        metadata: { ...metadata, reason: precondition.reason },
+      });
+      return {
+        status: "blocked",
+        execution_mode: "simulated_no_write",
+        provider_write_enabled: false,
+        reread: null,
+        message: precondition.message,
+      };
+    }
+    if (before.name === this.config.metaAppReviewRenameTargetName) {
+      await this.audit.record({
+        eventType: "meta_app_review_rename_already_applied",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        metadata,
+      });
+      return {
+        status: "already_applied",
+        execution_mode: "no_write_current_state",
+        provider_write_enabled: false,
+        reread: before,
+        message:
+          "Кампания уже имеет запрошенное название; изменение не выполнялось.",
+      };
+    }
+    await this.audit.record({
+      eventType: "meta_app_review_rename_prechecked",
+      actorType: "SERVICE",
+      workspaceId: principal.workspaceId,
+      targetType: "mcp_preview",
+      targetId: preview.id,
+      metadata,
+    });
+    const mutation = await this.providers.mutateCampaign(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      preview.externalObjectId,
+      "change_name",
+      { new_name: this.config.metaAppReviewRenameTargetName },
+    );
+    const after = await this.providers.readMetaControlledCampaign(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      preview.externalObjectId,
+    );
+    const changedFields = invariantChanges(before, after);
+    const verified =
+      after.name === this.config.metaAppReviewRenameTargetName &&
+      after.status === "PAUSED" &&
+      changedFields.length === 0;
+    await this.audit.record({
+      eventType: verified
+        ? "meta_app_review_rename_completed"
+        : "meta_app_review_rename_verification_failed",
+      actorType: "SERVICE",
+      workspaceId: principal.workspaceId,
+      targetType: "mcp_preview",
+      targetId: preview.id,
+      success: verified,
+      metadata: {
+        ...metadata,
+        metaMutationAccepted: mutation.result.providerAccepted,
+        postWriteName: after.name,
+        postWriteStatus: after.status,
+        invariantChangedFields: changedFields.join(","),
+        postWriteVerified: verified,
+      },
+    });
+    if (!verified)
+      return {
+        status: "verification_failed",
+        execution_mode: "confirmed_write",
+        provider_write_enabled: true,
+        reread: after,
+        message:
+          "Название отправлено в Meta, но проверка состояния кампании не прошла. Другие поля не изменялись HolyMedia MCP.",
+      };
+    return {
+      status: "committed",
+      execution_mode: "confirmed_write",
+      provider_write_enabled: true,
+      reread: after,
+      message:
+        "Название кампании изменено и подтверждено повторным чтением из Meta.",
+    };
   }
 
   private async account(principal: ServiceTokenPrincipal, accountId: string) {
@@ -356,4 +512,10 @@ export class McpPreviewService {
 
 function digest(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function payloadRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }

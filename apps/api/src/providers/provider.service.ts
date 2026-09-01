@@ -29,6 +29,7 @@ import { ProviderMetricsService } from "./provider.metrics.js";
 import { createLogger, type Logger } from "@holymedia/observability";
 import type {
   MetaReadAdapter,
+  MetaControlledCampaignState,
   NormalizedProviderAccount,
   ProviderCredentialPayload,
   ProviderScopeMetadata,
@@ -38,6 +39,7 @@ import type {
 import {
   isProviderMutationAdapter,
   isProviderReadAdapter,
+  isMetaControlledCampaignReadAdapter,
 } from "./provider.types.js";
 
 @Injectable()
@@ -776,6 +778,25 @@ export class ProviderService {
       result,
       reread: reread.items.find((campaign) => campaign.id === objectId) ?? null,
     };
+  }
+
+  public async readMetaControlledCampaign(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    campaignId: string,
+  ): Promise<MetaControlledCampaignState> {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    if (!isMetaControlledCampaignReadAdapter(context.adapter))
+      throw new ProviderError(
+        "provider_not_configured",
+        "Direct Meta campaign verification is not configured.",
+      );
+    return context.adapter.readControlledCampaign(context.read, campaignId);
   }
 
   public async metaBusinesses(workspaceId: string, connectionId: string) {

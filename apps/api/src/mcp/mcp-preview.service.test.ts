@@ -138,6 +138,112 @@ describe("MCP preview lifecycle", () => {
       setOptionalEnv("V2_WRITE_OPERATION_ALLOWLIST", previous.operations);
     }
   });
+
+  it("performs only the controlled Meta App Review rename after a PAUSED pre-read", async () => {
+    const names = [
+      "V2_META_APP_REVIEW_RENAME_ENABLED",
+      "V2_META_APP_REVIEW_RENAME_ACCOUNT_ID",
+      "V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID",
+      "V2_META_APP_REVIEW_RENAME_EXPECTED_NAME",
+      "V2_META_APP_REVIEW_RENAME_TARGET_NAME",
+    ] as const;
+    const previous = Object.fromEntries(
+      names.map((name) => [name, process.env[name]]),
+    );
+    Object.assign(process.env, {
+      V2_META_APP_REVIEW_RENAME_ENABLED: "true",
+      V2_META_APP_REVIEW_RENAME_ACCOUNT_ID: "act_1423247033195473",
+      V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: "120251139085310324",
+      V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: "hm_saqta_traffic_inst",
+      V2_META_APP_REVIEW_RENAME_TARGET_NAME: "hm_saqta_traffic_inst_rename",
+    });
+    const preview = {
+      id: "preview-review",
+      consumedAt: null as Date | null,
+      confirmedAt: new Date(),
+      expiresAt: new Date(Date.now() + 60_000),
+      operation: "change_name",
+      provider: "META_ADS",
+      accountId: "account-a",
+      externalObjectId: "120251139085310324",
+      payload: { new_name: "hm_saqta_traffic_inst_rename" },
+    };
+    const records: Array<Record<string, unknown>> = [];
+    const before = {
+      id: preview.externalObjectId,
+      accountId: "act_1423247033195473",
+      name: "hm_saqta_traffic_inst",
+      status: "PAUSED",
+      effectiveStatus: "PAUSED",
+      objective: "OUTCOME_TRAFFIC",
+      dailyBudget: null,
+      lifetimeBudget: null,
+      buyingType: "AUCTION",
+      startTime: null,
+      stopTime: null,
+    };
+    const mutateCampaign = async (...args: unknown[]) => {
+      expect(args.slice(3)).toEqual([
+        preview.externalObjectId,
+        "change_name",
+        { new_name: "hm_saqta_traffic_inst_rename" },
+      ]);
+      return { result: { providerAccepted: true }, reread: null };
+    };
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-a",
+            externalAccountId: "act_1423247033195473",
+            provider: "META_ADS",
+            connectionId: "connection-a",
+          }),
+        },
+        mcpPreview: {
+          findFirst: async () => preview,
+          updateMany: async () => ({ count: 1 }),
+        },
+      },
+    } as never;
+    const providers = {
+      mutateCampaign,
+      readMetaControlledCampaign: async () =>
+        records.some(
+          (record) => record.eventType === "meta_app_review_rename_prechecked",
+        )
+          ? { ...before, name: "hm_saqta_traffic_inst_rename" }
+          : before,
+    } as never;
+    const audit = {
+      record: async (record: Record<string, unknown>) => records.push(record),
+    } as never;
+    try {
+      const service = new McpPreviewService(database, audit, providers);
+      await expect(
+        service.commit(
+          {
+            kind: "service",
+            tokenId: "token-a",
+            serviceIdentityId: "identity-a",
+            workspaceId: "workspace-a",
+            scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+            accountIds: ["account-a"],
+          },
+          "hmpp_123456789012345678901234567892",
+        ),
+      ).resolves.toMatchObject({
+        status: "committed",
+        reread: { name: "hm_saqta_traffic_inst_rename", status: "PAUSED" },
+      });
+      expect(records.map((record) => record.eventType)).toEqual([
+        "meta_app_review_rename_prechecked",
+        "meta_app_review_rename_completed",
+      ]);
+    } finally {
+      for (const name of names) setOptionalEnv(name, previous[name]);
+    }
+  });
 });
 
 function setOptionalEnv(name: string, value: string | undefined) {
