@@ -100,7 +100,17 @@ export class McpPreviewService {
         accountRestricted: principal.accountIds.length > 0,
       },
     });
-    const policyReason = this.commitPolicyReason(preview, account);
+    const appReviewPolicy = evaluateMetaAppReviewRenamePolicy(
+      this.config,
+      preview,
+      account,
+    );
+    const policyReason =
+      appReviewPolicy.kind === "allowed"
+        ? null
+        : appReviewPolicy.kind === "blocked"
+          ? appReviewPolicy.reason
+          : this.commitPolicyReason(preview, account);
     const confirmedWriteAvailable =
       principal.scopes.includes(WRITE_SCOPE) && !policyReason;
     const providerRequest = this.providerRequest(
@@ -415,6 +425,30 @@ export class McpPreviewService {
       message:
         "Название кампании изменено и подтверждено повторным чтением из Meta.",
     };
+  }
+
+  private providerRequest(input: PreviewInput, objectId: string) {
+    if (input.provider === "META_ADS" && input.operation === "change_name") {
+      const name =
+        typeof input.payload.new_name === "string"
+          ? input.payload.new_name.trim()
+          : "";
+      return {
+        http_method: "POST",
+        endpoint: `/${objectId}`,
+        body: { name },
+      };
+    }
+    return null;
+  }
+
+  private writeReadiness(
+    principal: ServiceTokenPrincipal,
+    policyReason: string | null,
+  ): string {
+    if (!principal.scopes.includes(WRITE_SCOPE))
+      return "service_token_write_scope_required";
+    return policyReason ?? "provider_permission_check_required";
   }
 
   private async account(principal: ServiceTokenPrincipal, accountId: string) {

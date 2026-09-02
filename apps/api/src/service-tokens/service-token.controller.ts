@@ -23,6 +23,7 @@ import {
   CreateServiceTokenDto,
   RotateServiceTokenDto,
   UpdateServiceTokenDto,
+  UpdateServiceTokenScopesDto,
 } from "./service-token.dto.js";
 import { ServiceTokenService } from "./service-token.service.js";
 

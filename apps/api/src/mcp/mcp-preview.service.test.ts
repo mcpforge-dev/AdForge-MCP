@@ -2,6 +2,84 @@ import { describe, expect, it } from "vitest";
 import { McpPreviewService } from "./mcp-preview.service.js";
 
 describe("MCP preview lifecycle", () => {
+  it("marks the exact Meta App Review rename ready for confirmation", async () => {
+    const names = [
+      "V2_META_APP_REVIEW_RENAME_ENABLED",
+      "V2_META_APP_REVIEW_RENAME_ACCOUNT_ID",
+      "V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID",
+      "V2_META_APP_REVIEW_RENAME_EXPECTED_NAME",
+      "V2_META_APP_REVIEW_RENAME_TARGET_NAME",
+    ] as const;
+    const previous = Object.fromEntries(
+      names.map((name) => [name, process.env[name]]),
+    );
+    Object.assign(process.env, {
+      V2_META_APP_REVIEW_RENAME_ENABLED: "true",
+      V2_META_APP_REVIEW_RENAME_ACCOUNT_ID: "act_1423247033195473",
+      V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: "120251139085310324",
+      V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: "hm_saqta_traffic_inst",
+      V2_META_APP_REVIEW_RENAME_TARGET_NAME: "hm_saqta_traffic_inst_rename",
+    });
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-a",
+            externalAccountId: "act_1423247033195473",
+            provider: "META_ADS",
+            connectionId: "connection-a",
+          }),
+        },
+        mcpPreview: {
+          create: async () => ({
+            id: "preview-review",
+            provider: "META_ADS",
+            externalObjectId: "120251139085310324",
+            operation: "change_name",
+            payload: { new_name: "hm_saqta_traffic_inst_rename" },
+          }),
+        },
+      },
+    } as never;
+    try {
+      const service = new McpPreviewService(
+        database,
+        { record: async () => undefined } as never,
+        {} as never,
+      );
+      await expect(
+        service.create(
+          {
+            kind: "service",
+            tokenId: "token-a",
+            serviceIdentityId: "identity-a",
+            workspaceId: "workspace-a",
+            scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+            accountIds: ["account-a"],
+          },
+          {
+            provider: "META_ADS",
+            accountId: "act_1423247033195473",
+            objectId: "120251139085310324",
+            operation: "change_name",
+            payload: { new_name: "hm_saqta_traffic_inst_rename" },
+          },
+        ),
+      ).resolves.toMatchObject({
+        mode: "preview_confirm",
+        app_review_commit_available: true,
+        commit_tool: "commit_meta_confirmed_write",
+        provider_request: {
+          http_method: "POST",
+          endpoint: "/120251139085310324",
+          body: { name: "hm_saqta_traffic_inst_rename" },
+        },
+      });
+    } finally {
+      for (const name of names) setOptionalEnv(name, previous[name]);
+    }
+  });
+
   it("uses an external provider account identifier without querying the UUID column", async () => {
     let where: unknown;
     const database = {

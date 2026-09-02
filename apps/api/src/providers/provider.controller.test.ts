@@ -116,9 +116,9 @@ describe("provider OAuth callback UX", () => {
       "tiktok",
       validState,
       undefined,
+      "tiktok-auth-code",
       request,
       reply as never,
-      "tiktok-auth-code",
     );
 
     expect(providers.completeOAuthCallback).toHaveBeenCalledWith(
@@ -135,9 +135,9 @@ describe("provider OAuth callback UX", () => {
       "meta",
       validState,
       undefined,
+      undefined as never,
       request,
       reply as never,
-      undefined,
       "access_denied",
     );
 

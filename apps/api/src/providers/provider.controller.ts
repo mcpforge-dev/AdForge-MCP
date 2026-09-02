@@ -70,11 +70,10 @@ export class ProviderController {
   public async callback(
     @Param("provider") provider: string,
     @Query("state") state: string,
-    @Query("code") code: string,
-    @Query("auth_code") authCode: string,
+    @Query("code") code: string | undefined,
+    @Query("auth_code") authCode: string | undefined,
     @Req() request: RequestWithAuth,
     @Res() reply: FastifyReply,
-    @Query("auth_code") authCode?: string,
     @Query("error") oauthError?: string,
   ) {
     const providerId = this.provider(provider);
@@ -82,12 +81,19 @@ export class ProviderController {
     // OAuth providers use code. Keep both public callback shapes compatible.
     const authorizationCode =
       providerId === "TIKTOK_ADS" ? authCode || code : code;
-    const redirect = (outcome: "success" | "error") =>
+    const redirect = (outcome: "success" | "error", reason?: string) =>
       reply
         .code(302)
         .redirect(
-          `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}`,
+          `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}${reason ? `&oauth_reason=${encodeURIComponent(reason)}` : ""}`,
         );
+    if (oauthError)
+      return redirect(
+        "error",
+        oauthError === "access_denied"
+          ? "authorization_denied"
+          : "oauth_denied",
+      );
     if (
       typeof state !== "string" ||
       state.length < 32 ||
@@ -200,25 +206,6 @@ export class ProviderController {
       id,
       accountId,
       input.enabled,
-      principal,
-      request,
-    );
-  }
-
-  @Patch("workspaces/:id/connections/:connectionId/accounts")
-  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
-  @RequirePermissions("provider_accounts.manage")
-  public selectAccounts(
-    @Param("id") id: string,
-    @Param("connectionId") connectionId: string,
-    @Body() input: AccountSelectionBulkDto,
-    @CurrentPrincipal() principal: HumanPrincipal,
-    @Req() request: RequestWithAuth,
-  ) {
-    return this.providers.setAccountsEnabled(
-      id,
-      connectionId,
-      input.enabledAccountIds,
       principal,
       request,
     );

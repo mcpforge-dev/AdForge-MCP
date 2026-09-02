@@ -261,6 +261,41 @@ function providerCopy(provider: string) {
   );
 }
 
+function oauthFailureMessage(provider: string | null, reason: string | null) {
+  const name = providerCopy(provider ?? "").name;
+  if (reason === "insufficient_permissions") {
+    if (provider === "META_ADS")
+      return "Meta не выдала нужные разрешения. Проверьте права приложения и доступ пользователя.";
+    if (provider === "TIKTOK_ADS")
+      return "TikTok не выдал запрошенные разрешения. Проверьте одобрение приложения и права пользователя.";
+    return `${name} не выдала запрошенные разрешения. Проверьте настройки приложения и права пользователя.`;
+  }
+  if (reason === "authorization_denied")
+    return `Авторизация ${name} отменена. Разрешите доступ и попробуйте ещё раз.`;
+  if (reason === "provider_not_configured")
+    return `${name} пока не настроена на сервере. Обратитесь к оператору.`;
+  if (reason === "invalid_callback")
+    return `${name} вернула неполный ответ авторизации. Запустите подключение заново.`;
+  if (reason === "authentication_failed")
+    return `${name} не подтвердила авторизацию. Проверьте аккаунт и повторите вход.`;
+  return `Подключение ${name} не завершено. Проверьте настройки приложения и попробуйте ещё раз.`;
+}
+
+async function responseErrorMessage(
+  response: Response,
+  fallback: string,
+): Promise<string> {
+  try {
+    const payload = (await response.json()) as {
+      error?: { message?: string };
+      message?: string;
+    };
+    return payload.error?.message || payload.message || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 function connectionStatus(status: string) {
   if (status === "CONNECTED") return { label: "Подключено", tone: "ok" };
   if (status === "DEGRADED") return { label: "Нужно проверить", tone: "warn" };
@@ -698,7 +733,7 @@ export default function DashboardPage() {
       setHighlightedProvider(
         oauthProviderAliases[oauthProvider] ?? oauthProvider,
       );
-    setStartingProvider(null);
+    setOauthPendingProvider(null);
     setBusy(false);
     if (query.get("oauth") === "success")
       notify(
@@ -1948,6 +1983,28 @@ export default function DashboardPage() {
                                     </button>
                                     {!token.revokedAt && (
                                       <>
+                                        {!isExpired &&
+                                          !token.scopes.includes(
+                                            "adforge:mcp:write",
+                                          ) && (
+                                            <button
+                                              className="token-action"
+                                              type="button"
+                                              disabled={actionPending}
+                                              onClick={() =>
+                                                setConfirm({
+                                                  title: `Разрешить подтверждённую запись для «${displayName}»?`,
+                                                  description:
+                                                    "Значение ключа не изменится. Сервер разрешит только allowlisted Meta-операцию после отдельного подтверждения.",
+                                                  confirmLabel: "Разрешить",
+                                                  run: () =>
+                                                    grantConfirmedWrite(token),
+                                                })
+                                              }
+                                            >
+                                              Разрешить запись
+                                            </button>
+                                          )}
                                         {!isExpired && (
                                           <button
                                             className="token-action"

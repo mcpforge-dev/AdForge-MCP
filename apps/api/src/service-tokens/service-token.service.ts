@@ -12,6 +12,7 @@ import type {
   CreateServiceTokenDto,
   RotateServiceTokenDto,
   UpdateServiceTokenDto,
+  UpdateServiceTokenScopesDto,
 } from "./service-token.dto.js";
 
 const READ_SCOPE = "adforge:mcp:read";
