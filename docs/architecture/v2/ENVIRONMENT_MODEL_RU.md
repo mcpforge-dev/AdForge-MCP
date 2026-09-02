@@ -34,3 +34,5 @@ V2_WRITE_OPERATION_ALLOWLIST=
 - после commit provider adapter повторно читает campaign и сохраняет audit event.
 
 Allowlist принимает внутренний ProviderAccount ID либо внешний Meta account ID. Object allowlist принимает только campaign ID. Пустой allowlist всегда запрещает commit. Эти параметры нельзя включать глобально для всех аккаунтов и объектов.
+
+Владелец workspace может выдать уже существующему service token scope `adforge:mcp:write` без смены значения ключа. Это разрешено только ключу, который уже ограничен ровно одним рекламным кабинетом; действие пишется в audit log. Изменение scope само по себе не снимает ни один из остальных server-side барьеров выше.

@@ -58,16 +58,16 @@ AD_MCP_PREVIEW_ONLY=true
 
 ## Безопасная App Review демонстрация
 
-Текущий Live-объект для записи:
+Live-объект для записи задаётся только через server allowlist:
 
 ```text
-Ad account: act_1423247033195473
-Campaign ID: 120251175391620324
-Target name: hm_saqta_traffic_site_review_test
+Ad account: review account from V2_WRITE_ACCOUNT_ALLOWLIST
+Campaign ID: review campaign from V2_WRITE_OBJECT_ALLOWLIST
+Target name: approved review name
 Required current status: PAUSED
 ```
 
-В Live env разрешаются только этот account ID, этот campaign ID и операция `change_name`. Значения являются идентификаторами review-объектов, а не credentials; access token, app secret и preview token в документацию не записываются.
+В Live env разрешаются только назначенные для review account ID, campaign ID и операция `change_name`. Актуальные значения подтверждаются перед записью и не фиксируются в Git: это исключает случайное применение сценария к устаревшей кампании. Access token, app secret и preview token в документацию не записываются.
 
 Используйте отдельную PAUSED test campaign и тестовый adset. Первый ролик должен показывать низкорисковое переименование:
 

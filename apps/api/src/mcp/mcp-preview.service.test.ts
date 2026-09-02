@@ -138,6 +138,82 @@ describe("MCP preview lifecycle", () => {
       setOptionalEnv("V2_WRITE_OPERATION_ALLOWLIST", previous.operations);
     }
   });
+
+  it("shows a name-only Meta request when a confirmed write is ready", async () => {
+    const previous = {
+      preview: process.env.V2_PREVIEW_ONLY,
+      enabled: process.env.V2_CONFIRMED_WRITE_ENABLED,
+      accounts: process.env.V2_WRITE_ACCOUNT_ALLOWLIST,
+      objects: process.env.V2_WRITE_OBJECT_ALLOWLIST,
+      operations: process.env.V2_WRITE_OPERATION_ALLOWLIST,
+    };
+    Object.assign(process.env, {
+      V2_PREVIEW_ONLY: "false",
+      V2_CONFIRMED_WRITE_ENABLED: "true",
+      V2_WRITE_ACCOUNT_ALLOWLIST: "act_1",
+      V2_WRITE_OBJECT_ALLOWLIST: "campaign-a",
+      V2_WRITE_OPERATION_ALLOWLIST: "change_name",
+    });
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-a",
+            externalAccountId: "act_1",
+            provider: "META_ADS",
+            connectionId: "connection-a",
+          }),
+        },
+        mcpPreview: {
+          create: async (input: { data: Record<string, unknown> }) => ({
+            id: "preview-c",
+            ...input.data,
+          }),
+        },
+      },
+    } as never;
+    try {
+      const service = new McpPreviewService(
+        database,
+        { record: async () => undefined } as never,
+        {} as never,
+      );
+      await expect(
+        service.create(
+          {
+            kind: "service",
+            tokenId: "token-a",
+            serviceIdentityId: "identity-a",
+            workspaceId: "workspace-a",
+            scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+            accountIds: ["account-a"],
+          },
+          {
+            provider: "META_ADS",
+            accountId: "act_1",
+            objectId: "campaign-a",
+            operation: "change_name",
+            payload: { new_name: "Review test" },
+          },
+        ),
+      ).resolves.toMatchObject({
+        mode: "preview_confirm",
+        commit_available_after_confirmation: true,
+        commit_tool: "commit_meta_confirmed_write",
+        provider_request: {
+          http_method: "POST",
+          endpoint: "/campaign-a",
+          body: { name: "Review test" },
+        },
+      });
+    } finally {
+      setOptionalEnv("V2_PREVIEW_ONLY", previous.preview);
+      setOptionalEnv("V2_CONFIRMED_WRITE_ENABLED", previous.enabled);
+      setOptionalEnv("V2_WRITE_ACCOUNT_ALLOWLIST", previous.accounts);
+      setOptionalEnv("V2_WRITE_OBJECT_ALLOWLIST", previous.objects);
+      setOptionalEnv("V2_WRITE_OPERATION_ALLOWLIST", previous.operations);
+    }
+  });
 });
 
 function setOptionalEnv(name: string, value: string | undefined) {

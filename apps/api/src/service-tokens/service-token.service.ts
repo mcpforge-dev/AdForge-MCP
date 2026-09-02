@@ -11,6 +11,7 @@ import { DatabaseService } from "../infrastructure/database.service.js";
 import type {
   CreateServiceTokenDto,
   RotateServiceTokenDto,
+  UpdateServiceTokenScopesDto,
 } from "./service-token.dto.js";
 
 const READ_SCOPE = "adforge:mcp:read";
@@ -211,6 +212,49 @@ export class ServiceTokenService {
       ...this.toView(rotated.replacement, rotated.serviceIdentityId),
       token: rawToken,
     };
+  }
+
+  public async updateScopes(
+    workspaceId: string,
+    tokenId: string,
+    input: UpdateServiceTokenScopesDto,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ) {
+    const token = await this.database.client.serviceToken.findFirst({
+      where: {
+        id: tokenId,
+        revokedAt: null,
+        serviceIdentity: { workspaceId },
+      },
+      include: { serviceIdentity: { select: { id: true } } },
+    });
+    if (!token) throw new NotFoundException("Service token not found.");
+
+    const scopes = normalizeScopes(input.scopes);
+    const accountIds = jsonStrings(token.accountIds);
+    if (scopes.includes(WRITE_SCOPE) && accountIds.length !== 1) {
+      throw new BadRequestException(
+        "Write scope requires a service token restricted to exactly one account.",
+      );
+    }
+    const updated = await this.database.client.serviceToken.update({
+      where: { id: token.id },
+      data: { scopes },
+    });
+    await this.audit.record({
+      eventType: "service_token_scopes_updated",
+      actorUserId: principal.userId,
+      workspaceId,
+      targetType: "service_token",
+      targetId: updated.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: {
+        scopes: scopes.join(","),
+        restrictedAccounts: accountIds.length,
+      },
+    });
+    return this.toView(updated, token.serviceIdentity.id);
   }
 
   public async authenticate(

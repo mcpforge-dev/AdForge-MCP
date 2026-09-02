@@ -5,6 +5,7 @@ import {
   Get,
   Inject,
   Param,
+  Patch,
   Post,
   Req,
   UseGuards,
@@ -21,6 +22,7 @@ import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.gua
 import {
   CreateServiceTokenDto,
   RotateServiceTokenDto,
+  UpdateServiceTokenScopesDto,
 } from "./service-token.dto.js";
 import { ServiceTokenService } from "./service-token.service.js";
 
@@ -73,5 +75,18 @@ export class ServiceTokenController {
     @Req() request: RequestWithAuth,
   ) {
     return this.tokens.rotate(id, tokenId, input, principal, request);
+  }
+
+  @Patch(":id/service-tokens/:tokenId/scopes")
+  @UseGuards(WorkspaceAuthorizationGuard)
+  @RequirePermissions("mcp.tokens.manage")
+  public updateScopes(
+    @Param("id") id: string,
+    @Param("tokenId") tokenId: string,
+    @Body() input: UpdateServiceTokenScopesDto,
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.tokens.updateScopes(id, tokenId, input, principal, request);
   }
 }

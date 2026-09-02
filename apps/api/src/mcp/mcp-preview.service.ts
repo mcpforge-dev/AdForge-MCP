@@ -95,8 +95,16 @@ export class McpPreviewService {
         accountRestricted: principal.accountIds.length > 0,
       },
     });
+    const policyReason = this.commitPolicyReason(preview, account);
+    const confirmedWriteAvailable =
+      principal.scopes.includes(WRITE_SCOPE) && !policyReason;
+    const providerRequest = this.providerRequest(
+      input,
+      preview.externalObjectId,
+    );
     return {
       status: "preview",
+      mode: confirmedWriteAvailable ? "preview_confirm" : "preview_only",
       preview_token: previewToken,
       expires_at: expiresAt.toISOString(),
       provider: input.provider,
@@ -104,8 +112,20 @@ export class McpPreviewService {
       object_id: input.objectId.trim(),
       operation: input.operation,
       diff,
+      provider_request: providerRequest,
       risk_flags: ["explicit_confirmation_required", "server_side_policy"],
       execution_mode: "simulated_no_write",
+      confirmed_write_available: confirmedWriteAvailable,
+      app_review_commit_available: confirmedWriteAvailable,
+      commit_available_after_confirmation: confirmedWriteAvailable,
+      commit_tool: confirmedWriteAvailable
+        ? "commit_meta_confirmed_write"
+        : null,
+      required_oauth_permission:
+        input.provider === "META_ADS" ? "ads_management" : null,
+      write_readiness: confirmedWriteAvailable
+        ? "ready_after_explicit_confirmation"
+        : this.writeReadiness(principal, policyReason),
     };
   }
 
@@ -169,8 +189,8 @@ export class McpPreviewService {
         preview_only: this.config.previewOnly,
         provider_write_enabled: false,
         reread: null,
-        message:
-          "HolyMedia MCP работает в режиме чтения и не изменяет рекламные кампании.",
+        reason: policyReason,
+        message: this.policyMessage(policyReason),
       };
     }
     try {
@@ -239,6 +259,52 @@ export class McpPreviewService {
     if (!["change_name", "pause", "resume"].includes(preview.operation))
       return "operation_not_supported";
     return null;
+  }
+
+  private providerRequest(input: PreviewInput, objectId: string) {
+    if (input.provider === "META_ADS" && input.operation === "change_name") {
+      const name =
+        typeof input.payload.new_name === "string"
+          ? input.payload.new_name.trim()
+          : "";
+      return {
+        http_method: "POST",
+        endpoint: `/${objectId}`,
+        body: { name },
+      };
+    }
+    return null;
+  }
+
+  private writeReadiness(
+    principal: ServiceTokenPrincipal,
+    policyReason: string | null,
+  ): string {
+    if (!principal.scopes.includes(WRITE_SCOPE))
+      return "service_token_write_scope_required";
+    return policyReason ?? "provider_permission_check_required";
+  }
+
+  private policyMessage(reason: string) {
+    const messages: Record<string, string> = {
+      preview_only:
+        "Confirmed Meta writes are disabled while V2_PREVIEW_ONLY is enabled.",
+      confirmed_write_disabled:
+        "Confirmed Meta writes are not enabled for this environment.",
+      provider_write_unavailable:
+        "Confirmed writes are available only for Meta Ads.",
+      operation_not_allowlisted:
+        "This Meta operation is not allowlisted for confirmed writes.",
+      object_not_allowlisted:
+        "This campaign is not allowlisted for confirmed writes.",
+      account_not_allowlisted:
+        "This ad account is not allowlisted for confirmed writes.",
+      operation_not_supported:
+        "This Meta operation is not supported for confirmed writes.",
+    };
+    return (
+      messages[reason] ?? "Confirmed Meta write was blocked by server policy."
+    );
   }
 
   private async account(principal: ServiceTokenPrincipal, accountId: string) {

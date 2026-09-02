@@ -712,6 +712,40 @@ export default function DashboardPage() {
     notify("Новый ключ готов. Сохраните его сейчас.");
   }
 
+  async function grantConfirmedWrite(token: ServiceToken) {
+    if (!active) return;
+    if (token.accountIds.length !== 1) {
+      fail(
+        "Для подтверждённой записи ключ должен быть ограничен одним рекламным кабинетом.",
+      );
+      return;
+    }
+    const response = await fetch(
+      `${API}/api/v1/workspaces/${active.id}/service-tokens/${token.id}/scopes`,
+      {
+        method: "PATCH",
+        credentials: "include",
+        headers: {
+          "content-type": "application/json",
+          "x-csrf-token": await csrf(),
+        },
+        body: JSON.stringify({
+          scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+        }),
+      },
+    );
+    if (!response.ok) {
+      return fail(
+        await responseErrorMessage(
+          response,
+          "Не удалось выдать ключу право подтверждённой записи.",
+        ),
+      );
+    }
+    await loadTokens(active);
+    notify("Ключ получил право подтверждённой записи для своего кабинета.");
+  }
+
   async function loadReportPreview(
     workspaceId: string,
     accountId: string,
@@ -1508,6 +1542,23 @@ export default function DashboardPage() {
                           </span>
                           {!token.revokedAt && (
                             <div>
+                              {!token.scopes.includes("adforge:mcp:write") && (
+                                <button
+                                  className="ghost-button btn--small"
+                                  type="button"
+                                  onClick={() =>
+                                    setConfirm({
+                                      title: `Разрешить подтверждённую запись для «${token.name}»?`,
+                                      description:
+                                        "Значение ключа не изменится. Сервер разрешит только allowlisted Meta-операцию после отдельного подтверждения.",
+                                      confirmLabel: "Разрешить",
+                                      run: () => grantConfirmedWrite(token),
+                                    })
+                                  }
+                                >
+                                  Разрешить запись
+                                </button>
+                              )}
                               <button
                                 className="ghost-button btn--small"
                                 type="button"
