@@ -60,6 +60,7 @@ describe("Google Ads v2 adapter", () => {
     expect(url.searchParams.get("scope")).toBe(
       "https://www.googleapis.com/auth/adwords",
     );
+    expect(url.searchParams.get("include_granted_scopes")).toBe("true");
     const accounts = await adapter.discoverAccounts({
       accessToken: "access",
       scopes: ["https://www.googleapis.com/auth/adwords"],
@@ -69,6 +70,10 @@ describe("Google Ads v2 adapter", () => {
       "2345678901",
     ]);
     expect(accounts[1]?.currency).toBe("KZT");
+    expect(accounts[1]?.metadata).toMatchObject({
+      managerCustomerId: "1234567890",
+      loginCustomerId: "1234567890",
+    });
     expect(fetchMock).toHaveBeenCalledTimes(3);
   });
 
@@ -100,6 +105,34 @@ describe("Google Ads v2 adapter", () => {
     expect(
       String((fetchMock.mock.calls[0]?.[1] as RequestInit).body),
     ).not.toContain("campaign_budget.currency_code");
+  });
+
+  it("keeps an OAuth refresh rejection safe and diagnosable", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        jsonResponse(
+          {
+            error: "invalid_grant",
+            error_description: "The token has expired or was revoked.",
+          },
+          400,
+        ),
+      ),
+    );
+    const adapter = new GoogleAdsAdapter(config);
+
+    await expect(
+      adapter.refreshCredentials({
+        accessToken: "access",
+        refreshToken: "refresh",
+        scopes: ["https://www.googleapis.com/auth/adwords"],
+      }),
+    ).rejects.toMatchObject({
+      code: "refresh_failed",
+      providerStatus: "400",
+      providerCode: "invalid_grant",
+    });
   });
 });
 
@@ -155,6 +188,36 @@ describe("Meta Ads v2 adapter", () => {
     expect(url).not.toContain("user-token");
     expect(String(init.body)).toContain("name=Review+test");
     expect(String(init.body)).toContain("access_token=user-token");
+    expect(String(init.body)).not.toContain("status=");
+  });
+
+  it("reads an exact campaign directly from Meta for controlled verification", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        id: "120251139085310324",
+        account_id: "1423247033195473",
+        name: "hm_saqta_traffic_inst",
+        status: "PAUSED",
+        effective_status: "PAUSED",
+        objective: "OUTCOME_TRAFFIC",
+        buying_type: "AUCTION",
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new MetaAdsAdapter(config);
+    await expect(
+      adapter.readControlledCampaign(
+        {
+          credentials: { accessToken: "user-token", scopes: ["ads_read"] },
+          accountId: "act_1423247033195473",
+        },
+        "120251139085310324",
+      ),
+    ).resolves.toMatchObject({
+      accountId: "act_1423247033195473",
+      name: "hm_saqta_traffic_inst",
+      status: "PAUSED",
+    });
   });
 
   it("rejects mutation without ads_management", async () => {

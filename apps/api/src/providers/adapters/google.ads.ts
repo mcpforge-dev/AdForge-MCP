@@ -74,6 +74,7 @@ export class GoogleAdsAdapter
     url.searchParams.set("scope", GOOGLE_SCOPE);
     url.searchParams.set("access_type", "offline");
     url.searchParams.set("prompt", "consent");
+    url.searchParams.set("include_granted_scopes", "true");
     url.searchParams.set("state", context.state);
     return url.toString();
   }
@@ -129,10 +130,13 @@ export class GoogleAdsAdapter
         ...this.credentialsFromToken(response),
         refreshToken: credentials.refreshToken,
       };
-    } catch {
+    } catch (error) {
       throw new ProviderError(
         "refresh_failed",
         "Google authorization refresh failed.",
+        false,
+        error instanceof ProviderError ? error.providerStatus : undefined,
+        error instanceof ProviderError ? error.providerCode : undefined,
       );
     }
   }
@@ -165,8 +169,22 @@ export class GoogleAdsAdapter
       }
       for (const client of clients) {
         const id = String(client.customerId ?? "");
-        if (!id || accounts.some((item) => item.externalAccountId === id))
+        if (!id) continue;
+        const hierarchyMetadata = {
+          googleAdsType: client.manager ? "manager" : "customer",
+          googleAdsLevel: numberValue(client.level),
+          managerCustomerId: customerId,
+          loginCustomerId:
+            this.config.providerGoogleLoginCustomerId ?? customerId,
+        };
+        const existing = accounts.find((item) => item.externalAccountId === id);
+        if (existing) {
+          existing.metadata = {
+            ...(existing.metadata ?? {}),
+            ...hierarchyMetadata,
+          };
           continue;
+        }
         accounts.push({
           externalAccountId: id,
           displayName: String(client.descriptiveName || `Google Ads ${id}`),
@@ -177,10 +195,7 @@ export class GoogleAdsAdapter
             ? { timezone: stringOrUndefined(client.timeZone)! }
             : {}),
           status: normalizeGoogleStatus(client.status),
-          metadata: {
-            googleAdsType: client.manager ? "manager" : "customer",
-            googleAdsLevel: numberValue(client.level),
-          },
+          metadata: hierarchyMetadata,
         });
       }
     }

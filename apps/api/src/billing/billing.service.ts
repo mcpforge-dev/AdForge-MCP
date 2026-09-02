@@ -5,12 +5,16 @@ import {
   Inject,
   Injectable,
 } from "@nestjs/common";
+import { tariffPlanByKey, tariffServiceLevel } from "@holymedia/contracts";
+import { AuditService } from "../audit/audit.service.js";
+import type { RequestWithAuth } from "../auth/auth.types.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 
 @Injectable()
 export class BillingService {
   public constructor(
     @Inject(DatabaseService) private readonly database: DatabaseService,
+    @Inject(AuditService) private readonly audit?: AuditService,
   ) {}
 
   public listPlans(): Promise<unknown> {
@@ -32,6 +36,51 @@ export class BillingService {
       include: { plan: true, price: true },
       orderBy: { createdAt: "desc" },
     });
+  }
+
+  public async createTariffRequest(
+    workspaceId: string,
+    planKey: string,
+    request: RequestWithAuth,
+  ): Promise<unknown> {
+    const userId = request.user?.userId;
+    if (!userId)
+      throw new ForbiddenException("Authenticated user is required.");
+    const catalogPlan = tariffPlanByKey(planKey);
+    const serviceLevel = tariffServiceLevel(planKey);
+    if (!catalogPlan || !serviceLevel)
+      throw new HttpException("Plan is not available.", HttpStatus.BAD_REQUEST);
+    const plan = await this.database.client.plan.findUnique({
+      where: { key: planKey },
+      select: { id: true, key: true, name: true, active: true },
+    });
+    if (!plan?.active)
+      throw new HttpException("Plan is not available.", HttpStatus.BAD_REQUEST);
+    const existing = await this.database.client.tariffRequest.findFirst({
+      where: { workspaceId, requestedPlanId: plan.id, status: "PENDING" },
+      orderBy: { createdAt: "desc" },
+      include: { requestedPlan: { select: { key: true, name: true } } },
+    });
+    if (existing) return { request: existing, created: false };
+    const created = await this.database.client.tariffRequest.create({
+      data: {
+        workspaceId,
+        userId,
+        requestedPlanId: plan.id,
+        requestedServiceLevel: serviceLevel,
+      },
+      include: { requestedPlan: { select: { key: true, name: true } } },
+    });
+    await this.audit?.record({
+      eventType: "tariff_request_created",
+      actorUserId: userId,
+      workspaceId,
+      targetType: "tariff_request",
+      targetId: created.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+      metadata: { plan: plan.key, serviceLevel },
+    });
+    return { request: created, created: true };
   }
 
   public usage(workspaceId: string): Promise<unknown> {
@@ -187,29 +236,52 @@ export class BillingService {
   public async setProviderAccountsEnabled(
     workspaceId: string,
     connectionId: string,
-    enabledAccountIds: string[],
-  ): Promise<boolean> {
-    const selectedIds = [...new Set(enabledAccountIds)];
+    accountIds: string[],
+  ): Promise<{ changedAccountIds: string[] }> {
+    const selectedIds = [...new Set(accountIds)];
     const limit = await this.numericLimit(workspaceId, "provider_accounts");
-    await this.database.client.$transaction(
+
+    return this.database.client.$transaction(
       async (transaction) => {
-        if (limit !== null) {
-          const enabledOutsideConnection =
-            await transaction.providerAccount.count({
-              where: {
-                workspaceId,
-                enabled: true,
-                connectionId: { not: connectionId },
-              },
-            });
-          if (enabledOutsideConnection + selectedIds.length > limit)
-            throw new ForbiddenException("Provider account limit reached.");
-        }
-        await transaction.providerAccount.updateMany({
+        const accounts = await transaction.providerAccount.findMany({
           where: { workspaceId, connectionId },
+          select: { id: true, enabled: true },
+        });
+        const accountIdsInConnection = new Set(
+          accounts.map((account) => account.id),
+        );
+        if (
+          selectedIds.some(
+            (accountId) => !accountIdsInConnection.has(accountId),
+          )
+        )
+          throw new ForbiddenException(
+            "Provider account selection is invalid.",
+          );
+
+        const selected = new Set(selectedIds);
+        const changedAccountIds = accounts
+          .filter((account) => account.enabled !== selected.has(account.id))
+          .map((account) => account.id);
+        const enabledOutsideConnection =
+          await transaction.providerAccount.count({
+            where: {
+              workspaceId,
+              connectionId: { not: connectionId },
+              enabled: true,
+            },
+          });
+        if (
+          limit !== null &&
+          enabledOutsideConnection + selectedIds.length > limit
+        )
+          throw new ForbiddenException("Provider account limit reached.");
+
+        await transaction.providerAccount.updateMany({
+          where: { workspaceId, connectionId, enabled: true },
           data: { enabled: false },
         });
-        if (selectedIds.length > 0)
+        if (selectedIds.length) {
           await transaction.providerAccount.updateMany({
             where: {
               workspaceId,
@@ -218,10 +290,11 @@ export class BillingService {
             },
             data: { enabled: true },
           });
+        }
+        return { changedAccountIds };
       },
       { isolationLevel: "Serializable" },
     );
-    return true;
   }
 
   private async numericLimit(
@@ -239,7 +312,7 @@ export class BillingService {
     workspaceId: string,
     featureKey: string,
   ): Promise<unknown> {
-    const [entitlements, subscription] = await Promise.all([
+    const [entitlements, subscription, expiredTrial] = await Promise.all([
       this.database.client.entitlement.findMany({
         where: {
           workspaceId,
@@ -251,10 +324,22 @@ export class BillingService {
       this.database.client.workspaceSubscription.findFirst({
         where: {
           workspaceId,
-          status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] },
+          OR: [
+            { status: { in: ["ACTIVE", "PAST_DUE"] } },
+            { status: "TRIALING", trialEndsAt: { gt: new Date() } },
+          ],
         },
         include: { plan: { select: { features: true } } },
         orderBy: { createdAt: "desc" },
+      }),
+      this.database.client.workspaceSubscription.findFirst({
+        where: {
+          workspaceId,
+          status: "TRIALING",
+          trialEndsAt: { lte: new Date() },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true },
       }),
     ]);
     const legacy = entitlements.find(
@@ -269,6 +354,10 @@ export class BillingService {
       (item) => item.featureKey === featureKey,
     );
     if (override) return override.value;
+    if (!subscription && expiredTrial)
+      return featureKey.includes("requests") || featureKey.includes("accounts")
+        ? 0
+        : false;
     const plan =
       subscription?.plan ??
       (await this.database.client.plan.findUnique({

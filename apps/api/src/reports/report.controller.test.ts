@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { ReportController } from "./report.controller.js";
+import { PerformanceReportDto } from "./report.dto.js";
 
 const input = {
   accountId: "account-a",
@@ -22,6 +23,16 @@ function setup() {
 }
 
 describe("performance report downloads", () => {
+  it("keeps the query DTO available to Nest at runtime", () => {
+    expect(
+      Reflect.getMetadata(
+        "design:paramtypes",
+        ReportController.prototype,
+        "performance",
+      ),
+    ).toEqual([String, PerformanceReportDto]);
+  });
+
   it("checks the report entitlement and returns a PowerPoint download", async () => {
     const { controller, reports, billing } = setup();
     const reply = {

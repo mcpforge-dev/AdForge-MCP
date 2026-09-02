@@ -20,6 +20,11 @@ export class SignupDto {
   @MinLength(12)
   @MaxLength(128)
   public password!: string;
+
+  @IsString()
+  @MinLength(12)
+  @MaxLength(128)
+  public confirmPassword!: string;
 }
 
 export class LoginDto {
@@ -96,6 +101,52 @@ export class UpdateWorkspaceDto {
   @MinLength(2)
   @MaxLength(160)
   public name?: string;
+}
+
+export class UpdateCompanyProfileDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  public name!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(255)
+  public legalName!: string;
+
+  @IsString()
+  @MinLength(2)
+  @MaxLength(2)
+  public registrationCountry!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  public registrationNumber?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  public legalAddress?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  public companyPhone?: string;
+
+  @IsEmail()
+  @MaxLength(320)
+  public companyEmail!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  public websiteUrl?: string;
+}
+
+export class UpdateCompanyAccessStatusDto {
+  @IsString()
+  public status!: "PENDING" | "ACTIVE" | "SUSPENDED";
 }
 
 export class UpdateMemberRoleDto {

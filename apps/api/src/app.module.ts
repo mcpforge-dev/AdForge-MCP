@@ -42,25 +42,30 @@ import { LegacySiteAnalysisController } from "./compat/legacy-site-analysis.cont
 import { LegacyProfileController } from "./compat/legacy-profile.controller.js";
 import { SiteAnalysisController } from "./site-analysis/site-analysis.controller.js";
 import { SiteAnalysisService } from "./site-analysis/site-analysis.service.js";
+import { SiteAuditController } from "./site-audits/site-audit.controller.js";
+import { SiteAuditService } from "./site-audits/site-audit.service.js";
 import { BillingController } from "./billing/billing.controller.js";
 import { BillingService } from "./billing/billing.service.js";
-import {
-  AdminManualConnectionRequestController,
-  ManualConnectionRequestController,
-} from "./compat/manual-connection-request.controller.js";
+import { ManualConnectionRequestController } from "./compat/manual-connection-request.controller.js";
 import { ManualConnectionRequestService } from "./compat/manual-connection-request.service.js";
 import { LegacyDiagnosticsController } from "./compat/legacy-diagnostics.controller.js";
 import { SearchConsoleController } from "./seo/search-console.controller.js";
 import { McpPreviewService } from "./mcp/mcp-preview.service.js";
 import { LegacyMcpOAuthController } from "./compat/legacy-mcp-oauth.controller.js";
 import { McpOAuthClientService } from "./mcp/mcp-oauth-client.service.js";
+import { OAuthAuthorizationService } from "./mcp/oauth-authorization.service.js";
+import { OAuthClientMetadataService } from "./mcp/oauth-client-metadata.service.js";
 import { OAuthMetadataController } from "./compat/oauth-metadata.controller.js";
 import { LegacyGoogleLoginController } from "./compat/legacy-google-login.controller.js";
 import { GoogleLoginService } from "./auth/google-login.service.js";
-import { LegacyAdminController } from "./compat/legacy-admin.controller.js";
 import { LegacyMetaSkillsController } from "./compat/legacy-meta-skills.controller.js";
 import { ProductAnalyticsController } from "./analytics/product-analytics.controller.js";
 import { ProductAnalyticsService } from "./analytics/product-analytics.service.js";
+import { AdminController } from "./admin/admin.controller.js";
+import { AdminAuthenticationGuard } from "./admin/admin-authentication.guard.js";
+import { AdminService } from "./admin/admin.service.js";
+import { SupportRequestController } from "./support/support-request.controller.js";
+import { SupportRequestService } from "./support/support-request.service.js";
 
 @Module({
   controllers: [
@@ -81,17 +86,18 @@ import { ProductAnalyticsService } from "./analytics/product-analytics.service.j
     LegacySiteAnalysisController,
     LegacyProfileController,
     SiteAnalysisController,
+    SiteAuditController,
     BillingController,
     ManualConnectionRequestController,
-    AdminManualConnectionRequestController,
     LegacyDiagnosticsController,
     SearchConsoleController,
     LegacyMcpOAuthController,
     OAuthMetadataController,
     LegacyGoogleLoginController,
-    LegacyAdminController,
     LegacyMetaSkillsController,
     ProductAnalyticsController,
+    AdminController,
+    SupportRequestController,
   ],
   providers: [
     DatabaseService,
@@ -116,12 +122,18 @@ import { ProductAnalyticsService } from "./analytics/product-analytics.service.j
     McpService,
     McpPreviewService,
     McpOAuthClientService,
+    OAuthAuthorizationService,
+    OAuthClientMetadataService,
     GoogleLoginService,
     ReportService,
     SiteAnalysisService,
+    SiteAuditService,
     BillingService,
     ManualConnectionRequestService,
     ProductAnalyticsService,
+    AdminService,
+    AdminAuthenticationGuard,
+    SupportRequestService,
     { provide: APP_GUARD, useClass: CsrfGuard },
   ],
 })

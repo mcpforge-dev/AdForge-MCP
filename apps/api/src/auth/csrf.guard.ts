@@ -22,6 +22,21 @@ export class CsrfGuard implements CanActivate {
     ).toUpperCase();
     if (["GET", "HEAD", "OPTIONS"].includes(method)) return true;
 
+    // OAuth token exchange and public dynamic registration are machine-to-
+    // machine endpoints. They do not use browser session cookies; their
+    // protections are redirect URI binding, one-time codes and PKCE.
+    const url = String((request as unknown as { url?: string }).url ?? "");
+    const requestPath = url.split("?")[0];
+    if (
+      method === "POST" &&
+      (requestPath === "/mcp" ||
+        ["/oauth/token", "/oauth/register", "/oauth/revoke"].some((path) =>
+          requestPath?.endsWith(path),
+        ))
+    ) {
+      return true;
+    }
+
     // Bearer-authenticated machine clients do not send browser cookies, so a
     // cookie CSRF proof would reject MCP and other server-to-server calls.
     // Their protection is the bearer token itself, CORS for browser callers,

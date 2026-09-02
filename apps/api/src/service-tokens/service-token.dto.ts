@@ -43,9 +43,9 @@ export class RotateServiceTokenDto {
   public expiresInDays?: number;
 }
 
-export class UpdateServiceTokenScopesDto {
-  @IsArray()
-  @ArrayMaxSize(16)
-  @IsString({ each: true })
-  public scopes!: string[];
+export class UpdateServiceTokenDto {
+  @IsString()
+  @MinLength(2)
+  @MaxLength(160)
+  public name!: string;
 }

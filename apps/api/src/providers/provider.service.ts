@@ -30,6 +30,7 @@ import { ProviderMetricsService } from "./provider.metrics.js";
 import { createLogger, type Logger } from "@holymedia/observability";
 import type {
   MetaReadAdapter,
+  MetaControlledCampaignState,
   NormalizedProviderAccount,
   ProviderCredentialPayload,
   ProviderScopeMetadata,
@@ -39,6 +40,7 @@ import type {
 import {
   isProviderMutationAdapter,
   isProviderReadAdapter,
+  isMetaControlledCampaignReadAdapter,
 } from "./provider.types.js";
 
 @Injectable()
@@ -476,8 +478,12 @@ export class ProviderService {
           data: {
             status: "REAUTH_REQUIRED",
             lastErrorAt: new Date(),
-            lastErrorCode:
+            lastErrorCode: [
               error instanceof ProviderError ? error.code : "refresh_failed",
+              error instanceof ProviderError ? error.providerCode : undefined,
+            ]
+              .filter(Boolean)
+              .join(":"),
           },
         });
         throw toSafeProviderException(error);
@@ -496,40 +502,36 @@ export class ProviderService {
       10,
       900,
     );
-    const connection = await this.connectionWithCredential(
+    const context = await this.connectionReadCredentials(
       workspaceId,
       connectionId,
     );
-    if (!connection.credential)
-      throw new ProviderError(
-        "authentication_failed",
-        "Provider authorization is required.",
-      );
-    const credentials = this.vault.decrypt<ProviderCredentialPayload>(
-      connection.credential.encryptedPayload,
-      connection.credential.encryptionVersion,
-    );
-    const adapter = this.registry.adapter(connection.provider as ProviderId);
     try {
+      // Discovery is also a provider read. Refresh an expired access token before
+      // asking the provider for accounts, exactly as metrics/read operations do.
+      const fresh = await this.refreshCoordinator.withLock(
+        context.connection.id,
+        () => this.refreshForRead(context),
+      );
       const startedAt = Date.now();
       await this.persistAccounts(
         workspaceId,
         connectionId,
-        connection.provider as ProviderId,
-        credentials,
-        adapter,
+        fresh.connection.provider as ProviderId,
+        fresh.credentials,
+        fresh.adapter,
       );
       await this.record(
         "accounts_discovered",
         request,
         principal,
         workspaceId,
-        connection.provider as ProviderId,
+        fresh.connection.provider as ProviderId,
         connectionId,
       );
       this.metrics.record(
         "account_discovery_success",
-        connection.provider as ProviderId,
+        fresh.connection.provider as ProviderId,
         Date.now() - startedAt,
       );
       const current = await this.connectionWithAccounts(
@@ -540,7 +542,7 @@ export class ProviderService {
     } catch (error) {
       this.metrics.record(
         "account_discovery_failure",
-        connection.provider as ProviderId,
+        context.connection.provider as ProviderId,
       );
       await this.database.client.providerConnection.update({
         where: { id: connectionId },
@@ -588,50 +590,34 @@ export class ProviderService {
   public async setAccountsEnabled(
     workspaceId: string,
     connectionId: string,
-    enabledAccountIds: string[],
+    accountIds: string[],
     principal: HumanPrincipal,
     request: RequestWithAuth,
   ): Promise<ProviderAccountView[]> {
-    const connection = await this.database.client.providerConnection.findFirst({
-      where: { id: connectionId, workspaceId },
-      select: { provider: true },
-    });
-    if (!connection)
-      throw new NotFoundException("Provider connection not found.");
-
-    const selectedIds = [...new Set(enabledAccountIds)];
-    const accounts = await this.database.client.providerAccount.findMany({
-      where: { workspaceId, connectionId },
-      select: { id: true, enabled: true },
-    });
-    const availableIds = new Set(accounts.map((account) => account.id));
-    if (selectedIds.some((accountId) => !availableIds.has(accountId)))
-      throw new BadRequestException(
-        "One or more provider accounts are invalid.",
-      );
-
-    await this.billing.setProviderAccountsEnabled(
+    const result = await this.billing.setProviderAccountsEnabled(
       workspaceId,
       connectionId,
-      selectedIds,
+      accountIds,
     );
-    for (const account of accounts) {
-      const enabled = selectedIds.includes(account.id);
-      if (enabled !== account.enabled)
-        await this.record(
-          enabled ? "provider_account_enabled" : "provider_account_disabled",
-          request,
-          principal,
-          workspaceId,
-          connection.provider as ProviderId,
-          account.id,
-        );
+    const connection = await this.connectionWithAccounts(
+      workspaceId,
+      connectionId,
+    );
+    const changed = new Set(result.changedAccountIds);
+    for (const account of connection.accounts) {
+      if (!changed.has(account.id)) continue;
+      await this.record(
+        account.enabled
+          ? "provider_account_enabled"
+          : "provider_account_disabled",
+        request,
+        principal,
+        workspaceId,
+        account.provider as ProviderId,
+        account.id,
+      );
     }
-    const updated = await this.database.client.providerAccount.findMany({
-      where: { workspaceId, connectionId },
-      orderBy: { displayName: "asc" },
-    });
-    return updated.map((account) => this.accountView(account));
+    return connection.accounts.map((account) => this.accountView(account));
   }
 
   public async readAccountSummary(
@@ -793,6 +779,25 @@ export class ProviderService {
       result,
       reread: reread.items.find((campaign) => campaign.id === objectId) ?? null,
     };
+  }
+
+  public async readMetaControlledCampaign(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    campaignId: string,
+  ): Promise<MetaControlledCampaignState> {
+    const context = await this.readContext(
+      workspaceId,
+      connectionId,
+      accountId,
+    );
+    if (!isMetaControlledCampaignReadAdapter(context.adapter))
+      throw new ProviderError(
+        "provider_not_configured",
+        "Direct Meta campaign verification is not configured.",
+      );
+    return context.adapter.readControlledCampaign(context.read, campaignId);
   }
 
   public async metaBusinesses(workspaceId: string, connectionId: string) {
@@ -1161,14 +1166,16 @@ export class ProviderService {
     return { connection, credentials, adapter };
   }
 
-  private async refreshForRead(context: {
-    connection: { id: string; provider: ProviderId };
-    credentials: ProviderCredentialPayload;
-    adapter: {
+  private async refreshForRead<
+    TAdapter extends {
       refreshCredentials?: (
         credentials: ProviderCredentialPayload,
       ) => Promise<ProviderCredentialPayload>;
-    };
+    },
+  >(context: {
+    connection: { id: string; provider: ProviderId };
+    credentials: ProviderCredentialPayload;
+    adapter: TAdapter;
   }) {
     if (
       !context.credentials.expiresAt ||

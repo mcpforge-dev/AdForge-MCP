@@ -24,7 +24,7 @@ import { AuthenticationGuard } from "../auth/authentication.guard.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
 import { WorkspaceAuthorizationGuard } from "../auth/workspace-authorization.guard.js";
 import {
-  AccountSelectionBulkDto,
+  AccountSelectionBatchDto,
   AccountSelectionDto,
   ProviderDateRangeDto,
 } from "./provider.dto.js";
@@ -69,25 +69,25 @@ export class ProviderController {
   @Get("oauth/:provider/callback")
   public async callback(
     @Param("provider") provider: string,
-    @Query("state") state: string | undefined,
-    @Query("code") code: string | undefined,
+    @Query("state") state: string,
+    @Query("code") code: string,
+    @Query("auth_code") authCode: string,
     @Req() request: RequestWithAuth,
     @Res() reply: FastifyReply,
     @Query("auth_code") authCode?: string,
     @Query("error") oauthError?: string,
   ) {
     const providerId = this.provider(provider);
-    const redirect = (outcome: "success" | "error", reason?: string) => {
-      const query = new URLSearchParams({
-        section: "connections",
-        oauth: outcome,
-        provider,
-        ...(reason ? { oauth_reason: reason } : {}),
-      });
-      return reply.code(302).redirect(`/dashboard?${query.toString()}`);
-    };
-    if (oauthError) return redirect("error", "authorization_denied");
-    const authorizationCode = code ?? authCode;
+    // TikTok's established callback contract uses auth_code, while the other
+    // OAuth providers use code. Keep both public callback shapes compatible.
+    const authorizationCode =
+      providerId === "TIKTOK_ADS" ? authCode || code : code;
+    const redirect = (outcome: "success" | "error") =>
+      reply
+        .code(302)
+        .redirect(
+          `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}`,
+        );
     if (
       typeof state !== "string" ||
       state.length < 32 ||
@@ -165,6 +165,25 @@ export class ProviderController {
     @Req() request: RequestWithAuth,
   ) {
     return this.providers.discover(id, connectionId, principal, request);
+  }
+
+  @Patch("workspaces/:id/connections/:connectionId/accounts")
+  @UseGuards(AuthenticationGuard, WorkspaceAuthorizationGuard)
+  @RequirePermissions("provider_accounts.manage")
+  public selectAccounts(
+    @Param("id") id: string,
+    @Param("connectionId") connectionId: string,
+    @Body() input: AccountSelectionBatchDto,
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.providers.setAccountsEnabled(
+      id,
+      connectionId,
+      input.accountIds,
+      principal,
+      request,
+    );
   }
 
   @Patch("workspaces/:id/provider-accounts/:accountId")

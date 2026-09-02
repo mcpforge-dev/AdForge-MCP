@@ -2,7 +2,11 @@ import { Injectable } from "@nestjs/common";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import type { FastifyReply } from "fastify";
 import { createOpaqueToken } from "../infrastructure/security.utils.js";
-import { CSRF_COOKIE, SESSION_COOKIE } from "./auth.types.js";
+import {
+  ADMIN_SESSION_COOKIE,
+  CSRF_COOKIE,
+  SESSION_COOKIE,
+} from "./auth.types.js";
 
 @Injectable()
 export class CookieService {
@@ -40,6 +44,23 @@ export class CookieService {
   public clear(reply: FastifyReply): void {
     reply.clearCookie(SESSION_COOKIE, this.cookieOptions(true));
     reply.clearCookie(CSRF_COOKIE, this.cookieOptions(false));
+  }
+
+  public setAdminSession(reply: FastifyReply, sessionToken: string): void {
+    reply.setCookie(ADMIN_SESSION_COOKIE, sessionToken, {
+      ...this.cookieOptions(true),
+      path: "/api/v1/admin",
+      sameSite: "strict",
+      maxAge: this.config.adminSessionTtlHours * 3_600,
+    });
+  }
+
+  public clearAdminSession(reply: FastifyReply): void {
+    reply.clearCookie(ADMIN_SESSION_COOKIE, {
+      ...this.cookieOptions(true),
+      path: "/api/v1/admin",
+      sameSite: "strict",
+    });
   }
 
   private cookieOptions(httpOnly: boolean) {

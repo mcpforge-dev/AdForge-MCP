@@ -1,7 +1,26 @@
 import { describe, expect, it } from "vitest";
+import { randomUUID } from "node:crypto";
 import { loadConfig } from "./index.js";
 
 describe("v2 configuration", () => {
+  it("keeps owner admin access disabled until an environment secret is supplied", () => {
+    const base = {
+      NODE_ENV: "test" as const,
+      DATABASE_URL:
+        "postgresql://holymedia:change-me@localhost:5433/holymedia_v2",
+      REDIS_URL: "redis://localhost:6380",
+      CORS_ORIGINS: "http://localhost:3000",
+      SESSION_HASH_SECRET: "test-session-hash-secret-01234567890123456789",
+    };
+    expect(loadConfig(base).adminEnabled).toBe(false);
+    const configured = loadConfig({
+      ...base,
+      HOLYMEDIA_ADMIN_PASSWORD: randomUUID(),
+    });
+    expect(configured.adminEnabled).toBe(true);
+    expect(configured.adminLogin).toBe("Admin");
+  });
+
   it("parses the string false as boolean false", () => {
     const config = loadConfig({
       NODE_ENV: "test",
@@ -15,6 +34,35 @@ describe("v2 configuration", () => {
 
     expect(config.configStrict).toBe(false);
     expect(config.environment).toBe("test");
+  });
+
+  it("keeps Telegram support delivery disabled until both protected values exist", () => {
+    const base = {
+      NODE_ENV: "test" as const,
+      DATABASE_URL:
+        "postgresql://holymedia:change-me@localhost:5433/holymedia_v2",
+      REDIS_URL: "redis://localhost:6380",
+      CORS_ORIGINS: "https://mcp.holymedia.kz",
+      SESSION_HASH_SECRET: "test-session-hash-secret-01234567890123456789",
+    };
+    expect(
+      loadConfig({
+        ...base,
+        TELEGRAM_SUPPORT_BOT_TOKEN: "",
+        TELEGRAM_SUPPORT_CHAT_ID: "",
+      }).telegramSupportBotToken,
+    ).toBeUndefined();
+    expect(
+      loadConfig({
+        ...base,
+        HOLYMEDIA_PUBLIC_BASE_URL: "https://mcp.holymedia.kz/",
+        TELEGRAM_SUPPORT_BOT_TOKEN: "test-telegram-token-000000",
+        TELEGRAM_SUPPORT_CHAT_ID: "-1001234567890",
+      }),
+    ).toMatchObject({
+      publicBaseUrl: "https://mcp.holymedia.kz",
+      telegramSupportChatId: "-1001234567890",
+    });
   });
 
   it("parses confirmed-write allowlists without enabling writes", () => {
@@ -31,6 +79,23 @@ describe("v2 configuration", () => {
     expect(config.writeAccountAllowlist).toEqual(["act_1", "act_2"]);
     expect(config.writeObjectAllowlist).toEqual(["campaign-1"]);
     expect(config.writeOperationAllowlist).toEqual(["change_name"]);
+  });
+
+  it("keeps the Meta App Review rename policy disabled unless explicitly configured", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      V2_META_APP_REVIEW_RENAME_ENABLED: "true",
+      V2_META_APP_REVIEW_RENAME_ACCOUNT_ID: "act_1423247033195473",
+      V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: "120251139085310324",
+      V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: "hm_saqta_traffic_inst",
+      V2_META_APP_REVIEW_RENAME_TARGET_NAME: "hm_saqta_traffic_inst_rename",
+    });
+    expect(config).toMatchObject({
+      metaAppReviewRenameEnabled: true,
+      metaAppReviewRenameAccountId: "act_1423247033195473",
+      metaAppReviewRenameCampaignId: "120251139085310324",
+      metaAppReviewRenameTargetName: "hm_saqta_traffic_inst_rename",
+    });
   });
 
   it("enforces strict configuration for production-like environments", () => {

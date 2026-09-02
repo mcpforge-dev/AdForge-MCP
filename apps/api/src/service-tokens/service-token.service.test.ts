@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
-  ServiceTokenService,
   hashServiceToken,
+  ServiceTokenService,
 } from "./service-token.service.js";
 
 describe("service token security primitives", () => {
@@ -14,76 +14,46 @@ describe("service token security primitives", () => {
     expect(hashServiceToken(`${raw}-changed`)).not.toBe(digest);
   });
 
-  it("allows write scope only for a token restricted to one account", async () => {
-    let updateInput: Record<string, unknown> | undefined;
-    const database = {
-      client: {
-        serviceToken: {
-          findFirst: async () => ({
-            id: "token-a",
-            accountIds: ["account-a"],
-            serviceIdentity: { id: "identity-a" },
-          }),
-          update: async (input: Record<string, unknown>) => {
-            updateInput = input;
-            return {
-              id: "token-a",
-              tokenPrefix: "hmst_example",
-              name: "Review client",
-              scopes: ["adforge:mcp:read", "adforge:mcp:write"],
-              accountIds: ["account-a"],
-              createdAt: new Date(),
-              expiresAt: null,
-              revokedAt: null,
-              lastUsedAt: null,
-            };
-          },
-        },
-      },
-    } as never;
-    const audit = { record: async () => undefined } as never;
-    const service = new ServiceTokenService(database, audit);
-
-    await service.updateScopes(
-      "workspace-a",
-      "token-a",
-      { scopes: ["adforge:mcp:read", "adforge:mcp:write"] },
-      { kind: "human", userId: "user-a", sessionId: "session-a" },
-      {} as never,
+  it("lists only keys that have not been deleted", async () => {
+    const findMany = vi.fn().mockResolvedValue([]);
+    const service = new ServiceTokenService(
+      { client: { serviceToken: { findMany } } } as never,
+      { record: vi.fn() } as never,
     );
 
-    expect(updateInput).toEqual({
-      where: { id: "token-a" },
-      data: { scopes: ["adforge:mcp:read", "adforge:mcp:write"] },
-    });
+    await service.list("workspace-1");
+
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: {
+          revokedAt: null,
+          serviceIdentity: { workspaceId: "workspace-1" },
+        },
+      }),
+    );
   });
 
-  it("rejects write scope for a token that covers multiple accounts", async () => {
-    const database = {
-      client: {
-        serviceToken: {
-          findFirst: async () => ({
-            id: "token-a",
-            accountIds: ["account-a", "account-b"],
-            serviceIdentity: { id: "identity-a" },
-          }),
-        },
-      },
-    } as never;
-    const service = new ServiceTokenService(database, {
-      record: async () => undefined,
-    } as never);
+  it("does not delete a key that was already deleted", async () => {
+    const findFirst = vi.fn().mockResolvedValue(null);
+    const service = new ServiceTokenService(
+      { client: { serviceToken: { findFirst } } } as never,
+      { record: vi.fn() } as never,
+    );
 
     await expect(
-      service.updateScopes(
-        "workspace-a",
-        "token-a",
-        { scopes: ["adforge:mcp:read", "adforge:mcp:write"] },
-        { kind: "human", userId: "user-a", sessionId: "session-a" },
+      service.revoke(
+        "workspace-1",
+        "token-1",
+        { userId: "user-1" } as never,
         {} as never,
       ),
-    ).rejects.toThrow(
-      "Write scope requires a service token restricted to exactly one account.",
-    );
+    ).rejects.toMatchObject({ status: 404 });
+    expect(findFirst).toHaveBeenCalledWith({
+      where: {
+        id: "token-1",
+        revokedAt: null,
+        serviceIdentity: { workspaceId: "workspace-1" },
+      },
+    });
   });
 });

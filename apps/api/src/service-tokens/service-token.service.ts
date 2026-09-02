@@ -11,7 +11,7 @@ import { DatabaseService } from "../infrastructure/database.service.js";
 import type {
   CreateServiceTokenDto,
   RotateServiceTokenDto,
-  UpdateServiceTokenScopesDto,
+  UpdateServiceTokenDto,
 } from "./service-token.dto.js";
 
 const READ_SCOPE = "adforge:mcp:read";
@@ -129,7 +129,9 @@ export class ServiceTokenService {
 
   public async list(workspaceId: string) {
     const tokens = await this.database.client.serviceToken.findMany({
-      where: { serviceIdentity: { workspaceId } },
+      // Revoked keys remain in the audit trail, but no longer clutter the
+      // customer's active-key list.
+      where: { revokedAt: null, serviceIdentity: { workspaceId } },
       include: { serviceIdentity: { select: { id: true } } },
       orderBy: { createdAt: "desc" },
     });
@@ -143,7 +145,7 @@ export class ServiceTokenService {
     request: RequestWithAuth,
   ) {
     const token = await this.database.client.serviceToken.findFirst({
-      where: { id: tokenId, serviceIdentity: { workspaceId } },
+      where: { id: tokenId, revokedAt: null, serviceIdentity: { workspaceId } },
     });
     if (!token) throw new NotFoundException("Service token not found.");
     await this.database.client.serviceToken.update({
@@ -159,6 +161,34 @@ export class ServiceTokenService {
       ...(request.requestId ? { requestId: request.requestId } : {}),
     });
     return { success: true as const };
+  }
+
+  public async updateName(
+    workspaceId: string,
+    tokenId: string,
+    input: UpdateServiceTokenDto,
+    principal: HumanPrincipal,
+    request: RequestWithAuth,
+  ) {
+    const token = await this.database.client.serviceToken.findFirst({
+      where: { id: tokenId, serviceIdentity: { workspaceId } },
+      include: { serviceIdentity: { select: { id: true } } },
+    });
+    if (!token) throw new NotFoundException("Service token not found.");
+
+    const renamed = await this.database.client.serviceToken.update({
+      where: { id: token.id },
+      data: { name: input.name.trim() },
+    });
+    await this.audit.record({
+      eventType: "service_token_renamed",
+      actorUserId: principal.userId,
+      workspaceId,
+      targetType: "service_token",
+      targetId: token.id,
+      ...(request.requestId ? { requestId: request.requestId } : {}),
+    });
+    return this.toView(renamed, token.serviceIdentity.id);
   }
 
   public async rotate(
@@ -264,7 +294,12 @@ export class ServiceTokenService {
       where: { tokenDigest: hashServiceToken(rawToken) },
       include: {
         serviceIdentity: {
-          select: { id: true, workspaceId: true, revokedAt: true },
+          select: {
+            id: true,
+            workspaceId: true,
+            revokedAt: true,
+            workspace: { select: { accessStatus: true } },
+          },
         },
       },
     });
@@ -276,6 +311,7 @@ export class ServiceTokenService {
     ) {
       return null;
     }
+    if (token.serviceIdentity.workspace?.accessStatus !== "ACTIVE") return null;
     if (token.expiresAt && token.expiresAt <= new Date()) return null;
     await this.database.client.serviceToken.update({
       where: { id: token.id },

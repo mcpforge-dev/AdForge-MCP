@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ConflictException } from "@nestjs/common";
 import JSZip from "jszip";
 import { describe, expect, it } from "vitest";
 import { ReportService } from "./report.service.js";
@@ -16,6 +16,7 @@ describe("V2 performance reports", () => {
             displayName: "Test account",
             currency: "USD",
             timezone: "UTC",
+            connection: { status: "CONNECTED" },
           }),
         },
       },
@@ -84,6 +85,10 @@ describe("V2 performance reports", () => {
     });
     expect(document.subarray(0, 2).toString()).toBe("PK");
     expect(document.toString("utf8")).not.toContain("accessToken");
+    const documentArchive = await JSZip.loadAsync(document);
+    expect(
+      await documentArchive.file("word/document.xml")?.async("string"),
+    ).toContain("1234567890");
     const presentation = await service.performancePptx("workspace-a", {
       accountId: "1234567890",
       startDate: "2026-01-01",
@@ -99,6 +104,9 @@ describe("V2 performance reports", () => {
     expect(
       await archive.file("ppt/presentation.xml")?.async("string"),
     ).toContain("p:sldIdLst");
+    expect(
+      await archive.file("ppt/slides/slide1.xml")?.async("string"),
+    ).toContain("1234567890");
   });
 
   it("uses an equal previous period when the report form does not send one", async () => {
@@ -113,6 +121,7 @@ describe("V2 performance reports", () => {
             displayName: "Test account",
             currency: "USD",
             timezone: "UTC",
+            connection: { status: "CONNECTED" },
           }),
         },
       },
@@ -166,6 +175,7 @@ describe("V2 performance reports", () => {
             displayName: "Yandex account",
             currency: null,
             timezone: null,
+            connection: { status: "CONNECTED" },
           }),
         },
       },
@@ -178,5 +188,88 @@ describe("V2 performance reports", () => {
         endDate: "2026-01-07",
       }),
     ).rejects.toBeInstanceOf(BadRequestException);
+  });
+
+  it("requires the same enabled account state used by Connections", async () => {
+    let lookup: Record<string, unknown> | undefined;
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async (input: { where: Record<string, unknown> }) => {
+            lookup = input.where;
+            return null;
+          },
+        },
+      },
+    } as never;
+
+    await expect(
+      new ReportService(database, {} as never).performance("workspace-a", {
+        accountId: "account-a",
+        startDate: "2026-01-01",
+        endDate: "2026-01-07",
+      }),
+    ).rejects.toThrow("Provider account not found.");
+    expect(lookup).toMatchObject({
+      workspaceId: "workspace-a",
+      enabled: true,
+    });
+  });
+
+  it("tells the client to reconnect instead of treating a stale account as unselected", async () => {
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-internal",
+            connectionId: "connection-1",
+            provider: "GOOGLE_ADS",
+            externalAccountId: "1234567890",
+            displayName: "Google account",
+            currency: "USD",
+            timezone: "UTC",
+            connection: { status: "REAUTH_REQUIRED" },
+          }),
+        },
+      },
+    } as never;
+
+    await expect(
+      new ReportService(database, {} as never).performance("workspace-a", {
+        accountId: "account-internal",
+        startDate: "2026-01-01",
+        endDate: "2026-01-07",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
+  });
+
+  it("tells the client to reconnect when a degraded connection has an OAuth failure", async () => {
+    const database = {
+      client: {
+        providerAccount: {
+          findFirst: async () => ({
+            id: "account-internal",
+            connectionId: "connection-1",
+            provider: "GOOGLE_ADS",
+            externalAccountId: "1234567890",
+            displayName: "Google account",
+            currency: "USD",
+            timezone: "UTC",
+            connection: {
+              status: "DEGRADED",
+              lastErrorCode: "refresh_failed:invalid_grant",
+            },
+          }),
+        },
+      },
+    } as never;
+
+    await expect(
+      new ReportService(database, {} as never).performance("workspace-a", {
+        accountId: "account-internal",
+        startDate: "2026-01-01",
+        endDate: "2026-01-07",
+      }),
+    ).rejects.toBeInstanceOf(ConflictException);
   });
 });

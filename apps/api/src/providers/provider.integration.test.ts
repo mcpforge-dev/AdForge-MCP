@@ -17,6 +17,7 @@ import { ProviderRefreshCoordinator } from "./refresh-coordinator.service.js";
 import { ProviderService } from "./provider.service.js";
 import { ProviderError, toSafeProviderException } from "./provider.errors.js";
 import type { TestProviderAdapter } from "./adapters/test.provider.js";
+import type { ProviderCredentialPayload } from "./provider.types.js";
 
 const integrationEnabled =
   process.env.V2_INTEGRATION_TESTS === "true" &&
@@ -78,6 +79,7 @@ describe.skipIf(!integrationEnabled)(
           name: "Provider Integration",
           email,
           password: "integration-password",
+          confirmPassword: "integration-password",
         },
         request,
       );
@@ -201,12 +203,60 @@ describe.skipIf(!integrationEnabled)(
       ).rejects.toThrow();
     });
 
+    it("refreshes an expired credential before discovery without changing batch selection", async () => {
+      const connection =
+        await database.client.providerConnection.findFirstOrThrow({
+          where: { workspaceId, provider: "TEST_PROVIDER" },
+          include: { accounts: { orderBy: { externalAccountId: "asc" } } },
+        });
+      const selectedId = connection.accounts[0]!.id;
+      await providers.setAccountsEnabled(
+        workspaceId,
+        connection.id,
+        [selectedId],
+        principal,
+        request,
+      );
+      const credential =
+        await database.client.providerCredential.findUniqueOrThrow({
+          where: { connectionId: connection.id },
+        });
+      const expired = vault.encrypt({
+        ...vault.decrypt<ProviderCredentialPayload>(
+          credential.encryptedPayload,
+          credential.encryptionVersion,
+        ),
+        expiresAt: new Date(Date.now() - 60_000).toISOString(),
+      });
+      await database.client.providerCredential.update({
+        where: { connectionId: connection.id },
+        data: {
+          encryptedPayload: expired.ciphertext,
+          encryptionVersion: expired.encryptionVersion,
+        },
+      });
+
+      await expect(
+        providers.discover(workspaceId, connection.id, principal, request),
+      ).resolves.toHaveLength(2);
+
+      const persisted = await database.client.providerAccount.findMany({
+        where: { connectionId: connection.id },
+        orderBy: { externalAccountId: "asc" },
+      });
+      expect(persisted.map((account) => account.enabled)).toEqual([
+        true,
+        false,
+      ]);
+    });
+
     it("enforces workspace scope and blocks invalid OAuth state", async () => {
       const other = await auth.signup(
         {
           name: "Other Workspace",
           email: `other-${suffix}@example.test`,
           password: "integration-password",
+          confirmPassword: "integration-password",
         },
         request,
       );

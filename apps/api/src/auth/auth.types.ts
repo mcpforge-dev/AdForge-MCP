@@ -16,3 +16,4 @@ export type RequestWithAuth = {
 
 export const SESSION_COOKIE = "hm_v2_session";
 export const CSRF_COOKIE = "hm_v2_csrf";
+export const ADMIN_SESSION_COOKIE = "hm_admin_session";

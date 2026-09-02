@@ -31,8 +31,15 @@ export class LegacyGoogleLoginController {
 
   @Get("start")
   @Redirect()
-  public async start(@Res({ passthrough: true }) reply: FastifyReply) {
-    const result = await this.google.start();
+  public async start(
+    @Query("oauth_transaction") oauthTransaction: string | undefined,
+    @Res({ passthrough: true }) reply: FastifyReply,
+  ) {
+    const result = await this.google.start(
+      oauthTransaction
+        ? `/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
+        : undefined,
+    );
     reply.setCookie(GOOGLE_LOGIN_STATE_COOKIE, result.state, {
       ...this.cookieOptions(),
       httpOnly: true,
@@ -66,7 +73,10 @@ export class LegacyGoogleLoginController {
     const result = await this.auth.loginWithGoogle(profile, request);
     this.cookies.setSession(reply, result.sessionToken);
     reply.clearCookie(GOOGLE_LOGIN_STATE_COOKIE, this.cookieOptions());
-    return { url: stateResult.nextPath, statusCode: 302 };
+    return {
+      url: result.onboardingRequired ? "/onboarding" : stateResult.nextPath,
+      statusCode: 302,
+    };
   }
 
   private cookieOptions() {

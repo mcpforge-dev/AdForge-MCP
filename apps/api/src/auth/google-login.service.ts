@@ -43,15 +43,17 @@ export class GoogleLoginService {
     return 900;
   }
 
-  public async start(): Promise<GoogleLoginStart> {
+  public async start(nextPath = "/dashboard"): Promise<GoogleLoginStart> {
     if (!this.configured()) {
       throw new ServiceUnavailableException("Google Login is not configured.");
     }
 
     const state = createOpaqueToken();
+    const safeNextPath = normalizeNextPath(nextPath);
     await this.database.client.googleLoginState.create({
       data: {
         stateDigest: digestToken(state, this.config.sessionHashSecret),
+        nextPath: safeNextPath,
         expiresAt: new Date(Date.now() + this.stateTtlSeconds() * 1000),
       },
     });
@@ -99,10 +101,7 @@ export class GoogleLoginService {
         "Google Login session is invalid or expired.",
       );
     }
-    return {
-      nextPath:
-        record.nextPath === "/dashboard" ? record.nextPath : "/dashboard",
-    };
+    return { nextPath: normalizeNextPath(record.nextPath) };
   }
 
   public async exchangeCode(code: string): Promise<GoogleLoginProfile> {
@@ -193,4 +192,24 @@ export class GoogleLoginService {
       `http://localhost:${this.config.apiPort}/auth/google/callback`
     );
   }
+}
+
+function normalizeNextPath(value: string): string {
+  if (value === "/dashboard") return value;
+  try {
+    const url = new URL(value, "https://mcp.holymedia.kz");
+    const transaction = url.searchParams.get("transaction") ?? "";
+    if (
+      url.origin === "https://mcp.holymedia.kz" &&
+      url.pathname === "/oauth/authorize/continue" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        transaction,
+      )
+    ) {
+      return `${url.pathname}?transaction=${encodeURIComponent(transaction)}`;
+    }
+  } catch {
+    // Fall through to the safe default.
+  }
+  return "/dashboard";
 }

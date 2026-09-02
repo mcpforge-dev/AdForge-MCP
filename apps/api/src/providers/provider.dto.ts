@@ -1,10 +1,12 @@
 import {
   ArrayMaxSize,
+  ArrayUnique,
   IsArray,
   IsBoolean,
   IsDateString,
   IsOptional,
   IsString,
+  IsUUID,
   Max,
   MaxLength,
   Min,
@@ -16,12 +18,13 @@ export class AccountSelectionDto {
   public enabled!: boolean;
 }
 
-export class AccountSelectionBulkDto {
+export class AccountSelectionBatchDto {
   @IsArray()
-  @ArrayMaxSize(500)
-  @IsString({ each: true })
-  @MaxLength(80, { each: true })
-  public enabledAccountIds!: string[];
+  @ArrayUnique()
+  @ArrayMaxSize(1000)
+  // Migrated provider-account IDs can be UUIDv5; accept any RFC UUID version.
+  @IsUUID(undefined, { each: true })
+  public accountIds!: string[];
 }
 
 export class OAuthCallbackDto {

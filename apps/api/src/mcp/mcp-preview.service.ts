@@ -6,6 +6,11 @@ import { AuditService } from "../audit/audit.service.js";
 import { DatabaseService } from "../infrastructure/database.service.js";
 import type { ServiceTokenPrincipal } from "../service-tokens/service-token.service.js";
 import { ProviderService } from "../providers/provider.service.js";
+import {
+  evaluateMetaAppReviewPrecondition,
+  evaluateMetaAppReviewRenamePolicy,
+  invariantChanges,
+} from "./meta-app-review-write.policy.js";
 
 const READ_SCOPE = "adforge:mcp:read";
 const WRITE_SCOPE = "adforge:mcp:write";
@@ -165,7 +170,18 @@ export class McpPreviewService {
       );
 
     const account = await this.account(principal, preview.accountId);
-    const policyReason = this.commitPolicyReason(preview, account);
+    const payload = payloadRecord(preview.payload);
+    const appReviewPolicy = evaluateMetaAppReviewRenamePolicy(
+      this.config,
+      preview,
+      account,
+    );
+    const policyReason =
+      appReviewPolicy.kind === "allowed"
+        ? null
+        : appReviewPolicy.kind === "blocked"
+          ? appReviewPolicy.reason
+          : this.commitPolicyReason(preview, account);
     const consumed = await this.database.client.mcpPreview.updateMany({
       where: { id: preview.id, consumedAt: null },
       data: { consumedAt: new Date() },
@@ -180,7 +196,16 @@ export class McpPreviewService {
         targetType: "mcp_preview",
         targetId: preview.id,
         success: false,
-        metadata: { reason: policyReason },
+        metadata: {
+          reason: policyReason,
+          provider: preview.provider,
+          accountId: account.externalAccountId,
+          campaignId: preview.externalObjectId,
+          operation: preview.operation,
+          requestedName:
+            typeof payload.new_name === "string" ? payload.new_name : null,
+          serviceTokenId: principal.tokenId,
+        },
       });
       return {
         status: "blocked",
@@ -189,17 +214,20 @@ export class McpPreviewService {
         preview_only: this.config.previewOnly,
         provider_write_enabled: false,
         reread: null,
-        reason: policyReason,
-        message: this.policyMessage(policyReason),
+        message:
+          appReviewPolicy.kind === "blocked"
+            ? appReviewPolicy.message
+            : "HolyMedia MCP работает в режиме чтения и не изменяет рекламные кампании.",
       };
     }
     try {
-      const payload =
-        preview.payload &&
-        typeof preview.payload === "object" &&
-        !Array.isArray(preview.payload)
-          ? (preview.payload as Record<string, unknown>)
-          : {};
+      if (appReviewPolicy.kind === "allowed")
+        return this.commitMetaAppReviewRename(
+          principal,
+          preview,
+          account,
+          payload,
+        );
       const committed = await this.providers.mutateCampaign(
         principal.workspaceId,
         account.connectionId,
@@ -261,63 +289,156 @@ export class McpPreviewService {
     return null;
   }
 
-  private providerRequest(input: PreviewInput, objectId: string) {
-    if (input.provider === "META_ADS" && input.operation === "change_name") {
-      const name =
-        typeof input.payload.new_name === "string"
-          ? input.payload.new_name.trim()
-          : "";
+  private async commitMetaAppReviewRename(
+    principal: ServiceTokenPrincipal,
+    preview: {
+      id: string;
+      provider: string;
+      operation: string;
+      externalObjectId: string;
+    },
+    account: { id: string; connectionId: string; externalAccountId: string },
+    payload: Record<string, unknown>,
+  ) {
+    const before = await this.providers.readMetaControlledCampaign(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      preview.externalObjectId,
+    );
+    const precondition = evaluateMetaAppReviewPrecondition(this.config, before);
+    const metadata = {
+      provider: "META_ADS",
+      accountId: account.externalAccountId,
+      campaignId: preview.externalObjectId,
+      operation: "change_name",
+      previousName: before.name,
+      requestedName: String(payload.new_name ?? ""),
+      campaignStatus: before.status,
+      serviceTokenId: principal.tokenId,
+    };
+    if (precondition.kind === "blocked") {
+      await this.audit.record({
+        eventType: "meta_app_review_rename_blocked",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        success: false,
+        metadata: { ...metadata, reason: precondition.reason },
+      });
       return {
-        http_method: "POST",
-        endpoint: `/${objectId}`,
-        body: { name },
+        status: "blocked",
+        execution_mode: "simulated_no_write",
+        provider_write_enabled: false,
+        reread: null,
+        message: precondition.message,
       };
     }
-    return null;
-  }
-
-  private writeReadiness(
-    principal: ServiceTokenPrincipal,
-    policyReason: string | null,
-  ): string {
-    if (!principal.scopes.includes(WRITE_SCOPE))
-      return "service_token_write_scope_required";
-    return policyReason ?? "provider_permission_check_required";
-  }
-
-  private policyMessage(reason: string) {
-    const messages: Record<string, string> = {
-      preview_only:
-        "Confirmed Meta writes are disabled while V2_PREVIEW_ONLY is enabled.",
-      confirmed_write_disabled:
-        "Confirmed Meta writes are not enabled for this environment.",
-      provider_write_unavailable:
-        "Confirmed writes are available only for Meta Ads.",
-      operation_not_allowlisted:
-        "This Meta operation is not allowlisted for confirmed writes.",
-      object_not_allowlisted:
-        "This campaign is not allowlisted for confirmed writes.",
-      account_not_allowlisted:
-        "This ad account is not allowlisted for confirmed writes.",
-      operation_not_supported:
-        "This Meta operation is not supported for confirmed writes.",
-    };
-    return (
-      messages[reason] ?? "Confirmed Meta write was blocked by server policy."
+    if (before.name === this.config.metaAppReviewRenameTargetName) {
+      await this.audit.record({
+        eventType: "meta_app_review_rename_already_applied",
+        actorType: "SERVICE",
+        workspaceId: principal.workspaceId,
+        targetType: "mcp_preview",
+        targetId: preview.id,
+        metadata,
+      });
+      return {
+        status: "already_applied",
+        execution_mode: "no_write_current_state",
+        provider_write_enabled: false,
+        reread: before,
+        message:
+          "Кампания уже имеет запрошенное название; изменение не выполнялось.",
+      };
+    }
+    await this.audit.record({
+      eventType: "meta_app_review_rename_prechecked",
+      actorType: "SERVICE",
+      workspaceId: principal.workspaceId,
+      targetType: "mcp_preview",
+      targetId: preview.id,
+      metadata,
+    });
+    const mutation = await this.providers.mutateCampaign(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      preview.externalObjectId,
+      "change_name",
+      { new_name: this.config.metaAppReviewRenameTargetName },
     );
+    const after = await this.providers.readMetaControlledCampaign(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      preview.externalObjectId,
+    );
+    const changedFields = invariantChanges(before, after);
+    const verified =
+      after.name === this.config.metaAppReviewRenameTargetName &&
+      after.status === "PAUSED" &&
+      changedFields.length === 0;
+    await this.audit.record({
+      eventType: verified
+        ? "meta_app_review_rename_completed"
+        : "meta_app_review_rename_verification_failed",
+      actorType: "SERVICE",
+      workspaceId: principal.workspaceId,
+      targetType: "mcp_preview",
+      targetId: preview.id,
+      success: verified,
+      metadata: {
+        ...metadata,
+        metaMutationAccepted: mutation.result.providerAccepted,
+        postWriteName: after.name,
+        postWriteStatus: after.status,
+        invariantChangedFields: changedFields.join(","),
+        postWriteVerified: verified,
+      },
+    });
+    if (!verified)
+      return {
+        status: "verification_failed",
+        execution_mode: "confirmed_write",
+        provider_write_enabled: true,
+        reread: after,
+        message:
+          "Название отправлено в Meta, но проверка состояния кампании не прошла. Другие поля не изменялись HolyMedia MCP.",
+      };
+    return {
+      status: "committed",
+      execution_mode: "confirmed_write",
+      provider_write_enabled: true,
+      reread: after,
+      message:
+        "Название кампании изменено и подтверждено повторным чтением из Meta.",
+    };
   }
 
   private async account(principal: ServiceTokenPrincipal, accountId: string) {
     const normalized = accountId.trim();
+    // PostgreSQL validates the UUID branch of an OR expression even when the
+    // external account-id branch would match. Never pass a Meta `act_*` id to
+    // the UUID column: MCP accepts both internal UUIDs and provider IDs.
+    const identifiers: Array<Record<string, string>> = [
+      { externalAccountId: normalized },
+    ];
+    if (isUuid(normalized)) identifiers.unshift({ id: normalized });
     const account = await this.database.client.providerAccount.findFirst({
       where: {
         workspaceId: principal.workspaceId,
         enabled: true,
-        connection: { status: "CONNECTED" },
+        // A DEGRADED connection can still have a valid credential. It may be
+        // read and pre-checked, while every mutation remains subject to the
+        // policy enforced in commit(). Disconnected/revoked connections stay
+        // unavailable.
+        connection: { status: { in: ["CONNECTED", "DEGRADED"] } },
         ...(principal.accountIds.length
           ? { id: { in: principal.accountIds } }
           : {}),
-        OR: [{ id: normalized }, { externalAccountId: normalized }],
+        OR: identifiers,
       },
     });
     if (!account)
@@ -422,4 +543,16 @@ export class McpPreviewService {
 
 function digest(value: string): string {
   return createHash("sha256").update(value, "utf8").digest("hex");
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    value,
+  );
+}
+
+function payloadRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {};
 }

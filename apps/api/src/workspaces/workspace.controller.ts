@@ -20,6 +20,7 @@ import {
   CreateInvitationDto,
   CreateWorkspaceDto,
   UpdateMemberRoleDto,
+  UpdateCompanyProfileDto,
   UpdateWorkspaceDto,
 } from "../auth/auth.dto.js";
 import type { HumanPrincipal, RequestWithAuth } from "../auth/auth.types.js";
@@ -75,6 +76,18 @@ export class WorkspaceController {
     return this.workspaces.update(id, input, principal, request);
   }
 
+  @Patch(":id/company")
+  @UseGuards(WorkspaceAuthorizationGuard)
+  @RequirePermissions("workspace.manage")
+  public updateCompany(
+    @Param("id") id: string,
+    @Body() input: UpdateCompanyProfileDto,
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Req() request: RequestWithAuth,
+  ): Promise<WorkspaceView> {
+    return this.workspaces.updateCompanyProfile(id, input, principal, request);
+  }
+
   @Get(":id/members")
   @UseGuards(WorkspaceAuthorizationGuard)
   @RequirePermissions("members.read")
@@ -117,6 +130,30 @@ export class WorkspaceController {
     @Req() request: RequestWithAuth,
   ): Promise<InvitationView> {
     return this.workspaces.createInvitation(id, input, principal, request);
+  }
+
+  @Get(":id/invitations")
+  @UseGuards(WorkspaceAuthorizationGuard)
+  @RequirePermissions("members.manage")
+  public invitations(@Param("id") id: string): Promise<InvitationView[]> {
+    return this.workspaces.invitations(id);
+  }
+
+  @Post(":id/invitations/:invitationId/resend")
+  @UseGuards(WorkspaceAuthorizationGuard)
+  @RequirePermissions("members.manage")
+  public resendInvitation(
+    @Param("id") id: string,
+    @Param("invitationId") invitationId: string,
+    @CurrentPrincipal() principal: HumanPrincipal,
+    @Req() request: RequestWithAuth,
+  ): Promise<InvitationView> {
+    return this.workspaces.resendInvitation(
+      id,
+      invitationId,
+      principal,
+      request,
+    );
   }
 
   @Delete(":id/invitations/:invitationId")

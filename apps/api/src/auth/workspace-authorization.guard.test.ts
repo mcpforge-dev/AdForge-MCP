@@ -18,7 +18,12 @@ function guardFor(role: string, permissions: string[]) {
       workspaceMembership: {
         findUnique: async () => ({
           role,
-          workspace: { id: "workspace-a", name: "A", slug: "a" },
+          workspace: {
+            id: "workspace-a",
+            name: "A",
+            slug: "a",
+            accessStatus: "ACTIVE",
+          },
         }),
       },
       rolePermission: {
@@ -56,7 +61,12 @@ describe("WorkspaceAuthorizationGuard", () => {
           workspaceMembership: {
             findUnique: async () => ({
               role: "MEMBER",
-              workspace: { id: "workspace-a", name: "A", slug: "a" },
+              workspace: {
+                id: "workspace-a",
+                name: "A",
+                slug: "a",
+                accessStatus: "ACTIVE",
+              },
             }),
           },
           rolePermission: {
@@ -89,5 +99,38 @@ describe("WorkspaceAuthorizationGuard", () => {
         }),
       ),
     ).rejects.toThrow("Workspace access denied.");
+  });
+
+  it("keeps company and team management available while denying pending workspaces product access", async () => {
+    const database = {
+      client: {
+        workspaceMembership: {
+          findUnique: async () => ({
+            role: "OWNER",
+            workspace: {
+              id: "workspace-a",
+              name: "A",
+              slug: "a",
+              accessStatus: "PENDING",
+            },
+          }),
+        },
+        rolePermission: {
+          findMany: async () => [{ permission: { key: "connections.read" } }],
+        },
+      },
+    };
+    const guard = new WorkspaceAuthorizationGuard(
+      { getAllAndOverride: () => ["connections.read"] } as never,
+      database as never,
+    );
+    await expect(
+      guard.canActivate(
+        context({
+          params: { id: "workspace-a" },
+          user: { kind: "human", userId: "user-a", sessionId: "session-a" },
+        }),
+      ),
+    ).rejects.toThrow("Company access is pending approval.");
   });
 });

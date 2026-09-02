@@ -2,6 +2,76 @@ import { describe, expect, it } from "vitest";
 import { BillingService } from "./billing.service.js";
 
 describe("Billing usage", () => {
+  it("creates a workspace-scoped tariff request without assigning access", async () => {
+    let created: Record<string, unknown> | undefined;
+    const database = {
+      client: {
+        plan: {
+          findUnique: async () => ({
+            id: "plan-ads-support",
+            key: "ai_ads_support",
+            name: "AI Ads + Holy Media support",
+            active: true,
+          }),
+        },
+        tariffRequest: {
+          findFirst: async () => null,
+          create: async (input: Record<string, unknown>) => {
+            created = input;
+            return {
+              id: "request-a",
+              requestedPlan: { key: "ai_ads_support" },
+            };
+          },
+        },
+      },
+    } as never;
+    const service = new BillingService(database);
+    await expect(
+      service.createTariffRequest("workspace-a", "ai_ads_support", {
+        user: { kind: "human", userId: "user-a", sessionId: "session-a" },
+        headers: {},
+      }),
+    ).resolves.toMatchObject({ created: true });
+    expect(created?.data).toMatchObject({
+      workspaceId: "workspace-a",
+      userId: "user-a",
+      requestedPlanId: "plan-ads-support",
+      requestedServiceLevel: "HOLYMEDIA_SUPPORT",
+    });
+  });
+
+  it("deduplicates the same pending tariff request in one workspace", async () => {
+    let createCalls = 0;
+    const database = {
+      client: {
+        plan: {
+          findUnique: async () => ({
+            id: "plan-ads-self",
+            key: "ai_ads_self",
+            name: "AI Ads",
+            active: true,
+          }),
+        },
+        tariffRequest: {
+          findFirst: async () => ({
+            id: "request-existing",
+            requestedPlan: { key: "ai_ads_self" },
+          }),
+          create: async () => createCalls++,
+        },
+      },
+    } as never;
+    const service = new BillingService(database);
+    await expect(
+      service.createTariffRequest("workspace-a", "ai_ads_self", {
+        user: { kind: "human", userId: "user-a", sessionId: "session-a" },
+        headers: {},
+      }),
+    ).resolves.toMatchObject({ created: false });
+    expect(createCalls).toBe(0);
+  });
+
   it("records monthly MCP usage without sensitive metadata", async () => {
     let input: Record<string, unknown> | undefined;
     const database = {
@@ -95,51 +165,49 @@ describe("Billing usage", () => {
     ).rejects.toThrow("Provider account limit reached.");
   });
 
-  it("saves provider account selection in one transaction", async () => {
-    const transactions: unknown[] = [];
-    const updates: Record<string, unknown>[] = [];
+  it("atomically replaces one connection selection", async () => {
+    const accounts = [
+      { id: "account-a", enabled: true },
+      { id: "account-b", enabled: true },
+      { id: "account-c", enabled: true },
+    ];
     const database = {
       client: {
-        entitlement: { findMany: async () => [] },
-        workspaceSubscription: { findFirst: async () => null },
-        plan: {
-          findUnique: async () => ({ features: { provider_accounts: 2 } }),
+        entitlement: {
+          findMany: async () => [{ featureKey: "legacy_access", value: true }],
         },
-        $transaction: async (operation: (client: unknown) => Promise<void>) => {
-          transactions.push(operation);
-          return operation({
+        workspaceSubscription: { findFirst: async () => null },
+        $transaction: async (
+          operation: (client: unknown) => Promise<unknown>,
+        ) =>
+          operation({
             providerAccount: {
+              findMany: async () =>
+                accounts.map(({ id, enabled }) => ({ id, enabled })),
               count: async () => 0,
-              updateMany: async (input: Record<string, unknown>) => {
-                updates.push(input);
-                return { count: 1 };
+              updateMany: async (input: { data: { enabled: boolean } }) => {
+                for (const account of accounts) {
+                  account.enabled = input.data.enabled
+                    ? account.id === "account-b"
+                    : false;
+                }
+                return { count: accounts.length };
               },
             },
-          });
-        },
+          }),
       },
     } as never;
     const service = new BillingService(database);
 
-    await service.setProviderAccountsEnabled("workspace-a", "connection-a", [
-      "account-a",
-      "account-a",
-    ]);
-
-    expect(transactions).toHaveLength(1);
-    expect(updates).toEqual([
-      {
-        where: { workspaceId: "workspace-a", connectionId: "connection-a" },
-        data: { enabled: false },
-      },
-      {
-        where: {
-          workspaceId: "workspace-a",
-          connectionId: "connection-a",
-          id: { in: ["account-a"] },
-        },
-        data: { enabled: true },
-      },
+    await expect(
+      service.setProviderAccountsEnabled("workspace-a", "connection-a", [
+        "account-b",
+      ]),
+    ).resolves.toEqual({ changedAccountIds: ["account-a", "account-c"] });
+    expect(accounts.map((account) => [account.id, account.enabled])).toEqual([
+      ["account-a", false],
+      ["account-b", true],
+      ["account-c", false],
     ]);
   });
 });

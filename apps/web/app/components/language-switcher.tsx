@@ -1,18 +1,47 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { ThemeSwitcher } from "./theme-switcher";
 
-type Language = "en" | "ru";
+export type Language = "en" | "ru";
 
-const STORAGE_KEY = "holymedia-language";
+// Keep the old key out of the default decision: the previous release stored
+// its English default as if the user had explicitly selected it.
+const STORAGE_KEY = "holymedia-language-v2";
+const LANGUAGE_CHANGE_EVENT = "holymedia-language-change";
 const PAIRS: Array<[string, string]> = [
+  ["Подключите кабинеты", "Connect accounts"],
+  [
+    "AI-клиент увидит все подключённые кабинеты вашей компании.",
+    "Your AI client will see every connected account in your company.",
+  ],
+  [
+    "AI видит все подключённые рекламные кабинеты вашей компании.",
+    "AI can see every connected advertising account in your company.",
+  ],
+  ["Кабинеты вашей компании", "Your company accounts"],
+  [
+    "Доступ ограничен текущей компанией и её участниками.",
+    "Access is limited to the current company and its members.",
+  ],
+  [
+    "Ключ получит доступ ко всем подключённым кабинетам из раздела «Подключения» текущей компании.",
+    "The key will have access to every connected account in the current company.",
+  ],
   ["Рекламная аналитика и MCP", "Advertising analytics and MCP"],
   ["HolyMedia MCP", "HolyMedia MCP"],
+  ["Навигация", "Navigation"],
+  ["Пример ответа AI", "Example AI answer"],
   ["Как это работает", "How it works"],
+  ["Пример ответа", "Example answer"],
   ["Войти", "Sign in"],
   ["Создать аккаунт", "Create account"],
   ["Регистрация", "Sign up"],
   ["Вся ваша реклама — в одном AI-чате", "All your advertising in one AI chat"],
+  [
+    "Подключите Meta, Google Ads, TikTok и Яндекс Директ. Спрашивайте о кампаниях, расходах и результатах в Claude, ChatGPT или Codex.",
+    "Connect Meta, Google Ads, TikTok, and Yandex Direct. Ask about campaigns, spend, and results in Claude, ChatGPT, or Codex.",
+  ],
   ["Ваш AI-клиент", "Your AI client"],
   [
     "Какие кампании активны и сколько мы потратили за неделю?",
@@ -44,10 +73,10 @@ const PAIRS: Array<[string, string]> = [
     "Войдите через Google, Meta, TikTok или Яндекс.",
     "Sign in with Google, Meta, TikTok, or Yandex.",
   ],
-  ["Выберите кабинеты", "Choose accounts"],
+  ["Подключите кабинеты", "Connect accounts"],
   [
-    "Отметьте аккаунты, которые будут доступны AI-клиенту.",
-    "Select the accounts your AI client can access.",
+    "AI-клиент увидит все подключённые кабинеты вашей компании.",
+    "Your AI client will see every connected account in your company.",
   ],
   ["Подключите MCP", "Connect MCP"],
   [
@@ -56,8 +85,8 @@ const PAIRS: Array<[string, string]> = [
   ],
   ["Что можно узнать", "What you can learn"],
   [
-    "AI видит только выбранные вами рекламные кабинеты.",
-    "AI can see only the advertising accounts you select.",
+    "AI видит все подключённые рекламные кабинеты вашей компании.",
+    "AI can see every connected advertising account in your company.",
   ],
   [
     "какие кампании активны и где есть проблемы;",
@@ -159,6 +188,10 @@ const PAIRS: Array<[string, string]> = [
   ["выбрано", "selected"],
   ["Готов", "Ready"],
   ["ключ доступа", "access key"],
+  ["Ключи доступа", "Access keys"],
+  ["активных ключей", "active keys"],
+  ["Требуют внимания", "Need attention"],
+  ["подключений", "connections"],
   ["за выбранный период", "for the selected period"],
   ["Как начать", "How to start"],
   ["Официальный OAuth", "Official OAuth"],
@@ -264,22 +297,174 @@ const PAIRS: Array<[string, string]> = [
     "Реальные изменения не выполняются без отдельного подтверждения.",
     "Real changes are not executed without separate approval.",
   ],
+  ["Войдите через официальный OAuth.", "Sign in through official OAuth."],
+  ["Добавьте AI-клиент", "Add an AI client"],
+  ["Яндекс Директ", "Yandex Direct"],
+  [
+    "Кампании, расходы, клики и конверсии.",
+    "Campaigns, spend, clicks, and conversions.",
+  ],
+  [
+    "Клиенты и рекламные кабинеты Директа.",
+    "Direct clients and advertising accounts.",
+  ],
+  [
+    "Доступные рекламные аккаунты TikTok.",
+    "Available TikTok advertising accounts.",
+  ],
+  [
+    "Не удалось обновить список аккаунтов.",
+    "Couldn't refresh the account list.",
+  ],
+  ["Скопируйте MCP URL", "Copy the MCP URL"],
+  ["Скопировать", "Copy"],
+  ["MCP URL скопирован.", "MCP URL copied."],
+  ["Создайте ключ доступа", "Create an access key"],
+  ["Название", "Name"],
+  ["Например, Codex", "For example, Codex"],
+  ["Срок действия", "Expiration"],
+  ["30 дней", "30 days"],
+  ["90 дней", "90 days"],
+  ["1 год", "1 year"],
+  ["Ключ получит доступ к", "The key will have access to"],
+  [
+    "выбранным кабинетам из раздела «Подключения».",
+    "selected accounts in Connections.",
+  ],
+  ["Дополнительные настройки", "Additional settings"],
+  ["Разрешить подтверждённые изменения", "Allow confirmed changes"],
+  [
+    "Любое изменение потребует предварительного просмотра и подтверждения.",
+    "Every change requires a preview and confirmation.",
+  ],
+  ["Создать ключ", "Create key"],
+  ["Сохраните ключ сейчас", "Save the key now"],
+  [
+    "После закрытия страницы полный ключ больше не показывается.",
+    "The full key is not shown again after this page is closed.",
+  ],
+  ["Ключ скопирован.", "Key copied."],
+  ["Скрыть", "Hide"],
+  ["Ваши ключи", "Your keys"],
+  ["Без названия", "Untitled"],
+  ["Назвать", "Name key"],
+  ["Переименовать", "Rename"],
+  ["Название ключа", "Key name"],
+  ["Сохранить название", "Save name"],
+  ["Сохраняем…", "Saving…"],
+  ["Отмена", "Cancel"],
+  ["Активен", "Active"],
+  ["Истёк", "Expired"],
+  ["Бессрочно", "No expiration"],
+  ["Отозван", "Revoked"],
+  ["Отозвать", "Revoke"],
+  ["Без срока", "No expiration"],
+  ["Обновить ключ", "Rotate key"],
+  ["Отозвать ключ", "Revoke key"],
+  ["Название ключа сохранено.", "Key name saved."],
+  ["Не удалось сохранить название ключа.", "Couldn't save the key name."],
+  [
+    "Новый ключ готов. Сохраните его сейчас.",
+    "Your new key is ready. Save it now.",
+  ],
+  ["Не удалось обновить ключ.", "Couldn't rotate the key."],
+  ["Не удалось отозвать ключ.", "Couldn't revoke the key."],
+  [
+    "Текущее значение сразу перестанет работать. Новый ключ будет показан один раз.",
+    "The current value stops working immediately. The new key is shown once.",
+  ],
+  [
+    "AI-клиент с этим ключом потеряет доступ. Вернуть этот ключ нельзя.",
+    "The AI client will lose access. This key cannot be restored.",
+  ],
+  ["Выберите AI-клиент", "Choose an AI client"],
+  ["AI-клиенты", "AI clients"],
+  [
+    "Откройте настройки Codex и раздел MCP Servers.",
+    "Open Codex settings and go to MCP Servers.",
+  ],
+  ["Добавьте HTTP-сервер с адресом", "Add an HTTP server with the URL"],
+  ["В заголовке Authorization укажите", "Set the Authorization header to"],
+  ["ваш ключ", "your key"],
+  ["Сохраните и откройте новый чат.", "Save and open a new chat."],
+  ["Откройте Settings → Connectors.", "Open Settings → Connectors."],
+  [
+    "Добавьте custom connector «HolyMedia MCP».",
+    "Add the custom connector “HolyMedia MCP”.",
+  ],
+  ["Укажите адрес", "Enter the URL"],
+  [
+    "Пройдите вход в HolyMedia MCP, когда Claude его откроет.",
+    "Sign in to HolyMedia MCP when Claude opens it.",
+  ],
+  [
+    "Откройте настройки подключений ChatGPT.",
+    "Open ChatGPT connection settings.",
+  ],
+  [
+    "Создайте connector с полным адресом",
+    "Create a connector with the full URL",
+  ],
+  [
+    "Выберите OAuth и автоматическую регистрацию клиента.",
+    "Select OAuth and automatic client registration.",
+  ],
+  [
+    "Войдите в HolyMedia MCP и подтвердите подключение.",
+    "Sign in to HolyMedia MCP and confirm the connection.",
+  ],
+  ["Отчёт по рекламному кабинету", "Advertising account report"],
+  ["Отчёт", "Report"],
+  ["Основные разделы", "Main sections"],
+  ["Открыть профиль", "Open profile"],
+  ["HolyMedia MCP — обзор", "HolyMedia MCP — overview"],
+  ["Выберите кабинет и период.", "Select an account and period."],
+  ["Подготовим Word-документ или", "We'll prepare a Word document or"],
+  [
+    "презентацию с показателями, сравнением и кампаниями.",
+    "a presentation with metrics, comparisons, and campaigns.",
+  ],
+  ["HOLYMEDIA MCP · ОТЧЁТ", "HOLYMEDIA MCP · REPORT"],
+  ["Не удалось подготовить отчёт", "Couldn't prepare the report"],
+  ["Повторить проверку", "Retry check"],
+  [
+    "Получаем реальные показатели выбранного кабинета…",
+    "Loading live metrics for the selected account…",
+  ],
+  ["Основные показатели", "Key metrics"],
+  [
+    "нужно переподключить, чтобы получить данные для отчёта.",
+    "needs reconnecting to retrieve report data.",
+  ],
+  ["Открыть подключения", "Open connections"],
+  ["Отчёт по", "Report on"],
+  ["рекламным кампаниям", "advertising campaigns"],
+  ["дней", "days"],
 ];
 
 const translations = new Map(PAIRS);
+const reverseTranslations = new Map(
+  PAIRS.map(([russian, english]) => [english, russian]),
+);
 const orderedPairs = [...PAIRS].sort(
   (left, right) => right[0].length - left[0].length,
 );
+const reversePairs = [...PAIRS]
+  .map(([russian, english]) => [english, russian] as const)
+  .sort((left, right) => right[0].length - left[0].length);
 const originals = new WeakMap<Text, string>();
 const originalAttributes = new WeakMap<Element, Record<string, string>>();
-let activeLanguage: Language = "en";
+let activeLanguage: Language = "ru";
 let applyingLanguage = false;
 
 function translate(value: string, language: Language): string {
-  if (language === "ru") return value;
-  const exact = translations.get(value);
+  const exact =
+    language === "ru"
+      ? reverseTranslations.get(value)
+      : translations.get(value);
   if (exact) return exact;
-  return orderedPairs.reduce(
+  const pairs = language === "ru" ? reversePairs : orderedPairs;
+  return pairs.reduce(
     (current, [source, target]) => current.split(source).join(target),
     value,
   );
@@ -288,7 +473,9 @@ function translate(value: string, language: Language): string {
 function isUiNode(node: Node): boolean {
   const parent = node.parentElement;
   return Boolean(
-    parent?.closest("[data-language-switcher], script, style, noscript"),
+    parent?.closest(
+      "[data-language-switcher], [data-language-static], script, style, noscript",
+    ),
   );
 }
 
@@ -307,6 +494,12 @@ function applyLanguage(language: Language): void {
           button.setAttribute("aria-pressed", String(active));
         });
     });
+    document
+      .querySelectorAll<HTMLElement>("[data-language-title]")
+      .forEach((element) => {
+        const title = element.dataset.languageTitle;
+        if (title) document.title = translate(title, language);
+      });
     const walker = document.createTreeWalker(
       document.body,
       NodeFilter.SHOW_TEXT,
@@ -322,81 +515,108 @@ function applyLanguage(language: Language): void {
       const stored = originals.get(textNode);
       const base =
         stored === undefined ||
-        (/[А-Яа-яЁё]/.test(current) && current !== translate(stored, "en"))
+        (current !== translate(stored, "ru") &&
+          current !== translate(stored, "en"))
           ? current
           : stored;
-      originals.set(textNode, base ?? current);
-      textNode.nodeValue = translate(base ?? current, language);
+      originals.set(textNode, base);
+      const next = translate(base, language);
+      if (current !== next) textNode.nodeValue = next;
     });
     document
       .querySelectorAll<HTMLElement>("[placeholder], [title], [aria-label]")
       .forEach((element) => {
+        if (element.closest("[data-language-static]")) return;
         const saved = originalAttributes.get(element) ?? {};
         (["placeholder", "title", "aria-label"] as const).forEach(
           (attribute) => {
             const current = element.getAttribute(attribute);
             if (!current) return;
             const base =
-              saved[attribute] === undefined || /[А-Яа-яЁё]/.test(current)
+              saved[attribute] === undefined ||
+              (current !== translate(saved[attribute], "ru") &&
+                current !== translate(saved[attribute], "en"))
                 ? current
                 : saved[attribute];
             saved[attribute] = base;
-            element.setAttribute(attribute, translate(base, language));
+            const next = translate(base, language);
+            if (current !== next) element.setAttribute(attribute, next);
           },
         );
         originalAttributes.set(element, saved);
       });
-    window.localStorage.setItem(STORAGE_KEY, language);
+    window.dispatchEvent(
+      new CustomEvent<Language>(LANGUAGE_CHANGE_EVENT, { detail: language }),
+    );
   } finally {
     applyingLanguage = false;
   }
 }
 
+export function useLanguage(): Language {
+  const [language, setLanguage] = useState<Language>("ru");
+
+  useEffect(() => {
+    const saved = window.localStorage.getItem(STORAGE_KEY);
+    setLanguage(saved === "en" ? "en" : "ru");
+    const onChange = (event: Event) => {
+      setLanguage((event as CustomEvent<Language>).detail);
+    };
+    window.addEventListener(LANGUAGE_CHANGE_EVENT, onChange);
+    return () => window.removeEventListener(LANGUAGE_CHANGE_EVENT, onChange);
+  }, []);
+
+  return language;
+}
+
 export function LanguageSwitcher({ compact = false }: { compact?: boolean }) {
   useEffect(() => {
     const saved = window.localStorage.getItem(STORAGE_KEY);
-    activeLanguage = saved === "ru" ? "ru" : "en";
+    activeLanguage = saved === "en" ? "en" : "ru";
     const apply = () => applyLanguage(activeLanguage);
     const observer = new MutationObserver(() => apply());
     apply();
     observer.observe(document.body, {
       childList: true,
       subtree: true,
-      characterData: true,
     });
     return () => observer.disconnect();
   }, []);
 
   function select(language: Language) {
     activeLanguage = language;
+    window.localStorage.setItem(STORAGE_KEY, language);
     applyLanguage(language);
   }
 
   return (
-    <div
-      className={
-        compact
-          ? "language-switcher language-switcher--compact"
-          : "language-switcher"
-      }
-      data-language-switcher
-    >
-      <button
-        type="button"
-        data-language="en"
-        aria-label="English"
-        onClick={() => select("en")}
+    <div className="header-preferences" data-language-static>
+      <div
+        className={
+          compact
+            ? "language-switcher language-switcher--compact"
+            : "language-switcher"
+        }
+        data-language-switcher
       >
-        EN
-      </button>
-      <button
-        type="button"
-        data-language="ru"
-        aria-label="Русский"
-        onClick={() => select("ru")}
-      >
-        RU
-      </button>
+        <button
+          type="button"
+          data-language="en"
+          aria-label="English"
+          onClick={() => select("en")}
+        >
+          EN
+        </button>
+        <button
+          type="button"
+          data-language="ru"
+          aria-label="Русский"
+          onClick={() => select("ru")}
+        >
+          RU
+        </button>
+      </div>
+      <ThemeSwitcher compact={compact} />
     </div>
   );
 }

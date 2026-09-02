@@ -66,6 +66,13 @@ const rawConfigSchema = z.object({
   V2_WRITE_ACCOUNT_ALLOWLIST: z.string().default(""),
   V2_WRITE_OBJECT_ALLOWLIST: z.string().default(""),
   V2_WRITE_OPERATION_ALLOWLIST: z.string().default(""),
+  // Deliberately narrower than the legacy confirmed-write allowlists. This is
+  // an opt-in, one-resource policy used solely for a Meta App Review demo.
+  V2_META_APP_REVIEW_RENAME_ENABLED: booleanFromEnv.default(false),
+  V2_META_APP_REVIEW_RENAME_ACCOUNT_ID: z.string().default(""),
+  V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: z.string().default(""),
+  V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: z.string().default(""),
+  V2_META_APP_REVIEW_RENAME_TARGET_NAME: z.string().default(""),
   PROVIDER_TIKTOK_CLIENT_ID: z.string().optional(),
   PROVIDER_TIKTOK_CLIENT_SECRET: z.string().optional(),
   PROVIDER_TIKTOK_REDIRECT_URI: z.string().url().optional(),
@@ -112,6 +119,23 @@ const rawConfigSchema = z.object({
     .max(120000)
     .default(20000),
   COOKIE_DOMAIN: z.string().optional(),
+  HOLYMEDIA_ADMIN_ENABLED: booleanFromEnv.default(true),
+  HOLYMEDIA_ADMIN_PASSWORD: z.string().min(16).max(256).optional(),
+  HOLYMEDIA_ADMIN_SESSION_TTL_HOURS: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(24)
+    .default(8),
+  HOLYMEDIA_PUBLIC_BASE_URL: z.string().url().optional(),
+  TELEGRAM_SUPPORT_BOT_TOKEN: z.preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+    z.string().min(20).optional(),
+  ),
+  TELEGRAM_SUPPORT_CHAT_ID: z.preprocess(
+    (value) => (typeof value === "string" && !value.trim() ? undefined : value),
+    z.string().min(1).max(64).optional(),
+  ),
   SESSION_TTL_DAYS: z.coerce.number().int().min(1).max(90).default(14),
   EMAIL_TOKEN_TTL_MINUTES: z.coerce.number().int().min(5).max(1440).default(60),
   ARGON2_MEMORY_KIB: z.coerce
@@ -164,6 +188,11 @@ export type AppConfig = {
   writeAccountAllowlist: string[];
   writeObjectAllowlist: string[];
   writeOperationAllowlist: string[];
+  metaAppReviewRenameEnabled: boolean;
+  metaAppReviewRenameAccountId: string;
+  metaAppReviewRenameCampaignId: string;
+  metaAppReviewRenameExpectedName: string;
+  metaAppReviewRenameTargetName: string;
   providerTikTokClientId: string | undefined;
   providerTikTokClientSecret: string | undefined;
   providerTikTokRedirectUri: string | undefined;
@@ -183,6 +212,13 @@ export type AppConfig = {
   providerYandexClientLogin: string | undefined;
   providerHttpTimeoutMs: number;
   cookieDomain: string | undefined;
+  adminEnabled: boolean;
+  adminLogin: string;
+  adminPassword: string | undefined;
+  adminSessionTtlHours: number;
+  publicBaseUrl: string;
+  telegramSupportBotToken: string | undefined;
+  telegramSupportChatId: string | undefined;
   sessionTtlDays: number;
   emailTokenTtlMinutes: number;
   argon2MemoryKib: number;
@@ -386,6 +422,15 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     writeOperationAllowlist: value.V2_WRITE_OPERATION_ALLOWLIST.split(",")
       .map((item) => item.trim())
       .filter(Boolean),
+    metaAppReviewRenameEnabled: value.V2_META_APP_REVIEW_RENAME_ENABLED,
+    metaAppReviewRenameAccountId:
+      value.V2_META_APP_REVIEW_RENAME_ACCOUNT_ID.trim(),
+    metaAppReviewRenameCampaignId:
+      value.V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID.trim(),
+    metaAppReviewRenameExpectedName:
+      value.V2_META_APP_REVIEW_RENAME_EXPECTED_NAME.trim(),
+    metaAppReviewRenameTargetName:
+      value.V2_META_APP_REVIEW_RENAME_TARGET_NAME.trim(),
     providerTikTokClientId: value.PROVIDER_TIKTOK_CLIENT_ID,
     providerTikTokClientSecret: value.PROVIDER_TIKTOK_CLIENT_SECRET,
     providerTikTokRedirectUri: value.PROVIDER_TIKTOK_REDIRECT_URI,
@@ -405,6 +450,19 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
     providerYandexClientLogin: value.PROVIDER_YANDEX_CLIENT_LOGIN,
     providerHttpTimeoutMs: value.PROVIDER_HTTP_TIMEOUT_MS,
     cookieDomain: value.COOKIE_DOMAIN,
+    adminEnabled:
+      value.HOLYMEDIA_ADMIN_ENABLED && Boolean(value.HOLYMEDIA_ADMIN_PASSWORD),
+    // This identity is deliberately not configurable. Customer and workspace
+    // roles must never become alternate system-admin logins.
+    adminLogin: "Admin",
+    adminPassword: value.HOLYMEDIA_ADMIN_PASSWORD,
+    adminSessionTtlHours: value.HOLYMEDIA_ADMIN_SESSION_TTL_HOURS,
+    publicBaseUrl: (value.HOLYMEDIA_PUBLIC_BASE_URL ?? corsOrigins[0]!).replace(
+      /\/$/,
+      "",
+    ),
+    telegramSupportBotToken: nonEmpty(value.TELEGRAM_SUPPORT_BOT_TOKEN),
+    telegramSupportChatId: nonEmpty(value.TELEGRAM_SUPPORT_CHAT_ID),
     sessionTtlDays: value.SESSION_TTL_DAYS,
     emailTokenTtlMinutes: value.EMAIL_TOKEN_TTL_MINUTES,
     argon2MemoryKib: value.ARGON2_MEMORY_KIB,
