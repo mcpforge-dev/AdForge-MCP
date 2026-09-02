@@ -195,7 +195,19 @@ export class GoogleLoginService {
 }
 
 function normalizeNextPath(value: string): string {
-  if (value === "/dashboard") return value;
+  try {
+    const dashboard = new URL(value, "https://mcp.holymedia.kz");
+    if (
+      dashboard.origin === "https://mcp.holymedia.kz" &&
+      /^\/dashboard(?:\/(?:overview|connections|ai-client|reports|tariffs|profile|analysis))?$/.test(
+        dashboard.pathname,
+      )
+    ) {
+      return `${dashboard.pathname}${dashboard.search}`;
+    }
+  } catch {
+    // Continue with the non-dashboard continuation check below.
+  }
   try {
     const url = new URL(value, "https://mcp.holymedia.kz");
     const transaction = url.searchParams.get("transaction") ?? "";

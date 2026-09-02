@@ -85,7 +85,7 @@ export class ProviderController {
       reply
         .code(302)
         .redirect(
-          `/dashboard?section=connections&oauth=${outcome}&provider=${encodeURIComponent(provider)}${reason ? `&oauth_reason=${encodeURIComponent(reason)}` : ""}`,
+          `/dashboard/connections?oauth=${outcome}&provider=${encodeURIComponent(provider)}${reason ? `&oauth_reason=${encodeURIComponent(reason)}` : ""}`,
         );
     if (oauthError)
       return redirect(

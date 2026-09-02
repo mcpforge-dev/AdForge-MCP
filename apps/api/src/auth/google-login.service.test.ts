@@ -80,6 +80,25 @@ describe("GoogleLoginService", () => {
     });
   });
 
+  it("preserves a validated dashboard deep link and rejects external paths", async () => {
+    vi.stubEnv("NODE_ENV", "test");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");
+    vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET", "login-secret");
+    const database = databaseMock();
+    const service = new GoogleLoginService(database as never);
+
+    await service.start("/dashboard/connections?oauth=success");
+    expect(database.client.googleLoginState.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        nextPath: "/dashboard/connections?oauth=success",
+      }),
+    });
+    await service.start("https://attacker.example/dashboard/connections");
+    expect(database.client.googleLoginState.create).toHaveBeenLastCalledWith({
+      data: expect.objectContaining({ nextPath: "/dashboard" }),
+    });
+  });
+
   it("exchanges the code and returns only a normalized verified profile", async () => {
     vi.stubEnv("NODE_ENV", "test");
     vi.stubEnv("PROVIDER_GOOGLE_LOGIN_CLIENT_ID", "login-client");

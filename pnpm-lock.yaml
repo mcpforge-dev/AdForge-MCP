@@ -167,6 +167,9 @@ importers:
       '@holymedia/config':
         specifier: workspace:*
         version: link:../../packages/config
+      '@holymedia/contracts':
+        specifier: workspace:*
+        version: link:../../packages/contracts
       '@holymedia/database':
         specifier: workspace:*
         version: link:../../packages/database

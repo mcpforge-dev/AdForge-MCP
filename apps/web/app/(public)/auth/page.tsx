@@ -82,6 +82,23 @@ async function csrf(): Promise<string> {
   return data.csrfToken;
 }
 
+function safeDashboardPath(value: string | null): string {
+  if (!value) return "/dashboard";
+  try {
+    const url = new URL(value, window.location.origin);
+    if (
+      url.origin === window.location.origin &&
+      /^\/dashboard(?:\/(?:overview|connections|ai-client|reports|tariffs|profile|analysis))?$/.test(
+        url.pathname,
+      )
+    )
+      return `${url.pathname}${url.search}`;
+  } catch {
+    // Use the safe dashboard default.
+  }
+  return "/dashboard";
+}
+
 export default function AuthPage() {
   const language = useLanguage();
   const t = copy[language];
@@ -92,11 +109,13 @@ export default function AuthPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [oauthTransaction, setOauthTransaction] = useState("");
+  const [nextPath, setNextPath] = useState("/dashboard");
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search);
     const requested = query.get("mode");
     const transaction = query.get("oauth_transaction") ?? "";
+    setNextPath(safeDashboardPath(query.get("next")));
     if (
       /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
         transaction,
@@ -131,6 +150,7 @@ export default function AuthPage() {
     const query = new URLSearchParams();
     if (next !== "login") query.set("mode", next);
     if (oauthTransaction) query.set("oauth_transaction", oauthTransaction);
+    if (nextPath !== "/dashboard") query.set("next", nextPath);
     const suffix = query.toString();
     window.history.replaceState({}, "", suffix ? `/auth?${suffix}` : "/auth");
   }
@@ -183,7 +203,7 @@ export default function AuthPage() {
             ? "/onboarding"
             : oauthTransaction
               ? `${API}/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
-              : "/dashboard",
+              : nextPath,
         );
       }
     } catch {
@@ -261,7 +281,12 @@ export default function AuthPage() {
           {mode !== "forgot" && (
             <a
               className="secondary-button google-login-button"
-              href={`${API}/auth/google/start${oauthTransaction ? `?oauth_transaction=${encodeURIComponent(oauthTransaction)}` : ""}`}
+              href={`${API}/auth/google/start?${new URLSearchParams({
+                ...(oauthTransaction
+                  ? { oauth_transaction: oauthTransaction }
+                  : {}),
+                ...(nextPath !== "/dashboard" ? { next: nextPath } : {}),
+              }).toString()}`}
             >
               <GoogleIcon />
               {t.google}

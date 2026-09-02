@@ -1,5 +1,6 @@
 import type { Job } from "bullmq";
 import { loadConfig } from "@holymedia/config";
+import { tariffPresentation } from "@holymedia/contracts";
 import type { DatabaseHandle } from "@holymedia/database";
 import { createLogger } from "@holymedia/observability";
 
@@ -149,6 +150,7 @@ function messageText(row: {
   workspace: { name: string };
 }) {
   const email = escapeHtml(row.user.email);
+  const tariff = tariffPresentation(row.planKey);
   const lines = [
     "<b>💬 Новая заявка HolyMedia MCP</b>",
     "",
@@ -156,9 +158,13 @@ function messageText(row: {
     `<b>Пользователь:</b> ${escapeHtml(row.user.name)}`,
     `<b>Email:</b> <a href="mailto:${email}">${email}</a>`,
     `<b>Компания:</b> ${escapeHtml(row.workspace.name)}`,
-    ...(row.planKey ? [`<b>Тариф:</b> ${escapeHtml(row.planKey)}`] : []),
+    [
+      `<b>Тариф / Plan:</b> ${escapeHtml(`${tariff.full.ru} / ${tariff.full.en}`)}`,
+    ],
     ...(row.sourceRoute
-      ? [`<b>Страница:</b> ${escapeHtml(row.sourceRoute)}`]
+      ? [
+          `<b>Страница / Page:</b> <a href="${escapeHtml(row.sourceRoute)}">${escapeHtml(row.sourceRoute)}</a>`,
+        ]
       : []),
     "",
     "<b>Сообщение</b>",

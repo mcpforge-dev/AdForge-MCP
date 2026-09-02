@@ -2,6 +2,8 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
+import { usePathname, useRouter } from "next/navigation";
+import { tariffPresentation } from "@holymedia/contracts";
 import { BrandLockup } from "../../components/brand-lockup";
 import { SiteFooter } from "../../components/site-footer";
 import {
@@ -13,9 +15,17 @@ import { TariffCatalog } from "../../components/tariff-catalog";
 import { SubscriptionInfo } from "../../components/subscription-info";
 import { ProjectSelect } from "../../components/project-select";
 import { SiteAuditV3 } from "../../components/site-audit-v3";
+import {
+  dashboardRoute,
+  dashboardSectionFromLegacyQuery,
+  dashboardSectionFromPath,
+  type DashboardSection,
+} from "../../components/dashboard-routes";
 
 const API = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:4000";
 const MCP_URL = "https://mcp.holymedia.kz/mcp";
+// Product pause only: audit services, history and private artifacts remain intact.
+const SITE_AUDIT_PRODUCT_ENABLED = false;
 
 type Workspace = {
   id: string;
@@ -64,14 +74,7 @@ type BillingSubscription = {
   metadata?: Record<string, unknown> | null;
   plan?: { key?: string; name?: string } | null;
 };
-type Section =
-  | "overview"
-  | "connections"
-  | "mcp"
-  | "reports"
-  | "analysis"
-  | "tariffs"
-  | "profile";
+type Section = DashboardSection;
 type Client = "codex" | "claude" | "chatgpt";
 type ReportFormat = "docx" | "pptx";
 type ReportableAccount = { account: ProviderAccount; connection: Connection };
@@ -399,6 +402,8 @@ function tokenLifecycle(
 
 export default function DashboardPage() {
   const language = useLanguage();
+  const pathname = usePathname();
+  const router = useRouter();
   const deleteKeyCopy =
     language === "en"
       ? {
@@ -427,7 +432,9 @@ export default function DashboardPage() {
   );
   const [profileName, setProfileName] = useState("");
   const [avatar, setAvatar] = useState<string | null>(null);
-  const [section, setSection] = useState<Section>("overview");
+  const section = dashboardSectionFromPath(pathname);
+  const setSection = (next: Section) =>
+    router.push(dashboardRoute(next) as never);
   const [client, setClient] = useState<Client>("codex");
   const [drafts, setDrafts] = useState<Record<string, string[]>>({});
   const [openAccountsId, setOpenAccountsId] = useState<string | null>(null);
@@ -574,6 +581,9 @@ export default function DashboardPage() {
           docx: "Word-документ",
           pptx: "Презентация",
         };
+  const dashboardTariff = tariffPresentation(subscription?.plan?.key, {
+    lifetimeAccess: subscription?.metadata?.accessGrant === "FULL_NON_EXPIRING",
+  });
   const reportFormatLabel =
     reportFormat === "pptx" ? reportCardCopy.pptx : reportCardCopy.docx;
   const connectedCount = connections.filter((connection) =>
@@ -621,7 +631,8 @@ export default function DashboardPage() {
       cache: "no-store",
     });
     if (!response.ok) {
-      window.location.assign("/auth");
+      const requestedPath = `${window.location.pathname}${window.location.search}`;
+      window.location.assign(`/auth?next=${encodeURIComponent(requestedPath)}`);
       return;
     }
     const data = (await response.json()) as Workspace[];
@@ -712,16 +723,11 @@ export default function DashboardPage() {
     void loadWorkspaces();
     void loadProfile();
     const query = new URLSearchParams(window.location.search);
-    const requestedSection = query.get("section");
-    if (
-      requestedSection === "connections" ||
-      requestedSection === "mcp" ||
-      requestedSection === "reports" ||
-      requestedSection === "tariffs" ||
-      requestedSection === "analysis" ||
-      requestedSection === "profile"
-    )
-      setSection(requestedSection);
+    const requestedSection = dashboardSectionFromLegacyQuery(
+      query.get("section"),
+    );
+    if (requestedSection && pathname === "/dashboard")
+      router.replace(dashboardRoute(requestedSection) as never);
     const oauthProvider = query.get("provider")?.toUpperCase();
     const oauthProviderAliases: Record<string, string> = {
       GOOGLE: "GOOGLE_ADS",
@@ -746,9 +752,8 @@ export default function DashboardPage() {
           query.get("oauth_reason"),
         ),
       );
-    if (query.has("oauth"))
-      window.history.replaceState({}, "", "/dashboard?section=connections");
-  }, []);
+    if (query.has("oauth")) router.replace("/dashboard/connections");
+  }, [pathname, router]);
 
   useEffect(() => {
     if (!active) return;
@@ -893,7 +898,7 @@ export default function DashboardPage() {
       );
       if (!response.ok) throw new Error();
       const data = (await response.json()) as { authorizationUrl: string };
-      window.history.replaceState({}, "", "/dashboard?section=connections");
+      window.history.replaceState({}, "", "/dashboard/connections");
       window.location.assign(data.authorizationUrl);
     } catch {
       fail(
@@ -1395,7 +1400,7 @@ export default function DashboardPage() {
     { id: "connections", label: "Подключения" },
     { id: "mcp", label: "AI-клиент" },
     { id: "reports", label: "Отчёты" },
-    { id: "analysis", label: "Анализ сайта" },
+    { label: "Анализ сайта", disabled: true },
     { label: "SEO", disabled: true },
   ];
   const allProviderIds = [
@@ -1560,13 +1565,9 @@ export default function DashboardPage() {
                   onClick={() => setSection("tariffs")}
                 >
                   <span>Тариф</span>
-                  <strong>
-                    {subscription?.plan?.key === "legacy_internal"
-                      ? "Полный доступ"
-                      : (subscription?.plan?.name ?? "Не выбран")}
-                  </strong>
+                  <strong>{dashboardTariff.plan.ru}</strong>
                   <small>
-                    {subscription?.plan?.key === "legacy_internal"
+                    {dashboardTariff.kind === "lifetime"
                       ? "Бессрочно"
                       : subscription?.status === "TRIALING"
                         ? "Пробный период"
@@ -2357,7 +2358,34 @@ export default function DashboardPage() {
           </section>
         )}
 
-        {section === "analysis" && active && (
+        {section === "analysis" && (
+          <section
+            className="section coming-soon-panel"
+            aria-labelledby="site-audit-coming-soon-title"
+          >
+            <div className="section-head">
+              <div>
+                <p className="eyebrow">Инструменты</p>
+                <h1 id="site-audit-coming-soon-title">
+                  Анализ сайта скоро вернётся
+                </h1>
+                <p className="section-head__sub">
+                  Мы временно приостановили запуск новых аудитов. Существующие
+                  данные и отчёты сохранены.
+                </p>
+              </div>
+              <button
+                className="secondary-button"
+                type="button"
+                onClick={() => setSection("overview")}
+              >
+                Вернуться в обзор
+              </button>
+            </div>
+          </section>
+        )}
+
+        {section === "analysis" && SITE_AUDIT_PRODUCT_ENABLED && active && (
           <SiteAuditV3
             workspaceId={active.id}
             csrf={csrf}
@@ -2366,354 +2394,365 @@ export default function DashboardPage() {
           />
         )}
 
-        {section === "analysis" && Boolean(analysisResult) && (
-          <section className="section" aria-labelledby="analysis-title">
-            <div className="section-head">
-              <div>
-                <p className="eyebrow">Инструменты</p>
-                <h1 id="analysis-title">Анализ сайта</h1>
-                <p className="section-head__sub">
-                  Разберите публичную страницу и получите список понятных
-                  улучшений для первого экрана, структуры и следующего шага.
-                </p>
+        {section === "analysis" &&
+          SITE_AUDIT_PRODUCT_ENABLED &&
+          Boolean(analysisResult) && (
+            <section className="section" aria-labelledby="analysis-title">
+              <div className="section-head">
+                <div>
+                  <p className="eyebrow">Инструменты</p>
+                  <h1 id="analysis-title">Анализ сайта</h1>
+                  <p className="section-head__sub">
+                    Разберите публичную страницу и получите список понятных
+                    улучшений для первого экрана, структуры и следующего шага.
+                  </p>
+                </div>
               </div>
-            </div>
-            <div className="analysis-layout">
-              <section className="panel analysis-panel">
-                <form className="site-analysis-form" onSubmit={analyzeSite}>
-                  <label className="full-field">
-                    Адрес сайта
-                    <input
-                      type="url"
-                      required
-                      value={analysisUrl}
-                      onChange={(event) => setAnalysisUrl(event.target.value)}
-                      placeholder="https://example.com"
-                    />
-                  </label>
-                  <fieldset className="analysis-mode full-field">
-                    <legend>Глубина проверки</legend>
-                    <button
-                      className={analysisMode === "quick" ? "is-active" : ""}
-                      type="button"
-                      aria-pressed={analysisMode === "quick"}
-                      onClick={() => setAnalysisMode("quick")}
-                    >
-                      Быстрая
-                    </button>
-                    <button
-                      className={analysisMode === "full" ? "is-active" : ""}
-                      type="button"
-                      aria-pressed={analysisMode === "full"}
-                      onClick={() => setAnalysisMode("full")}
-                    >
-                      Полная
-                    </button>
-                  </fieldset>
-                  <details className="analysis-brief full-field">
-                    <summary>Уточнить задачу</summary>
-                    <div className="analysis-brief__fields">
-                      <label>
-                        Тип сайта
-                        <select
-                          value={analysisBrief.siteType}
-                          onChange={(event) =>
-                            setAnalysisBrief((current) => ({
-                              ...current,
-                              siteType: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">Определить по странице</option>
-                          <option value="landing">Лендинг</option>
-                          <option value="corporate">Сайт компании</option>
-                          <option value="ecommerce">Интернет-магазин</option>
-                          <option value="services">Услуги</option>
-                        </select>
-                      </label>
-                      <label>
-                        Цель
-                        <select
-                          value={analysisBrief.goal}
-                          onChange={(event) =>
-                            setAnalysisBrief((current) => ({
-                              ...current,
-                              goal: event.target.value,
-                            }))
-                          }
-                        >
-                          <option value="">Определить по странице</option>
-                          <option value="Заявки">Заявки</option>
-                          <option value="Продажи">Продажи</option>
-                          <option value="Звонки">Звонки</option>
-                          <option value="Записи">Записи</option>
-                        </select>
-                      </label>
-                      <label>
-                        Аудитория
-                        <input
-                          value={analysisBrief.audience}
-                          maxLength={400}
-                          onChange={(event) =>
-                            setAnalysisBrief((current) => ({
-                              ...current,
-                              audience: event.target.value,
-                            }))
-                          }
-                          placeholder="Кому вы продаёте"
-                        />
-                      </label>
-                      <label>
-                        Город или страна
-                        <input
-                          value={analysisBrief.region}
-                          maxLength={160}
-                          onChange={(event) =>
-                            setAnalysisBrief((current) => ({
-                              ...current,
-                              region: event.target.value,
-                            }))
-                          }
-                          placeholder="Например, Казахстан"
-                        />
-                      </label>
-                      <label>
-                        Конкурент
-                        <input
-                          value={analysisBrief.competitor}
-                          maxLength={240}
-                          onChange={(event) =>
-                            setAnalysisBrief((current) => ({
-                              ...current,
-                              competitor: event.target.value,
-                            }))
-                          }
-                          placeholder="Необязательно"
-                        />
-                      </label>
-                      <label>
-                        Что беспокоит
-                        <input
-                          value={analysisBrief.concern}
-                          maxLength={400}
-                          onChange={(event) =>
-                            setAnalysisBrief((current) => ({
-                              ...current,
-                              concern: event.target.value,
-                            }))
-                          }
-                          placeholder="Например, мало заявок"
-                        />
-                      </label>
-                    </div>
-                  </details>
-                  <button
-                    className="primary-button"
-                    type="submit"
-                    disabled={analysisBusy}
-                  >
-                    {analysisBusy ? "Проверяем…" : "Проанализировать сайт"}
-                  </button>
-                </form>
-                {analysisBusy && (
-                  <ol className="analysis-progress" aria-live="polite">
-                    <li className="is-active">Открываем публичную страницу</li>
-                    <li className={analysisStage > 0 ? "is-active" : ""}>
-                      Изучаем структуру и контент
-                    </li>
-                    <li>Собираем рекомендации</li>
-                  </ol>
-                )}
-                {analysisResult && (
-                  <div className="analysis-result" aria-live="polite">
-                    <div className="analysis-result__head">
-                      <div>
-                        <span className="eyebrow">Результат</span>
-                        <h2>{analysisResult.url}</h2>
+              <div className="analysis-layout">
+                <section className="panel analysis-panel">
+                  <form className="site-analysis-form" onSubmit={analyzeSite}>
+                    <label className="full-field">
+                      Адрес сайта
+                      <input
+                        type="url"
+                        required
+                        value={analysisUrl}
+                        onChange={(event) => setAnalysisUrl(event.target.value)}
+                        placeholder="https://example.com"
+                      />
+                    </label>
+                    <fieldset className="analysis-mode full-field">
+                      <legend>Глубина проверки</legend>
+                      <button
+                        className={analysisMode === "quick" ? "is-active" : ""}
+                        type="button"
+                        aria-pressed={analysisMode === "quick"}
+                        onClick={() => setAnalysisMode("quick")}
+                      >
+                        Быстрая
+                      </button>
+                      <button
+                        className={analysisMode === "full" ? "is-active" : ""}
+                        type="button"
+                        aria-pressed={analysisMode === "full"}
+                        onClick={() => setAnalysisMode("full")}
+                      >
+                        Полная
+                      </button>
+                    </fieldset>
+                    <details className="analysis-brief full-field">
+                      <summary>Уточнить задачу</summary>
+                      <div className="analysis-brief__fields">
+                        <label>
+                          Тип сайта
+                          <select
+                            value={analysisBrief.siteType}
+                            onChange={(event) =>
+                              setAnalysisBrief((current) => ({
+                                ...current,
+                                siteType: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Определить по странице</option>
+                            <option value="landing">Лендинг</option>
+                            <option value="corporate">Сайт компании</option>
+                            <option value="ecommerce">Интернет-магазин</option>
+                            <option value="services">Услуги</option>
+                          </select>
+                        </label>
+                        <label>
+                          Цель
+                          <select
+                            value={analysisBrief.goal}
+                            onChange={(event) =>
+                              setAnalysisBrief((current) => ({
+                                ...current,
+                                goal: event.target.value,
+                              }))
+                            }
+                          >
+                            <option value="">Определить по странице</option>
+                            <option value="Заявки">Заявки</option>
+                            <option value="Продажи">Продажи</option>
+                            <option value="Звонки">Звонки</option>
+                            <option value="Записи">Записи</option>
+                          </select>
+                        </label>
+                        <label>
+                          Аудитория
+                          <input
+                            value={analysisBrief.audience}
+                            maxLength={400}
+                            onChange={(event) =>
+                              setAnalysisBrief((current) => ({
+                                ...current,
+                                audience: event.target.value,
+                              }))
+                            }
+                            placeholder="Кому вы продаёте"
+                          />
+                        </label>
+                        <label>
+                          Город или страна
+                          <input
+                            value={analysisBrief.region}
+                            maxLength={160}
+                            onChange={(event) =>
+                              setAnalysisBrief((current) => ({
+                                ...current,
+                                region: event.target.value,
+                              }))
+                            }
+                            placeholder="Например, Казахстан"
+                          />
+                        </label>
+                        <label>
+                          Конкурент
+                          <input
+                            value={analysisBrief.competitor}
+                            maxLength={240}
+                            onChange={(event) =>
+                              setAnalysisBrief((current) => ({
+                                ...current,
+                                competitor: event.target.value,
+                              }))
+                            }
+                            placeholder="Необязательно"
+                          />
+                        </label>
+                        <label>
+                          Что беспокоит
+                          <input
+                            value={analysisBrief.concern}
+                            maxLength={400}
+                            onChange={(event) =>
+                              setAnalysisBrief((current) => ({
+                                ...current,
+                                concern: event.target.value,
+                              }))
+                            }
+                            placeholder="Например, мало заявок"
+                          />
+                        </label>
                       </div>
-                      <span className="status-badge ok">Готово</span>
-                    </div>
-                    <p className="analysis-verdict">
-                      {analysisResult.result.overview?.verdict}
-                    </p>
-                    <div className="analysis-scores">
-                      {(analysisResult.result.scores ?? []).map((score) => (
-                        <div key={score.id}>
-                          <strong>{score.value}</strong>
-                          <span>{score.label}</span>
-                        </div>
-                      ))}
-                    </div>
-                    <div
-                      className="analysis-tabs"
-                      role="tablist"
-                      aria-label="Разделы анализа"
+                    </details>
+                    <button
+                      className="primary-button"
+                      type="submit"
+                      disabled={analysisBusy}
                     >
-                      {(
-                        [
-                          ["priorities", "Приоритеты"],
-                          ["hero", "Первый экран"],
-                          ["plan", "План"],
-                          ["details", "Детали"],
-                        ] as const
-                      ).map(([id, label]) => (
-                        <button
-                          className={analysisTab === id ? "is-active" : ""}
-                          type="button"
-                          role="tab"
-                          aria-selected={analysisTab === id}
-                          key={id}
-                          onClick={() => setAnalysisTab(id)}
-                        >
-                          {label}
-                        </button>
-                      ))}
-                    </div>
-                    {analysisTab === "priorities" && (
-                      <div className="analysis-priorities">
-                        {(analysisResult.result.topIssues ?? []).map(
-                          (item, index) => (
-                            <article key={`${item.title}-${index}`}>
-                              <span>{item.priority}</span>
-                              <h3>{item.title}</h3>
-                              <p>{item.problem}</p>
-                              <small>{item.evidence}</small>
-                              <strong>{item.recommendation}</strong>
-                            </article>
-                          ),
-                        )}
-                        <div className="analysis-quick-wins">
-                          <h3>Быстрые улучшения</h3>
-                          <ul>
-                            {(analysisResult.result.quickWins ?? []).map(
+                      {analysisBusy ? "Проверяем…" : "Проанализировать сайт"}
+                    </button>
+                  </form>
+                  {analysisBusy && (
+                    <ol className="analysis-progress" aria-live="polite">
+                      <li className="is-active">
+                        Открываем публичную страницу
+                      </li>
+                      <li className={analysisStage > 0 ? "is-active" : ""}>
+                        Изучаем структуру и контент
+                      </li>
+                      <li>Собираем рекомендации</li>
+                    </ol>
+                  )}
+                  {analysisResult && (
+                    <div className="analysis-result" aria-live="polite">
+                      <div className="analysis-result__head">
+                        <div>
+                          <span className="eyebrow">Результат</span>
+                          <h2>{analysisResult.url}</h2>
+                        </div>
+                        <span className="status-badge ok">Готово</span>
+                      </div>
+                      <p className="analysis-verdict">
+                        {analysisResult.result.overview?.verdict}
+                      </p>
+                      <div className="analysis-scores">
+                        {(analysisResult.result.scores ?? []).map((score) => (
+                          <div key={score.id}>
+                            <strong>{score.value}</strong>
+                            <span>{score.label}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div
+                        className="analysis-tabs"
+                        role="tablist"
+                        aria-label="Разделы анализа"
+                      >
+                        {(
+                          [
+                            ["priorities", "Приоритеты"],
+                            ["hero", "Первый экран"],
+                            ["plan", "План"],
+                            ["details", "Детали"],
+                          ] as const
+                        ).map(([id, label]) => (
+                          <button
+                            className={analysisTab === id ? "is-active" : ""}
+                            type="button"
+                            role="tab"
+                            aria-selected={analysisTab === id}
+                            key={id}
+                            onClick={() => setAnalysisTab(id)}
+                          >
+                            {label}
+                          </button>
+                        ))}
+                      </div>
+                      {analysisTab === "priorities" && (
+                        <div className="analysis-priorities">
+                          {(analysisResult.result.topIssues ?? []).map(
+                            (item, index) => (
+                              <article key={`${item.title}-${index}`}>
+                                <span>{item.priority}</span>
+                                <h3>{item.title}</h3>
+                                <p>{item.problem}</p>
+                                <small>{item.evidence}</small>
+                                <strong>{item.recommendation}</strong>
+                              </article>
+                            ),
+                          )}
+                          <div className="analysis-quick-wins">
+                            <h3>Быстрые улучшения</h3>
+                            <ul>
+                              {(analysisResult.result.quickWins ?? []).map(
+                                (item, index) => (
+                                  <li key={`${item.title}-${index}`}>
+                                    {item.title}
+                                  </li>
+                                ),
+                              )}
+                            </ul>
+                          </div>
+                        </div>
+                      )}
+                      {analysisTab === "hero" && (
+                        <div className="analysis-copy-card">
+                          <span>Главный заголовок</span>
+                          <h3>{analysisResult.result.hero?.h1}</h3>
+                          <p>{analysisResult.result.hero?.subtitle}</p>
+                          <strong>{analysisResult.result.hero?.cta}</strong>
+                        </div>
+                      )}
+                      {analysisTab === "plan" && (
+                        <div className="analysis-plan">
+                          <h3>План на один рабочий день</h3>
+                          <ol>
+                            {(analysisResult.result.oneDayPlan ?? []).map(
                               (item, index) => (
                                 <li key={`${item.title}-${index}`}>
                                   {item.title}
                                 </li>
                               ),
                             )}
-                          </ul>
-                        </div>
-                      </div>
-                    )}
-                    {analysisTab === "hero" && (
-                      <div className="analysis-copy-card">
-                        <span>Главный заголовок</span>
-                        <h3>{analysisResult.result.hero?.h1}</h3>
-                        <p>{analysisResult.result.hero?.subtitle}</p>
-                        <strong>{analysisResult.result.hero?.cta}</strong>
-                      </div>
-                    )}
-                    {analysisTab === "plan" && (
-                      <div className="analysis-plan">
-                        <h3>План на один рабочий день</h3>
-                        <ol>
-                          {(analysisResult.result.oneDayPlan ?? []).map(
-                            (item, index) => (
-                              <li key={`${item.title}-${index}`}>
-                                {item.title}
-                              </li>
-                            ),
-                          )}
-                        </ol>
-                        <h3>Рекомендуемая структура</h3>
-                        <ol>
-                          {(analysisResult.result.structure ?? []).map(
-                            (item) => (
-                              <li key={item}>{item}</li>
-                            ),
-                          )}
-                        </ol>
-                        {(analysisResult.result.questions ?? []).length > 0 && (
-                          <>
-                            <h3>Что уточнить</h3>
-                            <ul>
-                              {analysisResult.result.questions?.map((item) => (
+                          </ol>
+                          <h3>Рекомендуемая структура</h3>
+                          <ol>
+                            {(analysisResult.result.structure ?? []).map(
+                              (item) => (
                                 <li key={item}>{item}</li>
-                              ))}
-                            </ul>
-                          </>
-                        )}
-                      </div>
-                    )}
-                    {analysisTab === "details" && (
-                      <>
-                        <dl className="analysis-checks">
-                          <div>
-                            <dt>HTTPS</dt>
-                            <dd>
-                              {analysisResult.result.checks?.https
-                                ? "Да"
-                                : "Нет"}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Заголовок страницы</dt>
-                            <dd>
-                              {analysisResult.result.checks?.hasTitle
-                                ? "Есть"
-                                : "Нет"}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Описание</dt>
-                            <dd>
-                              {analysisResult.result.checks?.hasDescription
-                                ? "Есть"
-                                : "Нет"}
-                            </dd>
-                          </div>
-                          <div>
-                            <dt>Один H1</dt>
-                            <dd>
-                              {analysisResult.result.checks?.hasSingleH1
-                                ? "Да"
-                                : "Проверьте"}
-                            </dd>
-                          </div>
-                        </dl>
-                        <p className="analysis-limitations">
-                          {analysisResult.result.evidence?.limitations}
-                        </p>
-                      </>
-                    )}
-                    <button
-                      className="secondary-button"
-                      type="button"
-                      onClick={() => void downloadSiteAnalysis(analysisResult)}
-                    >
-                      Скачать отчёт DOCX
-                    </button>
-                  </div>
-                )}
-              </section>
-              <aside className="analysis-aside">
-                <h2>Последние проверки</h2>
-                {analysisHistory.length ? (
-                  <ul className="analysis-history">
-                    {analysisHistory.slice(0, 5).map((item) => (
-                      <li key={item.id}>
-                        <button
-                          type="button"
-                          onClick={() => setAnalysisResult(item)}
-                        >
-                          <strong>{item.url}</strong>
-                          <small>
-                            {new Date(item.created_at).toLocaleDateString(
-                              "ru-RU",
+                              ),
                             )}
-                          </small>
-                        </button>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="empty-inline">Здесь появятся ваши проверки.</p>
-                )}
-              </aside>
-            </div>
-          </section>
-        )}
+                          </ol>
+                          {(analysisResult.result.questions ?? []).length >
+                            0 && (
+                            <>
+                              <h3>Что уточнить</h3>
+                              <ul>
+                                {analysisResult.result.questions?.map(
+                                  (item) => (
+                                    <li key={item}>{item}</li>
+                                  ),
+                                )}
+                              </ul>
+                            </>
+                          )}
+                        </div>
+                      )}
+                      {analysisTab === "details" && (
+                        <>
+                          <dl className="analysis-checks">
+                            <div>
+                              <dt>HTTPS</dt>
+                              <dd>
+                                {analysisResult.result.checks?.https
+                                  ? "Да"
+                                  : "Нет"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Заголовок страницы</dt>
+                              <dd>
+                                {analysisResult.result.checks?.hasTitle
+                                  ? "Есть"
+                                  : "Нет"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Описание</dt>
+                              <dd>
+                                {analysisResult.result.checks?.hasDescription
+                                  ? "Есть"
+                                  : "Нет"}
+                              </dd>
+                            </div>
+                            <div>
+                              <dt>Один H1</dt>
+                              <dd>
+                                {analysisResult.result.checks?.hasSingleH1
+                                  ? "Да"
+                                  : "Проверьте"}
+                              </dd>
+                            </div>
+                          </dl>
+                          <p className="analysis-limitations">
+                            {analysisResult.result.evidence?.limitations}
+                          </p>
+                        </>
+                      )}
+                      <button
+                        className="secondary-button"
+                        type="button"
+                        onClick={() =>
+                          void downloadSiteAnalysis(analysisResult)
+                        }
+                      >
+                        Скачать отчёт DOCX
+                      </button>
+                    </div>
+                  )}
+                </section>
+                <aside className="analysis-aside">
+                  <h2>Последние проверки</h2>
+                  {analysisHistory.length ? (
+                    <ul className="analysis-history">
+                      {analysisHistory.slice(0, 5).map((item) => (
+                        <li key={item.id}>
+                          <button
+                            type="button"
+                            onClick={() => setAnalysisResult(item)}
+                          >
+                            <strong>{item.url}</strong>
+                            <small>
+                              {new Date(item.created_at).toLocaleDateString(
+                                "ru-RU",
+                              )}
+                            </small>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="empty-inline">
+                      Здесь появятся ваши проверки.
+                    </p>
+                  )}
+                </aside>
+              </div>
+            </section>
+          )}
 
         {section === "profile" && (
           <section className="section" aria-labelledby="profile-title">

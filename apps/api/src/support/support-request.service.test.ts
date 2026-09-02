@@ -17,7 +17,7 @@ function input(message = "The account selector needs more space on mobile.") {
   return {
     category: "SUGGESTION" as const,
     message,
-    sourceRoute: "/dashboard?section=reports",
+    sourceRoute: "http://localhost:3000/dashboard/reports",
     locale: "ru" as const,
     idempotencyKey: "idempotency-key-0001",
   };
@@ -71,6 +71,7 @@ describe("SupportRequestService", () => {
       category: "SUGGESTION",
       planKey: "ai_marketing",
       telegramDeliveryStatus: "NOT_CONFIGURED",
+      sourceRoute: "http://localhost:3000/dashboard/reports",
     });
     expect(auditEvents[0]).toMatchObject({
       targetType: "support_request",
@@ -116,6 +117,43 @@ describe("SupportRequestService", () => {
       telegramMessageId: "77",
       request: { id: "support-existing" },
     });
+  });
+
+  it("does not persist an arbitrary external page in a support request", async () => {
+    let createInput: Record<string, unknown> | undefined;
+    const service = new SupportRequestService(
+      {
+        client: {
+          supportRequest: {
+            findFirst: async () => null,
+            create: async (value: Record<string, unknown>) => {
+              createInput = value;
+              return { id: "support-a", status: "NEW", createdAt: new Date() };
+            },
+          },
+          workspace: {
+            findUnique: async () => ({
+              accessStatus: "ACTIVE",
+              subscriptions: [],
+            }),
+          },
+        },
+      } as never,
+      { record: async () => undefined } as never,
+      { consume: async () => undefined } as never,
+    );
+
+    await expect(
+      service.create(
+        "workspace-a",
+        {
+          ...input(),
+          sourceRoute: "https://attacker.example/dashboard/reports",
+        },
+        request,
+      ),
+    ).rejects.toBeInstanceOf(ServiceUnavailableException);
+    expect(createInput?.data).toMatchObject({ sourceRoute: null });
   });
 
   it("rejects an empty or whitespace-only message", async () => {

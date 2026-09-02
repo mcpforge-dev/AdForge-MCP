@@ -45,6 +45,10 @@ export class SupportRequestService {
     if (!userId)
       throw new ForbiddenException("Authenticated user is required.");
     const message = normalizeMessage(input.message);
+    const sourceRoute = normalizeSourceRoute(
+      input.sourceRoute,
+      this.config.publicBaseUrl,
+    );
     if (message.length < 3)
       throw new BadRequestException("Message is too short.");
 
@@ -105,7 +109,7 @@ export class SupportRequestService {
         userId,
         category: input.category,
         message,
-        sourceRoute: input.sourceRoute ?? null,
+        sourceRoute,
         locale: input.locale ?? null,
         idempotencyKey: input.idempotencyKey ?? null,
         telegramDeliveryStatus: deliveryStatus,
@@ -123,7 +127,7 @@ export class SupportRequestService {
       ...(request.requestId ? { requestId: request.requestId } : {}),
       metadata: {
         category: input.category,
-        sourceRoute: input.sourceRoute ?? null,
+        sourceRoute,
       },
     });
 
@@ -230,6 +234,22 @@ function isDelivered(value: unknown): value is TelegramDeliveryConfirmation {
 
 function normalizeMessage(value: string): string {
   return value.replace(/\r\n?/g, "\n").trim();
+}
+
+function normalizeSourceRoute(
+  value: string | undefined,
+  publicBaseUrl: string,
+): string | null {
+  if (!value) return null;
+  try {
+    const origin = new URL(publicBaseUrl).origin;
+    const url = new URL(value, origin);
+    if (url.origin !== origin || !url.pathname.startsWith("/dashboard"))
+      return null;
+    return `${origin}${url.pathname}${url.search}`;
+  } catch {
+    return null;
+  }
 }
 
 function redisConnection(redisUrl: string) {

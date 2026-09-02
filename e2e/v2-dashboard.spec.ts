@@ -53,6 +53,39 @@ async function selectProjectOption(
 }
 
 test.describe("restored HolyMedia client UX", () => {
+  test("uses route-backed dashboard navigation and keeps paused tools unavailable", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await login(page);
+
+    await page
+      .getByRole("button", { name: "Подключения", exact: true })
+      .click();
+    await expect(page).toHaveURL(/\/dashboard\/connections$/);
+    await expect(page.getByRole("heading", { name: "Meta Ads" })).toBeVisible();
+    await page.goBack();
+    await expect(page).toHaveURL(/\/dashboard$/);
+
+    await page.goto("/dashboard/reports");
+    await expect(
+      page.getByRole("heading", { name: "Отчёт по рекламному кабинету" }),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: /SEO/ })).toBeDisabled();
+    await expect(
+      page.getByRole("button", { name: /Анализ сайта/ }),
+    ).toBeDisabled();
+
+    await page.goto("/dashboard/analysis");
+    await expect(
+      page.getByRole("heading", { name: "Анализ сайта скоро вернётся" }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: /Запустить аудит/ }),
+    ).toHaveCount(0);
+    expect((await new AxeBuilder({ page }).analyze()).violations).toEqual([]);
+  });
+
   test("keeps an active session when returning from legal pages", async ({
     page,
   }) => {

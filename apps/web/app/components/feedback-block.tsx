@@ -15,10 +15,7 @@ async function csrf(): Promise<string> {
 }
 
 function currentRoute(): string {
-  const route = window.location.pathname
-    .replace(/[^A-Za-z0-9_./-]/g, "")
-    .slice(0, 256);
-  return route.startsWith("/") ? route : "/";
+  return `${window.location.origin}${window.location.pathname}${window.location.search}`;
 }
 
 type SupportRequestResponse = {

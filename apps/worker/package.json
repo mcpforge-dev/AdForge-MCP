@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@holymedia/config": "workspace:*",
+    "@holymedia/contracts": "workspace:*",
     "@holymedia/database": "workspace:*",
     "@holymedia/observability": "workspace:*",
     "@holymedia/site-audit": "workspace:*",

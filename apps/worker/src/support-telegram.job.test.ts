@@ -10,9 +10,9 @@ function supportRow(status = "PENDING") {
     workspaceId: "workspace-a",
     category: "SUGGESTION",
     message: "Use <b>only</b> & keep it safe.",
-    sourceRoute: "/dashboard?section=reports",
+    sourceRoute: "https://mcp.holymedia.kz/dashboard/reports",
     locale: "ru",
-    planKey: "ai_marketing",
+    planKey: "legacy_internal",
     createdAt: new Date("2026-08-29T08:00:00Z"),
     telegramDeliveryStatus: status,
     user: { name: "Test User", email: "test@example.com" },
@@ -86,6 +86,11 @@ describe("support Telegram delivery", () => {
     const payload = JSON.parse(String(requestInit?.body));
     expect(payload.text).toContain(
       "&lt;b&gt;only&lt;/b&gt; &amp; keep it safe.",
+    );
+    expect(payload.text).toContain("Бессрочный доступ / Lifetime access");
+    expect(payload.text).not.toContain("legacy_internal");
+    expect(payload.text).toContain(
+      "https://mcp.holymedia.kz/dashboard/reports",
     );
     expect(payload.reply_markup.inline_keyboard[0][0].url).toMatch(
       /\/admin\?section=support/,

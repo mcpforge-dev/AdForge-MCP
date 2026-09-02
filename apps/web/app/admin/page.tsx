@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
+import { tariffPresentation } from "@holymedia/contracts";
 import { BrandLockup } from "../components/brand-lockup";
 import { ThemeSwitcher } from "../components/theme-switcher";
 import { ProjectSelect } from "../components/project-select";
@@ -970,7 +971,15 @@ function Support({
                       <summary>{preview(value(row, "message"))}</summary>
                       <p>{value(row, "message")}</p>
                       <p>Страница: {value(row, "sourceRoute")}</p>
-                      <p>Тариф: {value(row, "planKey")}</p>
+                      <p>
+                        Тариф:{" "}
+                        {(() => {
+                          const plan = tariffPresentation(
+                            value(row, "planKey") || null,
+                          );
+                          return `${plan.full.ru} / ${plan.full.en}`;
+                        })()}
+                      </p>
                       {history.length > 0 && (
                         <p>
                           История:{" "}

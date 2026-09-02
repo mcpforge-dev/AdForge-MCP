@@ -33,12 +33,13 @@ export class LegacyGoogleLoginController {
   @Redirect()
   public async start(
     @Query("oauth_transaction") oauthTransaction: string | undefined,
+    @Query("next") next: string | undefined,
     @Res({ passthrough: true }) reply: FastifyReply,
   ) {
     const result = await this.google.start(
       oauthTransaction
         ? `/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
-        : undefined,
+        : next,
     );
     reply.setCookie(GOOGLE_LOGIN_STATE_COOKIE, result.state, {
       ...this.cookieOptions(),

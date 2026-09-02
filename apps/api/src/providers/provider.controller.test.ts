@@ -38,7 +38,7 @@ describe("provider OAuth callback UX", () => {
       request,
     );
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard?section=connections&oauth=success&provider=google",
+      "/dashboard/connections?oauth=success&provider=google",
     );
     expect(reply.code).toHaveBeenCalledWith(302);
   });
@@ -67,7 +67,7 @@ describe("provider OAuth callback UX", () => {
         request,
       );
       expect(reply.redirect).toHaveBeenCalledWith(
-        `/dashboard?section=connections&oauth=success&provider=${pathProvider}`,
+        `/dashboard/connections?oauth=success&provider=${pathProvider}`,
       );
     },
   );
@@ -89,7 +89,7 @@ describe("provider OAuth callback UX", () => {
     );
 
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard?section=connections&oauth=error&provider=google&oauth_reason=oauth_failed",
+      "/dashboard/connections?oauth=error&provider=google&oauth_reason=oauth_failed",
     );
     expect(reply.code).toHaveBeenCalledWith(302);
   });
@@ -105,7 +105,7 @@ describe("provider OAuth callback UX", () => {
       reply as never,
     );
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard?section=connections&oauth=error&provider=google&oauth_reason=invalid_callback",
+      "/dashboard/connections?oauth=error&provider=google&oauth_reason=invalid_callback",
     );
   });
 
@@ -142,7 +142,7 @@ describe("provider OAuth callback UX", () => {
     );
 
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard?section=connections&oauth=error&provider=meta&oauth_reason=authorization_denied",
+      "/dashboard/connections?oauth=error&provider=meta&oauth_reason=authorization_denied",
     );
   });
 
@@ -164,7 +164,7 @@ describe("provider OAuth callback UX", () => {
       request,
     );
     expect(reply.redirect).toHaveBeenCalledWith(
-      "/dashboard?section=connections&oauth=success&provider=tiktok",
+      "/dashboard/connections?oauth=success&provider=tiktok",
     );
   });
 

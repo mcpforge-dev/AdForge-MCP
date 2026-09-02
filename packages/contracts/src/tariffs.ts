@@ -260,3 +260,63 @@ export function tariffServiceLevel(key: string): TariffServiceLevel | null {
     ? "HOLYMEDIA_SUPPORT"
     : "SELF_SERVICE";
 }
+
+/**
+ * Customer-facing representation of a subscription key. Keep this next to the
+ * tariff catalogue so support, product UI and admin never need their own
+ * ad-hoc key-to-label tables.
+ */
+export type TariffPresentation = {
+  plan: Record<TariffLanguage, string>;
+  serviceLevel: Record<TariffLanguage, string> | null;
+  full: Record<TariffLanguage, string>;
+  kind: "catalog" | "lifetime" | "unknown";
+};
+
+const TARIFF_SERVICE_LEVEL_LABELS: Record<
+  TariffServiceLevel,
+  Record<TariffLanguage, string>
+> = {
+  SELF_SERVICE: { ru: "Самостоятельно", en: "Self-service" },
+  HOLYMEDIA_SUPPORT: {
+    ru: "Расширенная поддержка",
+    en: "Extended support",
+  },
+};
+
+const LIFETIME_PRESENTATION: TariffPresentation = {
+  plan: { ru: "Бессрочный доступ", en: "Lifetime access" },
+  serviceLevel: null,
+  full: { ru: "Бессрочный доступ", en: "Lifetime access" },
+  kind: "lifetime",
+};
+
+const UNKNOWN_PRESENTATION: TariffPresentation = {
+  plan: { ru: "Не определён", en: "Not specified" },
+  serviceLevel: null,
+  full: { ru: "Не определён", en: "Not specified" },
+  kind: "unknown",
+};
+
+export function tariffPresentation(
+  key: string | null | undefined,
+  options?: { lifetimeAccess?: boolean },
+): TariffPresentation {
+  if (options?.lifetimeAccess || key === "legacy_internal")
+    return LIFETIME_PRESENTATION;
+  if (!key) return UNKNOWN_PRESENTATION;
+
+  const plan = tariffPlanByKey(key);
+  const serviceLevel = tariffServiceLevel(key);
+  if (!plan || !serviceLevel) return UNKNOWN_PRESENTATION;
+  const level = TARIFF_SERVICE_LEVEL_LABELS[serviceLevel];
+  return {
+    plan: plan.name,
+    serviceLevel: level,
+    full: {
+      ru: `${plan.name.ru} — ${level.ru}`,
+      en: `${plan.name.en} — ${level.en}`,
+    },
+    kind: "catalog",
+  };
+}

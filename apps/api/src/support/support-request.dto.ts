@@ -18,7 +18,7 @@ export class CreateSupportRequestDto {
 
   @IsOptional()
   @IsString()
-  @Matches(/^\/[A-Za-z0-9_./?=&-]{0,255}$/)
+  @MaxLength(512)
   public sourceRoute?: string;
 
   @IsOptional()

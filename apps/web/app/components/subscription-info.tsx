@@ -1,6 +1,6 @@
 "use client";
 
-import { tariffPlanByKey, tariffServiceLevel } from "@holymedia/contracts";
+import { tariffPresentation, tariffServiceLevel } from "@holymedia/contracts";
 import { useLanguage } from "./language-switcher";
 
 export type SubscriptionInfoValue = {
@@ -31,7 +31,7 @@ function getPresentation(
   const fullAccess =
     key === "legacy_internal" ||
     subscription?.metadata?.accessGrant === "FULL_NON_EXPIRING";
-  const plan = key ? tariffPlanByKey(key) : undefined;
+  const plan = tariffPresentation(key, { lifetimeAccess: fullAccess });
   const level = tariffServiceLevel(key ?? "");
   const status = subscription?.status;
   const trialEndsAt = subscription?.trialEndsAt
@@ -44,13 +44,7 @@ function getPresentation(
 
   return {
     fullAccess,
-    planName: fullAccess
-      ? ru
-        ? "Полный доступ"
-        : "Full access"
-      : (plan?.name[language] ??
-        subscription?.plan?.name ??
-        (ru ? "Тариф не выбран" : "No plan selected")),
+    planName: plan.plan[language],
     mode: fullAccess
       ? ru
         ? "Бессрочно"
