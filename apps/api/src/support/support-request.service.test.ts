@@ -17,7 +17,7 @@ function input(message = "The account selector needs more space on mobile.") {
   return {
     category: "SUGGESTION" as const,
     message,
-    sourceRoute: "http://localhost:3000/dashboard/reports",
+    sourceRoute: "/dashboard/reports",
     locale: "ru" as const,
     idempotencyKey: "idempotency-key-0001",
   };

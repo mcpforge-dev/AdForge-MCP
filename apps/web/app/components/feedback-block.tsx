@@ -15,7 +15,11 @@ async function csrf(): Promise<string> {
 }
 
 function currentRoute(): string {
-  return `${window.location.origin}${window.location.pathname}${window.location.search}`;
+  // The API owns origin validation and expands this path into the canonical
+  // support URL. Keeping the browser payload path-only avoids cross-origin
+  // validation ambiguity while still preserving the exact dashboard section.
+  const path = `${window.location.pathname}${window.location.search}`;
+  return path.startsWith("/dashboard") ? path.slice(0, 256) : "/dashboard";
 }
 
 type SupportRequestResponse = {
