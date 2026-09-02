@@ -30,13 +30,19 @@ services:
     restart: unless-stopped
     env_file:
       - /etc/holymedia-v2/compose.env
-    command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$$V2_REDIS_PASSWORD\""]
+    command:
+      [
+        "sh",
+        "-c",
+        'exec redis-server --appendonly yes --requirepass "$$V2_REDIS_PASSWORD"',
+      ]
     volumes:
       - /var/lib/holymedia-v2/redis:/data
     ports:
       - "127.0.0.1:${V2_REDIS_PORT}:6379"
     healthcheck:
-      test: ["CMD-SHELL", "redis-cli -a \"$$V2_REDIS_PASSWORD\" ping | grep -q PONG"]
+      test:
+        ["CMD-SHELL", 'redis-cli -a "$$V2_REDIS_PASSWORD" ping | grep -q PONG']
       interval: 5s
       timeout: 3s
       retries: 20
@@ -52,11 +58,22 @@ services:
     init: true
     env_file:
       - /etc/holymedia-v2/app.env
-    command: ["sh", "-c", "pnpm --filter @holymedia/database prisma:deploy && pnpm --filter @holymedia/api start"]
+    command:
+      [
+        "sh",
+        "-c",
+        "pnpm --dir packages/database run prisma:deploy && pnpm --filter @holymedia/api start",
+      ]
     ports:
       - "127.0.0.1:${V2_API_PORT}:4000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:4000/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4000/ready').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 5s
       timeout: 5s
       retries: 30
@@ -81,7 +98,13 @@ services:
       - /etc/holymedia-v2/app.env
     command: ["pnpm", "--filter", "@holymedia/worker", "start"]
     healthcheck:
-      test: ["CMD", "node", "-e", "import('ioredis').then(async ({ default: Redis }) => { const redis = new Redis(process.env.REDIS_URL); await redis.ping(); await redis.quit(); }).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "import('ioredis').then(async ({ default: Redis }) => { const redis = new Redis(process.env.REDIS_URL); await redis.ping(); await redis.quit(); }).catch(() => process.exit(1))",
+        ]
       interval: 5s
       timeout: 5s
       retries: 20
@@ -106,7 +129,13 @@ services:
     ports:
       - "127.0.0.1:${V2_WEB_PORT}:3000"
     healthcheck:
-      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))"]
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+        ]
       interval: 5s
       timeout: 5s
       retries: 30

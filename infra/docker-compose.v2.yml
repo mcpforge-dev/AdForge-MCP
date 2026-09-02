@@ -46,7 +46,7 @@ services:
       [
         "sh",
         "-c",
-        "pnpm --filter @holymedia/database prisma:deploy && pnpm --filter @holymedia/api start",
+        "pnpm --dir packages/database run prisma:deploy && pnpm --filter @holymedia/api start",
       ]
     ports:
       - "4000:4000"
