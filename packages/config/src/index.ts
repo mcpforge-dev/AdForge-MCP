@@ -49,6 +49,12 @@ const rawConfigSchema = z.object({
   PROVIDER_GOOGLE_SEARCH_CONSOLE_SCOPES: z
     .string()
     .default("https://www.googleapis.com/auth/webmasters.readonly"),
+  // GA4 deliberately owns a separate provider credential and callback. The
+  // OAuth client itself may be shared with Google Ads only when this explicit
+  // configuration points at that same client in protected environment storage.
+  PROVIDER_GOOGLE_ANALYTICS_CLIENT_ID: z.string().optional(),
+  PROVIDER_GOOGLE_ANALYTICS_CLIENT_SECRET: z.string().optional(),
+  PROVIDER_GOOGLE_ANALYTICS_REDIRECT_URI: z.string().url().optional(),
   PROVIDER_GOOGLE_LOGIN_CLIENT_ID: z.string().optional(),
   PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET: z.string().optional(),
   PROVIDER_GOOGLE_LOGIN_REDIRECT_URI: z.string().url().optional(),
@@ -174,6 +180,9 @@ export type AppConfig = {
   providerGoogleSearchConsoleClientSecret: string | undefined;
   providerGoogleSearchConsoleRedirectUri: string | undefined;
   providerGoogleSearchConsoleScopes: string;
+  providerGoogleAnalyticsClientId: string | undefined;
+  providerGoogleAnalyticsClientSecret: string | undefined;
+  providerGoogleAnalyticsRedirectUri: string | undefined;
   providerGoogleLoginClientId: string | undefined;
   providerGoogleLoginClientSecret: string | undefined;
   providerGoogleLoginRedirectUri: string | undefined;
@@ -267,6 +276,15 @@ function withV1ProviderAliases(source: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   );
   value.PROVIDER_GOOGLE_SEARCH_CONSOLE_SCOPES ??= nonEmpty(
     value.AD_MCP_GOOGLE_SEARCH_CONSOLE_SCOPES,
+  );
+  value.PROVIDER_GOOGLE_ANALYTICS_CLIENT_ID ??= nonEmpty(
+    value.AD_MCP_GOOGLE_OAUTH_CLIENT_ID,
+  );
+  value.PROVIDER_GOOGLE_ANALYTICS_CLIENT_SECRET ??= nonEmpty(
+    value.AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET,
+  );
+  value.PROVIDER_GOOGLE_ANALYTICS_REDIRECT_URI ??= callback(
+    value.AD_MCP_GOOGLE_ANALYTICS_REDIRECT_PATH,
   );
   value.PROVIDER_GOOGLE_LOGIN_CLIENT_ID ??= nonEmpty(
     value.AD_MCP_GOOGLE_LOGIN_CLIENT_ID,
@@ -401,6 +419,11 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       value.PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI,
     providerGoogleSearchConsoleScopes:
       value.PROVIDER_GOOGLE_SEARCH_CONSOLE_SCOPES,
+    providerGoogleAnalyticsClientId: value.PROVIDER_GOOGLE_ANALYTICS_CLIENT_ID,
+    providerGoogleAnalyticsClientSecret:
+      value.PROVIDER_GOOGLE_ANALYTICS_CLIENT_SECRET,
+    providerGoogleAnalyticsRedirectUri:
+      value.PROVIDER_GOOGLE_ANALYTICS_REDIRECT_URI,
     providerGoogleLoginClientId: value.PROVIDER_GOOGLE_LOGIN_CLIENT_ID,
     providerGoogleLoginClientSecret: value.PROVIDER_GOOGLE_LOGIN_CLIENT_SECRET,
     providerGoogleLoginRedirectUri: value.PROVIDER_GOOGLE_LOGIN_REDIRECT_URI,

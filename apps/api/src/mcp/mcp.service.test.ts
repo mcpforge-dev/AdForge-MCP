@@ -54,6 +54,27 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
             conversionValue: null,
             costPerConversion: { amount: "10", currency: "USD" },
           },
+    googleAnalyticsGetProperty: vi.fn(async () => ({
+      name: "properties/987654",
+      displayName: "GA4 property",
+      timeZone: "Asia/Almaty",
+      currencyCode: "KZT",
+    })),
+    googleAnalyticsRunReport: vi.fn(async () => ({
+      rowCount: 1,
+      rows: [{ dimensionValues: [], metricValues: [{ value: "42" }] }],
+      propertyQuota: { tokensPerDay: { remaining: 1_234 } },
+    })),
+    googleAnalyticsRunRealtime: vi.fn(async () => ({ rowCount: 0, rows: [] })),
+    googleAnalyticsCheckCompatibility: vi.fn(async () => ({
+      dimensionCompatibilities: [],
+      metricCompatibilities: [],
+    })),
+    googleAnalyticsGoogleAdsLinks: vi.fn(async () => []),
+    googleAnalyticsCustomDefinitions: vi.fn(async () => ({
+      customDimensions: [],
+      customMetrics: [],
+    })),
   } as never;
   const reports = {
     performance: vi.fn(async (_workspaceId: string, input: unknown) => ({
@@ -96,16 +117,34 @@ describe("MCP V1-compatible policy", () => {
     enabled: true,
     connectionId: "connection-a",
   };
+  const ga4Account = {
+    id: "internal-ga4-property",
+    workspaceId: "workspace-a",
+    provider: "GOOGLE_ANALYTICS",
+    externalAccountId: "987654",
+    displayName: "GA4 property",
+    currency: "KZT",
+    timezone: "Asia/Almaty",
+    status: "ACTIVE",
+    enabled: true,
+    connectionId: "connection-ga4",
+  };
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
-    expect(service.tools()).toHaveLength(140);
+    expect(service.tools()).toHaveLength(156);
     expect(service.tools().map((tool) => tool.name)).toContain(
       "get_basic_metrics",
     );
     expect(service.tools().map((tool) => tool.name)).not.toContain(
       "commit_change",
     );
+    expect(
+      service
+        .tools()
+        .find((tool) => tool.name === "google_analytics_run_report")
+        ?.inputSchema,
+    ).toMatchObject({ additionalProperties: false });
   });
 
   it("exposes every exact V1 tool name", () => {
@@ -138,6 +177,11 @@ describe("MCP V1-compatible policy", () => {
         expect.objectContaining({
           id: "collect_report",
           mcp_tool: "collect_report_skill",
+          read_only: true,
+        }),
+        expect.objectContaining({
+          id: "ga4_traffic_diagnosis",
+          mcp_tool: "google_analytics_traffic_overview",
           read_only: true,
         }),
       ]),
@@ -199,6 +243,46 @@ describe("MCP V1-compatible policy", () => {
       { provider: "google_ads", account_id: "1234567890" },
     );
     expect(result).toMatchObject({ account_id: "1234567890" });
+  });
+
+  it("uses only an enabled GA4 property in the caller workspace for reports", async () => {
+    const service = serviceWithAccounts([account, ga4Account]);
+    const result = (await service.call(
+      {
+        kind: "service",
+        tokenId: "token",
+        serviceIdentityId: "identity",
+        workspaceId: "workspace-a",
+        scopes: ["adforge:mcp:read"],
+        accountIds: [],
+      },
+      "google_analytics_traffic_overview",
+      {
+        property_id: "987654",
+        start_date: "2026-08-01",
+        end_date: "2026-08-31",
+      },
+    )) as { property: { property_id: string }; rows: unknown[] };
+    expect(result.property.property_id).toBe("987654");
+    expect(result.rows).toHaveLength(1);
+  });
+
+  it("does not expose a GA4 property outside a service-token restriction", async () => {
+    const service = serviceWithAccounts([account, ga4Account]);
+    await expect(
+      service.call(
+        {
+          kind: "service",
+          tokenId: "token",
+          serviceIdentityId: "identity",
+          workspaceId: "workspace-a",
+          scopes: ["adforge:mcp:read"],
+          accountIds: ["internal-account-a"],
+        },
+        "google_analytics_get_property",
+        { property_id: "987654" },
+      ),
+    ).rejects.toThrow("Account is not available to this service token.");
   });
 
   it("compares two periods using the provider read adapter", async () => {

@@ -47,6 +47,7 @@ describe("provider OAuth callback UX", () => {
     ["meta", "META_ADS"],
     ["yandex", "YANDEX_DIRECT"],
     ["tiktok", "TIKTOK_ADS"],
+    ["google_analytics", "GOOGLE_ANALYTICS"],
   ])(
     "returns %s OAuth callbacks to the matching connections card",
     async (pathProvider, provider) => {

@@ -28,6 +28,7 @@ enum AuditActorType {
 
 enum ProviderId {
   GOOGLE_ADS
+  GOOGLE_ANALYTICS
   META_ADS
   GOOGLE_SEARCH_CONSOLE
   YANDEX_DIRECT

@@ -2608,7 +2608,8 @@ pre {
   gap: 6px;
 }
 .status-badge--muted {
-  opacity: 0.72;
+  /* Keep the informational badge at the AA contrast threshold. */
+  opacity: 1;
 }
 .connection-card__head h2 {
   font-size: 17px;
@@ -2629,6 +2630,12 @@ pre {
   background: var(--surface-inset);
   color: var(--text);
   font-weight: 800;
+}
+
+.provider-mark--google-analytics {
+  display: block;
+  object-fit: contain;
+  padding: 0.28rem;
 }
 .provider-mark--google_ads {
   color: #84a9ff;

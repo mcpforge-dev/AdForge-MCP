@@ -163,9 +163,8 @@ test.describe("axe accessibility", () => {
       }
     }
     const siteAudit = page.getByRole("button", { name: /Анализ сайта/ });
-    await expect(siteAudit).toBeEnabled();
-    await siteAudit.click();
-    await expectAccessible(page, "site audit brief");
+    await expect(siteAudit).toBeDisabled();
+    await expect(siteAudit.locator("small")).toHaveText("Скоро");
     const seo = page.getByRole("button", { name: /SEO/ });
     await expect(seo).toBeDisabled();
     await expect(seo.locator("small")).toHaveText("Скоро");

@@ -1,0 +1,4 @@
+interface:
+  display_name: "GA4 Analytics"
+  short_description: "Analyze GA4 traffic with read-only evidence"
+  default_prompt: "Use $ga4-analytics to analyze a selected Google Analytics 4 property. Keep all conclusions source-backed and read-only."

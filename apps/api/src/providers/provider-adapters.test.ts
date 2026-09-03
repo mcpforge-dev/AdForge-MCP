@@ -5,6 +5,7 @@ import { MetaAdsAdapter } from "./adapters/meta.ads.js";
 import { TikTokAdsAdapter } from "./adapters/tiktok.ads.js";
 import { YandexDirectAdapter } from "./adapters/yandex.direct.js";
 import { GoogleSearchConsoleAdapter } from "./adapters/google.search-console.js";
+import { GoogleAnalyticsAdapter } from "./adapters/google.analytics.js";
 import {
   googleAccessibleCustomersFixture,
   googleCampaignFixture,
@@ -31,6 +32,10 @@ const config = loadConfig({
   PROVIDER_GOOGLE_SEARCH_CONSOLE_CLIENT_SECRET: "search-console-secret",
   PROVIDER_GOOGLE_SEARCH_CONSOLE_REDIRECT_URI:
     "https://v2.example.test/oauth/google-search-console/callback",
+  PROVIDER_GOOGLE_ANALYTICS_CLIENT_ID: "analytics-client",
+  PROVIDER_GOOGLE_ANALYTICS_CLIENT_SECRET: "analytics-secret",
+  PROVIDER_GOOGLE_ANALYTICS_REDIRECT_URI:
+    "https://v2.example.test/oauth/google-analytics/callback",
 });
 
 function jsonResponse(payload: unknown, status = 200): Response {
@@ -133,6 +138,88 @@ describe("Google Ads v2 adapter", () => {
       providerStatus: "400",
       providerCode: "invalid_grant",
     });
+  });
+});
+
+describe("Google Analytics GA4 adapter", () => {
+  it("uses a separate readonly OAuth scope and discovers GA4 properties", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        jsonResponse({
+          accountSummaries: [
+            {
+              displayName: "HolyMedia",
+              propertySummaries: [
+                { property: "properties/123456", displayName: "Main GA4" },
+              ],
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        jsonResponse({
+          displayName: "Main GA4",
+          timeZone: "Asia/Almaty",
+          currencyCode: "KZT",
+        }),
+      );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAnalyticsAdapter(config);
+    const url = new URL(
+      adapter.authorizationUrl({
+        state: "state",
+        redirectUri: config.providerGoogleAnalyticsRedirectUri!,
+      }),
+    );
+    expect(url.searchParams.get("scope")).toBe(
+      "https://www.googleapis.com/auth/analytics.readonly",
+    );
+    expect(url.searchParams.get("scope")).not.toContain("analytics.edit");
+    expect(url.searchParams.get("scope")).not.toContain("adwords");
+    await expect(
+      adapter.discoverAccounts({
+        accessToken: "access",
+        scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+      }),
+    ).resolves.toMatchObject([
+      {
+        externalAccountId: "123456",
+        displayName: "Main GA4",
+        timezone: "Asia/Almaty",
+        currency: "KZT",
+        metadata: { accountName: "HolyMedia", resourceType: "ga4_property" },
+      },
+    ]);
+  });
+
+  it("runs a bounded Data API report against a GA4 property only", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      jsonResponse({
+        rowCount: 1,
+        rows: [{ metricValues: [{ value: "42" }] }],
+      }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    const adapter = new GoogleAnalyticsAdapter(config);
+    await adapter.runReport(
+      {
+        accessToken: "access",
+        scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+      },
+      "123456",
+      {
+        dateRanges: [{ startDate: "2026-08-01", endDate: "2026-08-30" }],
+        metrics: ["sessions"],
+        limit: 5_000,
+      },
+    );
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toContain(
+      "analyticsdata.googleapis.com/v1beta/properties/123456:runReport",
+    );
+    expect(String(init.body)).toContain('"limit":1000');
+    expect(String(init.body)).not.toContain("analytics.edit");
   });
 });
 

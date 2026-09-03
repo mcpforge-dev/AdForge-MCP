@@ -14,6 +14,7 @@ import { BillingService } from "../billing/billing.service.js";
 
 const providerAliases: Record<string, ProviderId> = {
   google_ads: "GOOGLE_ADS",
+  google_analytics: "GOOGLE_ANALYTICS",
   meta_ads: "META_ADS",
   google_search_console: "GOOGLE_SEARCH_CONSOLE",
   yandex_direct: "YANDEX_DIRECT",
@@ -162,6 +163,24 @@ export const V1_COMPATIBLE_MCP_TOOLS = [
   "get_detailed_ad_report_types",
   "get_search_console_report",
   "list_search_console_properties",
+  // Native GA4 tools. These are deliberately narrow, read-only Data/Admin API
+  // operations instead of exposing an unbounded generic Google request proxy.
+  "google_analytics_list_properties",
+  "google_analytics_get_property",
+  "google_analytics_run_report",
+  "google_analytics_check_compatibility",
+  "google_analytics_traffic_overview",
+  "google_analytics_acquisition",
+  "google_analytics_landing_pages",
+  "google_analytics_pages",
+  "google_analytics_events",
+  "google_analytics_key_events",
+  "google_analytics_devices",
+  "google_analytics_geography",
+  "google_analytics_realtime",
+  "google_analytics_compare_periods",
+  "google_analytics_list_google_ads_links",
+  "google_analytics_get_custom_dimensions_metrics",
 ] as const;
 
 const COMPAT_PREVIEW_OPERATIONS: Record<string, string> = {
@@ -307,7 +326,10 @@ export class McpService {
     return V1_COMPATIBLE_MCP_TOOLS.map((name) => ({
       name,
       description: toolDescription(name),
-      inputSchema: { type: "object", additionalProperties: true },
+      inputSchema: ga4ToolSchema(name) ?? {
+        type: "object",
+        additionalProperties: true,
+      },
     }));
   }
 
@@ -330,6 +352,136 @@ export class McpService {
     const compatibility = await this.compatRead(principal, name, args);
     if (compatibility.handled) return compatibility.value;
     switch (name) {
+      case "google_analytics_list_properties":
+        return this.listAccounts(principal, "google_analytics");
+      case "google_analytics_get_property": {
+        const account = await this.ga4Account(principal, args);
+        return this.providers.googleAnalyticsGetProperty(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+        );
+      }
+      case "google_analytics_run_report":
+        return this.ga4Report(principal, args);
+      case "google_analytics_check_compatibility": {
+        const account = await this.ga4Account(principal, args);
+        const dimensions = stringList(args.dimensions, 9, "dimensions");
+        const metrics = stringList(args.metrics, 10, "metrics", true);
+        return this.providers.googleAnalyticsCheckCompatibility(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          dimensions,
+          metrics,
+        );
+      }
+      case "google_analytics_traffic_overview":
+        return this.ga4Preset(
+          principal,
+          args,
+          [],
+          [
+            "activeUsers",
+            "totalUsers",
+            "newUsers",
+            "sessions",
+            "engagedSessions",
+            "engagementRate",
+            "screenPageViews",
+            "keyEvents",
+            "totalRevenue",
+          ],
+        );
+      case "google_analytics_acquisition":
+        return this.ga4Preset(
+          principal,
+          args,
+          [text(args.dimension, "sessionSourceMedium")],
+          [
+            "sessions",
+            "activeUsers",
+            "engagedSessions",
+            "keyEvents",
+            "totalRevenue",
+          ],
+        );
+      case "google_analytics_landing_pages":
+        return this.ga4Preset(
+          principal,
+          args,
+          ["landingPagePlusQueryString"],
+          [
+            "sessions",
+            "activeUsers",
+            "engagementRate",
+            "keyEvents",
+            "totalRevenue",
+          ],
+        );
+      case "google_analytics_pages":
+        return this.ga4Preset(
+          principal,
+          args,
+          [text(args.dimension, "unifiedScreenClass")],
+          [
+            "screenPageViews",
+            "activeUsers",
+            "userEngagementDuration",
+            "eventCount",
+          ],
+        );
+      case "google_analytics_events":
+      case "google_analytics_key_events":
+        return this.ga4Preset(
+          principal,
+          args,
+          ["eventName"],
+          ["eventCount", "activeUsers", "keyEvents", "totalRevenue"],
+        );
+      case "google_analytics_devices":
+        return this.ga4Preset(
+          principal,
+          args,
+          [text(args.dimension, "deviceCategory")],
+          ["activeUsers", "sessions", "engagementRate", "keyEvents"],
+        );
+      case "google_analytics_geography":
+        return this.ga4Preset(
+          principal,
+          args,
+          [text(args.dimension, "country")],
+          ["activeUsers", "sessions", "keyEvents"],
+        );
+      case "google_analytics_realtime": {
+        const account = await this.ga4Account(principal, args);
+        return this.providers.googleAnalyticsRunRealtime(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+          stringList(args.dimensions, 4, "dimensions"),
+          stringList(args.metrics ?? ["activeUsers"], 4, "metrics", true),
+          safeLimit(args.limit),
+        );
+      }
+      case "google_analytics_compare_periods":
+        return this.ga4ComparePeriods(principal, args);
+      case "google_analytics_list_google_ads_links": {
+        const account = await this.ga4Account(principal, args);
+        return this.providers.googleAnalyticsGoogleAdsLinks(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+        );
+      }
+      case "google_analytics_get_custom_dimensions_metrics": {
+        const account = await this.ga4Account(principal, args);
+        return this.providers.googleAnalyticsCustomDefinitions(
+          principal.workspaceId,
+          account.connectionId,
+          account.id,
+        );
+      }
       case "list_providers":
         return this.providers.listProviders();
       case "get_provider_capabilities":
@@ -865,6 +1017,41 @@ export class McpService {
               status: "implemented",
               read_only: true,
             },
+            {
+              id: "ga4_traffic_diagnosis",
+              title: "GA4 traffic diagnosis",
+              mcp_tool: "google_analytics_traffic_overview",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "ga4_acquisition",
+              title: "GA4 acquisition",
+              mcp_tool: "google_analytics_acquisition",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "ga4_content",
+              title: "GA4 landing pages and content",
+              mcp_tool: "google_analytics_landing_pages",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "ga4_key_events",
+              title: "GA4 key events",
+              mcp_tool: "google_analytics_key_events",
+              status: "implemented",
+              read_only: true,
+            },
+            {
+              id: "ga4_period_compare",
+              title: "GA4 period comparison",
+              mcp_tool: "google_analytics_compare_periods",
+              status: "implemented",
+              read_only: true,
+            },
           ],
           read_only: true,
         };
@@ -1335,6 +1522,141 @@ export class McpService {
     });
   }
 
+  private async ga4Account(principal: ServiceTokenPrincipal, args: JsonObject) {
+    return this.account(principal, {
+      ...args,
+      provider: "google_analytics",
+      account_id:
+        args.property_id ??
+        args.propertyId ??
+        args.account_id ??
+        args.accountId,
+    });
+  }
+
+  private async ga4Report(principal: ServiceTokenPrincipal, args: JsonObject) {
+    const account = await this.ga4Account(principal, args);
+    const dateRanges = ga4DateRanges(args);
+    const dimensions = stringList(args.dimensions, 9, "dimensions");
+    const metrics = stringList(args.metrics, 10, "metrics", true);
+    const orderBys = objectList(
+      args.order_bys ?? args.orderBys,
+      9,
+      "order_bys",
+    );
+    const report = await this.providers.googleAnalyticsRunReport(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      {
+        dateRanges,
+        dimensions,
+        metrics,
+        limit: safeLimit(args.limit),
+        ...(objectValue(args.dimension_filter ?? args.dimensionFilter) &&
+        Object.keys(objectValue(args.dimension_filter ?? args.dimensionFilter))
+          .length
+          ? {
+              dimensionFilter: objectValue(
+                args.dimension_filter ?? args.dimensionFilter,
+              ),
+            }
+          : {}),
+        ...(objectValue(args.metric_filter ?? args.metricFilter) &&
+        Object.keys(objectValue(args.metric_filter ?? args.metricFilter)).length
+          ? {
+              metricFilter: objectValue(
+                args.metric_filter ?? args.metricFilter,
+              ),
+            }
+          : {}),
+        ...(orderBys.length ? { orderBys } : {}),
+      },
+    );
+    return ga4Response(account, dateRanges, dimensions, metrics, report);
+  }
+
+  private async ga4Preset(
+    principal: ServiceTokenPrincipal,
+    args: JsonObject,
+    dimensions: string[],
+    metrics: string[],
+  ) {
+    const account = await this.ga4Account(principal, args);
+    const dateRanges = ga4DateRanges(args);
+    const report = await this.providers.googleAnalyticsRunReport(
+      principal.workspaceId,
+      account.connectionId,
+      account.id,
+      { dateRanges, dimensions, metrics, limit: safeLimit(args.limit) },
+    );
+    return ga4Response(account, dateRanges, dimensions, metrics, report);
+  }
+
+  private async ga4ComparePeriods(
+    principal: ServiceTokenPrincipal,
+    args: JsonObject,
+  ) {
+    const account = await this.ga4Account(principal, args);
+    const current = range(args) ?? defaultReportRange();
+    const previous = reportPreviousRange(args, current);
+    const metrics = stringList(
+      args.metrics ?? [
+        "activeUsers",
+        "sessions",
+        "engagedSessions",
+        "keyEvents",
+        "totalRevenue",
+      ],
+      10,
+      "metrics",
+      true,
+    );
+    const dimensions = stringList(args.dimensions, 9, "dimensions");
+    const [currentReport, previousReport] = await Promise.all([
+      this.providers.googleAnalyticsRunReport(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        {
+          dateRanges: [current],
+          dimensions,
+          metrics,
+          limit: safeLimit(args.limit),
+        },
+      ),
+      this.providers.googleAnalyticsRunReport(
+        principal.workspaceId,
+        account.connectionId,
+        account.id,
+        {
+          dateRanges: [previous],
+          dimensions,
+          metrics,
+          limit: safeLimit(args.limit),
+        },
+      ),
+    ]);
+    return {
+      property: ga4Property(account),
+      current: ga4Response(
+        account,
+        [current],
+        dimensions,
+        metrics,
+        currentReport,
+      ),
+      previous: ga4Response(
+        account,
+        [previous],
+        dimensions,
+        metrics,
+        previousReport,
+      ),
+      note: "Changes show measured GA4 data; they do not by themselves establish causation.",
+    };
+  }
+
   private async listAccounts(
     principal: ServiceTokenPrincipal,
     rawProvider: unknown,
@@ -1455,6 +1777,8 @@ export class McpService {
 }
 
 function toolDescription(name: string): string {
+  if (name.startsWith("google_analytics_"))
+    return "Read-only Google Analytics 4 tool. It can access only an enabled GA4 property in the caller's current workspace and never changes Analytics configuration.";
   if (name === "preview_change_campaign_name")
     return "Create a read-only rename preview. Use only after the user explicitly asks to rename a campaign and supplies the target name. Then confirm and commit the returned preview token in the same user-authorized flow.";
   if (name === "confirm_preview")
@@ -1462,6 +1786,214 @@ function toolDescription(name: string): string {
   if (name === "commit_meta_app_review_preview")
     return "Commit an explicitly confirmed Meta rename preview. Server policy permits only the prepared Meta App Review campaign/name combination and always reads Meta before and after the mutation.";
   return `HolyMedia MCP compatibility tool: ${name}`;
+}
+
+function ga4ToolSchema(name: string): Record<string, unknown> | undefined {
+  const property = {
+    property_id: {
+      type: "string",
+      minLength: 1,
+      maxLength: 20,
+      description: "Enabled GA4 property ID.",
+    },
+  };
+  const period = {
+    start_date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+    end_date: { type: "string", pattern: "^\\d{4}-\\d{2}-\\d{2}$" },
+  };
+  if (name === "google_analytics_list_properties")
+    return { type: "object", additionalProperties: false, properties: {} };
+  if (
+    [
+      "google_analytics_get_property",
+      "google_analytics_list_google_ads_links",
+      "google_analytics_get_custom_dimensions_metrics",
+    ].includes(name)
+  )
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["property_id"],
+      properties: property,
+    };
+  if (name === "google_analytics_run_report")
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["property_id", "metrics"],
+      properties: {
+        ...property,
+        ...period,
+        dimensions: {
+          type: "array",
+          items: { type: "string", minLength: 1, maxLength: 80 },
+          maxItems: 9,
+        },
+        metrics: {
+          type: "array",
+          items: { type: "string", minLength: 1, maxLength: 80 },
+          minItems: 1,
+          maxItems: 10,
+        },
+        dimension_filter: {
+          type: "object",
+          additionalProperties: true,
+          description: "GA4 Data API dimensionFilter expression.",
+        },
+        metric_filter: {
+          type: "object",
+          additionalProperties: true,
+          description: "GA4 Data API metricFilter expression.",
+        },
+        order_bys: {
+          type: "array",
+          items: { type: "object", additionalProperties: true },
+          maxItems: 9,
+          description: "GA4 Data API orderBys expressions.",
+        },
+        limit: { type: "integer", minimum: 1, maximum: 1000 },
+      },
+    };
+  if (name === "google_analytics_check_compatibility")
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["property_id", "metrics"],
+      properties: {
+        ...property,
+        dimensions: { type: "array", items: { type: "string" }, maxItems: 9 },
+        metrics: {
+          type: "array",
+          items: { type: "string" },
+          minItems: 1,
+          maxItems: 10,
+        },
+      },
+    };
+  if (name === "google_analytics_realtime")
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["property_id"],
+      properties: {
+        ...property,
+        dimensions: { type: "array", items: { type: "string" }, maxItems: 4 },
+        metrics: { type: "array", items: { type: "string" }, maxItems: 4 },
+        limit: { type: "integer", minimum: 1, maximum: 1000 },
+      },
+    };
+  if (name.startsWith("google_analytics_"))
+    return {
+      type: "object",
+      additionalProperties: false,
+      required: ["property_id"],
+      properties: {
+        ...property,
+        ...period,
+        dimension: { type: "string", minLength: 1, maxLength: 80 },
+        dimensions: { type: "array", items: { type: "string" }, maxItems: 9 },
+        metrics: { type: "array", items: { type: "string" }, maxItems: 10 },
+        limit: { type: "integer", minimum: 1, maximum: 1000 },
+      },
+    };
+  return undefined;
+}
+
+function stringList(
+  value: unknown,
+  maximum: number,
+  label: string,
+  required = false,
+): string[] {
+  if (value === undefined || value === null) {
+    if (required) throw new ForbiddenException(`${label} is required.`);
+    return [];
+  }
+  if (!Array.isArray(value) || value.length > maximum)
+    throw new ForbiddenException(
+      `${label} must contain up to ${maximum} items.`,
+    );
+  const result = value.map((item) => text(item)).filter(Boolean);
+  if (result.length !== value.length || (required && !result.length))
+    throw new ForbiddenException(`${label} contains an invalid value.`);
+  return result;
+}
+
+function objectList(
+  value: unknown,
+  maximum: number,
+  label: string,
+): JsonObject[] {
+  if (value === undefined || value === null) return [];
+  if (!Array.isArray(value) || value.length > maximum)
+    throw new ForbiddenException(
+      `${label} must contain up to ${maximum} items.`,
+    );
+  if (
+    value.some(
+      (item) => !item || typeof item !== "object" || Array.isArray(item),
+    )
+  )
+    throw new ForbiddenException(`${label} contains an invalid value.`);
+  return value as JsonObject[];
+}
+
+function safeLimit(value: unknown): number {
+  if (value === undefined || value === null || value === "") return 100;
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 1 || number > 1_000)
+    throw new ForbiddenException("limit must be between 1 and 1000.");
+  return number;
+}
+
+function ga4DateRanges(args: JsonObject) {
+  const current = range(args) ?? defaultReportRange();
+  return [current];
+}
+
+function ga4Property(account: {
+  externalAccountId: string;
+  displayName: string;
+  timezone: string | null;
+  currency: string | null;
+}) {
+  return {
+    property_id: account.externalAccountId,
+    name: account.displayName,
+    timezone: account.timezone,
+    currency: account.currency,
+  };
+}
+
+function ga4Response(
+  account: {
+    externalAccountId: string;
+    displayName: string;
+    timezone: string | null;
+    currency: string | null;
+  },
+  dateRanges: Array<{ startDate: string; endDate: string }>,
+  dimensions: string[],
+  metrics: string[],
+  raw: Record<string, unknown>,
+) {
+  const rows = Array.isArray(raw.rows) ? raw.rows : [];
+  return {
+    property: ga4Property(account),
+    period: dateRanges,
+    dimensions,
+    metrics,
+    rows,
+    totals: Array.isArray(raw.totals) ? raw.totals : [],
+    row_count: raw.rowCount ?? rows.length,
+    metadata: raw.metadata ?? {},
+    quota: raw.propertyQuota ?? null,
+    provenance: {
+      provider: "GOOGLE_ANALYTICS",
+      source_api: "Google Analytics Data API",
+      real_data: true,
+    },
+  };
 }
 
 function isUuid(value: string): boolean {

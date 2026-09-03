@@ -245,9 +245,53 @@ export interface SearchConsoleReadAdapter extends ProviderOAuthAdapter {
   ): Promise<Record<string, unknown>[]>;
 }
 
+export type GoogleAnalyticsReportRequest = {
+  dateRanges: Array<{ startDate: string; endDate: string }>;
+  dimensions?: string[];
+  metrics: string[];
+  limit?: number;
+  dimensionFilter?: Record<string, unknown>;
+  metricFilter?: Record<string, unknown>;
+  orderBys?: Array<Record<string, unknown>>;
+};
+
+export interface GoogleAnalyticsReadAdapter extends ProviderOAuthAdapter {
+  getProperty(
+    credentials: ProviderCredentialPayload,
+    propertyId: string,
+  ): Promise<NormalizedProviderAccount>;
+  runReport(
+    credentials: ProviderCredentialPayload,
+    propertyId: string,
+    request: GoogleAnalyticsReportRequest,
+  ): Promise<Record<string, unknown>>;
+  runRealtimeReport(
+    credentials: ProviderCredentialPayload,
+    propertyId: string,
+    dimensions: string[],
+    metrics: string[],
+    limit?: number,
+  ): Promise<Record<string, unknown>>;
+  checkCompatibility(
+    credentials: ProviderCredentialPayload,
+    propertyId: string,
+    dimensions: string[],
+    metrics: string[],
+  ): Promise<Record<string, unknown>>;
+  listGoogleAdsLinks(
+    credentials: ProviderCredentialPayload,
+    propertyId: string,
+  ): Promise<Record<string, unknown>[]>;
+  listCustomDimensionsMetrics(
+    credentials: ProviderCredentialPayload,
+    propertyId: string,
+  ): Promise<Record<string, unknown>>;
+}
+
 export function isProviderId(value: string): value is ProviderId {
   return [
     "GOOGLE_ADS",
+    "GOOGLE_ANALYTICS",
     "META_ADS",
     "GOOGLE_SEARCH_CONSOLE",
     "YANDEX_DIRECT",

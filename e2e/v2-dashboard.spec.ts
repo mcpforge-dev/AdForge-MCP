@@ -269,6 +269,33 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(connect).toBeEnabled();
   });
 
+  test("shows Google Analytics last and lets an owner select GA4 properties", async ({
+    page,
+  }) => {
+    await installMockApi(page);
+    await login(page);
+    await page
+      .getByRole("button", { name: "Подключения", exact: true })
+      .click();
+
+    const cards = page.locator(".connection-card");
+    await expect(
+      cards.last().getByRole("heading", { name: "Google Analytics" }),
+    ).toBeVisible();
+    const analyticsCard = cards.filter({ hasText: "Google Analytics" });
+    await analyticsCard
+      .getByRole("button", { name: "Посмотреть ресурсы" })
+      .click();
+    const selector = page.getByRole("dialog", { name: "Выберите ресурсы" });
+    await expect(
+      selector.getByText("HolyMedia GA4", { exact: true }),
+    ).toBeVisible();
+    await expect(
+      selector.getByText("987654321", { exact: true }),
+    ).toBeVisible();
+    await selector.getByRole("button", { name: "Отмена" }).click();
+  });
+
   test("connections, account selection, MCP, reports and profile form a complete flow", async ({
     page,
   }, testInfo) => {

@@ -184,6 +184,30 @@ describe("v2 configuration", () => {
     );
   });
 
+  it("keeps GA4 OAuth credentials and callback logically separate from Google Ads", () => {
+    const config = loadConfig({
+      NODE_ENV: "test",
+      AD_MCP_PUBLIC_BASE_URL: "https://mcp.holymedia.kz",
+      AD_MCP_GOOGLE_OAUTH_CLIENT_ID: "google-client",
+      AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET: "google-secret",
+      AD_MCP_GOOGLE_OAUTH_REDIRECT_PATH: "/oauth/google/callback",
+      AD_MCP_GOOGLE_ANALYTICS_REDIRECT_PATH:
+        "/api/v1/oauth/GOOGLE_ANALYTICS/callback",
+    });
+
+    expect(config.providerGoogleClientId).toBe("google-client");
+    expect(config.providerGoogleRedirectUri).toBe(
+      "https://mcp.holymedia.kz/oauth/google/callback",
+    );
+    expect(config.providerGoogleAnalyticsClientId).toBe("google-client");
+    expect(config.providerGoogleAnalyticsRedirectUri).toBe(
+      "https://mcp.holymedia.kz/api/v1/oauth/GOOGLE_ANALYTICS/callback",
+    );
+    expect(config.providerGoogleAnalyticsRedirectUri).not.toBe(
+      config.providerGoogleRedirectUri,
+    );
+  });
+
   it("maps the legacy Google Login client and callback", () => {
     const config = loadConfig({
       NODE_ENV: "test",

@@ -359,6 +359,8 @@ export class ProviderController {
     const aliases: Record<string, ProviderId> = {
       google: "GOOGLE_ADS",
       google_ads: "GOOGLE_ADS",
+      google_analytics: "GOOGLE_ANALYTICS",
+      "google-analytics": "GOOGLE_ANALYTICS",
       meta: "META_ADS",
       meta_ads: "META_ADS",
       yandex: "YANDEX_DIRECT",

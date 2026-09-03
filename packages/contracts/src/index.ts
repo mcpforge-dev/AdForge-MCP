@@ -23,6 +23,7 @@ export type ApiError = {
 
 export type ProviderId =
   | "GOOGLE_ADS"
+  | "GOOGLE_ANALYTICS"
   | "META_ADS"
   | "GOOGLE_SEARCH_CONSOLE"
   | "YANDEX_DIRECT"
@@ -56,6 +57,8 @@ export type ProviderAccountView = {
   provider: ProviderId;
   externalAccountId: string;
   displayName: string;
+  /** Parent platform account where a provider exposes one. */
+  accountName?: string | null;
   currency: string | null;
   timezone: string | null;
   status: string | null;

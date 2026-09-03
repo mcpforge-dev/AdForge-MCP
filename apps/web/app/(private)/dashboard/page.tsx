@@ -44,6 +44,9 @@ type ProviderAccount = {
   id: string;
   externalAccountId: string;
   displayName: string;
+  accountName?: string | null;
+  currency?: string | null;
+  timezone?: string | null;
   enabled: boolean;
   status: string | null;
 };
@@ -206,6 +209,12 @@ const PROVIDER_COPY: Record<
     name: "Google Search Console",
     short: "S",
     description: "Данные поиска и страницы сайта.",
+  },
+  GOOGLE_ANALYTICS: {
+    name: "Google Analytics",
+    short: "GA",
+    description:
+      "Анализируйте трафик сайта, источники, страницы, события и ключевые действия через AI.",
   },
 };
 
@@ -435,6 +444,14 @@ export default function DashboardPage() {
   const section = dashboardSectionFromPath(pathname);
   const setSection = (next: Section) =>
     router.push(dashboardRoute(next) as never);
+
+  useEffect(() => {
+    document.title =
+      language === "en"
+        ? "HolyMedia MCP — Dashboard"
+        : "HolyMedia MCP — Личный кабинет";
+  }, [language, section]);
+
   const [client, setClient] = useState<Client>("codex");
   const [drafts, setDrafts] = useState<Record<string, string[]>>({});
   const [openAccountsId, setOpenAccountsId] = useState<string | null>(null);
@@ -614,6 +631,15 @@ export default function DashboardPage() {
         );
       })
     : [];
+  const selectorUsesProperties =
+    selectorConnection?.provider === "GOOGLE_ANALYTICS";
+  const selectorLabel = selectorUsesProperties
+    ? language === "en"
+      ? "properties"
+      : "ресурсы"
+    : language === "en"
+      ? "accounts"
+      : "кабинеты";
 
   function notify(text: string) {
     setError("");
@@ -1408,6 +1434,7 @@ export default function DashboardPage() {
     "META_ADS",
     "YANDEX_DIRECT",
     "TIKTOK_ADS",
+    "GOOGLE_ANALYTICS",
   ];
 
   return (
@@ -1635,6 +1662,13 @@ export default function DashboardPage() {
                     ? storedConnection
                     : undefined;
                 const copyText = providerCopy(providerId);
+                const providerDescription =
+                  providerId === "GOOGLE_ANALYTICS" && language === "en"
+                    ? "Analyze website traffic, sources, pages, events and key actions through AI."
+                    : copyText.description;
+                const providerConfigured =
+                  providerId !== "GOOGLE_ANALYTICS" ||
+                  definition?.status.toLowerCase() === "available";
                 const status = connectionStatus(connection?.status ?? "");
                 const selected = new Set(
                   connection ? (drafts[connection.id] ?? []) : [],
@@ -1648,15 +1682,23 @@ export default function DashboardPage() {
                     key={providerId}
                   >
                     <div className="connection-card__head">
-                      <span
-                        className={`provider-mark provider-mark--${providerId.toLowerCase()}`}
-                        aria-hidden="true"
-                      >
-                        {copyText.short}
-                      </span>
+                      {providerId === "GOOGLE_ANALYTICS" ? (
+                        <img
+                          className="provider-mark provider-mark--google-analytics"
+                          src="/google-analytics.svg"
+                          alt=""
+                        />
+                      ) : (
+                        <span
+                          className={`provider-mark provider-mark--${providerId.toLowerCase()}`}
+                          aria-hidden="true"
+                        >
+                          {copyText.short}
+                        </span>
+                      )}
                       <div>
                         <h2>{copyText.name}</h2>
-                        <p>{copyText.description}</p>
+                        <p>{providerDescription}</p>
                       </div>
                       <div className="connection-card__statuses">
                         <span className={`status-badge ${status.tone}`}>
@@ -1673,8 +1715,16 @@ export default function DashboardPage() {
                       <>
                         <p className="connection-count">
                           {connection.accounts.length
-                            ? `${connection.accounts.length} кабинетов · ${selected.size} выбрано`
-                            : "Кабинеты ещё не найдены"}
+                            ? providerId === "GOOGLE_ANALYTICS"
+                              ? language === "en"
+                                ? `${connection.accounts.length} properties · ${selected.size} selected`
+                                : `${connection.accounts.length} ресурсов · ${selected.size} выбрано`
+                              : `${connection.accounts.length} кабинетов · ${selected.size} выбрано`
+                            : providerId === "GOOGLE_ANALYTICS"
+                              ? language === "en"
+                                ? "Properties have not been found yet"
+                                : "Ресурсы ещё не найдены"
+                              : "Кабинеты ещё не найдены"}
                         </p>
                         {connection.status !== "CONNECTED" && (
                           <p className="connection-note">
@@ -1689,7 +1739,11 @@ export default function DashboardPage() {
                             aria-haspopup="dialog"
                             onClick={() => openAccountSelector(connection)}
                           >
-                            Посмотреть кабинеты
+                            {providerId === "GOOGLE_ANALYTICS"
+                              ? language === "en"
+                                ? "View properties"
+                                : "Посмотреть ресурсы"
+                              : "Посмотреть кабинеты"}
                           </button>
                           <button
                             className="secondary-button btn--small"
@@ -1728,17 +1782,33 @@ export default function DashboardPage() {
                       </>
                     ) : (
                       <div className="connection-empty">
-                        <p>Платформа ещё не подключена.</p>
+                        <p>
+                          {providerId === "GOOGLE_ANALYTICS" &&
+                          language === "en"
+                            ? "Google Analytics has not been connected yet."
+                            : "Платформа ещё не подключена."}
+                        </p>
+                        {!providerConfigured && (
+                          <p className="connection-note">
+                            {language === "en"
+                              ? "Google Analytics connection is not configured on the server yet."
+                              : "Подключение Google Analytics ещё не настроено на сервере."}
+                          </p>
+                        )}
                         <button
                           className="primary-button"
                           type="button"
                           disabled={
                             Boolean(oauthPendingProvider) ||
-                            definition?.status === "DISABLED"
+                            definition?.status === "DISABLED" ||
+                            !providerConfigured
                           }
                           onClick={() => void startProvider(providerId)}
                         >
-                          Подключить {copyText.name}
+                          {providerId === "GOOGLE_ANALYTICS" &&
+                          language === "en"
+                            ? "Connect Google Analytics"
+                            : `Подключить ${copyText.name}`}
                         </button>
                       </div>
                     )}
@@ -3064,10 +3134,15 @@ export default function DashboardPage() {
           >
             <div className="account-selector__head">
               <div>
-                <h2 id="account-selector-title">Выберите кабинеты</h2>
+                <h2 id="account-selector-title">
+                  {language === "en"
+                    ? `Select ${selectorLabel}`
+                    : `Выберите ${selectorLabel}`}
+                </h2>
                 <p>
-                  {selectorSelected.size} из{" "}
-                  {selectorConnection.accounts.length} выбрано
+                  {language === "en"
+                    ? `${selectorSelected.size} of ${selectorConnection.accounts.length} selected`
+                    : `${selectorSelected.size} из ${selectorConnection.accounts.length} выбрано`}
                 </p>
               </div>
               {selectorConnection.accounts.length > 0 && (
@@ -3084,7 +3159,7 @@ export default function DashboardPage() {
                       }))
                     }
                   >
-                    Выбрать все
+                    {language === "en" ? "Select all" : "Выбрать все"}
                   </button>
                   <button
                     type="button"
@@ -3095,14 +3170,18 @@ export default function DashboardPage() {
                       }))
                     }
                   >
-                    Снять все
+                    {language === "en" ? "Clear all" : "Снять все"}
                   </button>
                 </div>
               )}
               <button
                 className="modal__close account-selector__close"
                 type="button"
-                aria-label="Закрыть выбор кабинетов"
+                aria-label={
+                  language === "en"
+                    ? `Close ${selectorLabel} selection`
+                    : `Закрыть выбор: ${selectorLabel}`
+                }
                 onClick={closeAccountSelector}
               >
                 ×
@@ -3111,17 +3190,22 @@ export default function DashboardPage() {
             {selectorConnection.accounts.length ? (
               <>
                 <label className="account-selector__search">
-                  <span>Поиск кабинета</span>
+                  <span>
+                    {language === "en"
+                      ? `Search ${selectorLabel}`
+                      : `Поиск: ${selectorLabel}`}
+                  </span>
                   <input
                     autoFocus
                     value={accountSearch}
                     onChange={(event) => setAccountSearch(event.target.value)}
-                    placeholder="Название или ID"
+                    placeholder={language === "en" ? "Name or ID" : "Название или ID"}
                   />
                 </label>
                 <p className="account-selector__hint">
-                  Статус показываем только если его передала рекламная
-                  платформа.
+                  {language === "en"
+                    ? "Status is shown only when it is supplied by the connected platform."
+                    : "Статус показываем только если его передала подключённая платформа."}
                 </p>
                 <div className="account-list" aria-live="polite">
                   {selectorAccounts.map((account) => {
@@ -3141,15 +3225,33 @@ export default function DashboardPage() {
                         <span>
                           <strong>{account.displayName}</strong>
                           <small>{account.externalAccountId}</small>
+                          {selectorUsesProperties &&
+                            (account.accountName ||
+                              account.timezone ||
+                              account.currency) && (
+                              <small>
+                                {[
+                                  account.accountName,
+                                  account.timezone,
+                                  account.currency,
+                                ]
+                                  .filter(Boolean)
+                                  .join(" · ")}
+                              </small>
+                            )}
                         </span>
-                        {inactive && <em>Неактивен</em>}
+                        {inactive && (
+                          <em>{language === "en" ? "Inactive" : "Неактивен"}</em>
+                        )}
                       </label>
                     );
                   })}
                 </div>
                 {!selectorAccounts.length && (
                   <p className="empty-inline">
-                    По этому запросу кабинеты не найдены.
+                    {language === "en"
+                      ? `No ${selectorLabel} match this search.`
+                      : `По этому запросу ${selectorLabel} не найдены.`}
                   </p>
                 )}
                 <div className="account-selector__save">
@@ -3158,7 +3260,7 @@ export default function DashboardPage() {
                     type="button"
                     onClick={closeAccountSelector}
                   >
-                    Отмена
+                    {language === "en" ? "Cancel" : "Отмена"}
                   </button>
                   <button
                     className="primary-button"
@@ -3167,21 +3269,31 @@ export default function DashboardPage() {
                     onClick={() => void saveAccounts(selectorConnection)}
                   >
                     {savingAccounts === selectorConnection.id
-                      ? "Сохраняем…"
-                      : "Сохранить выбор"}
+                      ? language === "en"
+                        ? "Saving…"
+                        : "Сохраняем…"
+                      : language === "en"
+                        ? "Save selection"
+                        : "Сохранить выбор"}
                   </button>
                 </div>
               </>
             ) : (
               <div className="empty-state">
-                <p>Кабинеты пока не найдены.</p>
+                <p>
+                  {language === "en"
+                    ? `No ${selectorLabel} have been found yet.`
+                    : `${selectorLabel[0]!.toUpperCase()}${selectorLabel.slice(1)} пока не найдены.`}
+                </p>
                 <button
                   className="secondary-button"
                   type="button"
                   disabled={busy}
                   onClick={() => void refreshAccounts(selectorConnection)}
                 >
-                  Найти кабинеты
+                  {language === "en"
+                    ? `Find ${selectorLabel}`
+                    : `Найти ${selectorLabel}`}
                 </button>
               </div>
             )}

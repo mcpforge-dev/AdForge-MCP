@@ -613,6 +613,7 @@ export async function installMockApi(
           ["YANDEX_DIRECT", "Yandex Direct"],
           ["TIKTOK_ADS", "TikTok Ads"],
           ["GOOGLE_SEARCH_CONSOLE", "Google Search Console"],
+          ["GOOGLE_ANALYTICS", "Google Analytics"],
         ].map(([id, displayName]) => ({
           id,
           displayName,
@@ -645,6 +646,21 @@ export async function installMockApi(
               displayName: "Исторический кабинет",
               enabled: true,
               status: "ENABLED",
+            },
+          ],
+        },
+        {
+          id: "88888888-8888-4888-8888-888888888888",
+          provider: "GOOGLE_ANALYTICS",
+          displayName: "HolyMedia Analytics",
+          status: "CONNECTED",
+          accounts: [
+            {
+              id: "99999999-9999-4999-8999-999999999999",
+              externalAccountId: "987654321",
+              displayName: "HolyMedia GA4",
+              enabled: true,
+              status: "CONNECTED",
             },
           ],
         },

@@ -32,6 +32,8 @@ import type {
   MetaControlledCampaignState,
   NormalizedProviderAccount,
   ProviderCredentialPayload,
+  GoogleAnalyticsReadAdapter,
+  GoogleAnalyticsReportRequest,
   ProviderScopeMetadata,
   SearchConsoleReadAdapter,
   SearchConsoleQueryRow,
@@ -703,6 +705,157 @@ export class ProviderService {
     return context.adapter.health(context.read);
   }
 
+  /** GA4 reads are intentionally separate from the ads-shaped read adapter. */
+  public async googleAnalyticsGetProperty(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "ga4_property",
+      async () => {
+        const context = await this.googleAnalyticsContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.getProperty(
+          context.credentials,
+          context.account.externalAccountId,
+        );
+      },
+    );
+  }
+
+  public async googleAnalyticsRunReport(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    request: GoogleAnalyticsReportRequest,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "ga4_report",
+      async () => {
+        const context = await this.googleAnalyticsContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.runReport(
+          context.credentials,
+          context.account.externalAccountId,
+          request,
+        );
+      },
+    );
+  }
+
+  public async googleAnalyticsRunRealtime(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    dimensions: string[],
+    metrics: string[],
+    limit?: number,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "ga4_realtime",
+      async () => {
+        const context = await this.googleAnalyticsContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.runRealtimeReport(
+          context.credentials,
+          context.account.externalAccountId,
+          dimensions,
+          metrics,
+          limit,
+        );
+      },
+    );
+  }
+
+  public async googleAnalyticsCheckCompatibility(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+    dimensions: string[],
+    metrics: string[],
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "ga4_compatibility",
+      async () => {
+        const context = await this.googleAnalyticsContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.checkCompatibility(
+          context.credentials,
+          context.account.externalAccountId,
+          dimensions,
+          metrics,
+        );
+      },
+    );
+  }
+
+  public async googleAnalyticsGoogleAdsLinks(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "ga4_google_ads_links",
+      async () => {
+        const context = await this.googleAnalyticsContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.listGoogleAdsLinks(
+          context.credentials,
+          context.account.externalAccountId,
+        );
+      },
+    );
+  }
+
+  public async googleAnalyticsCustomDefinitions(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    return this.withReadFailure(
+      workspaceId,
+      connectionId,
+      "ga4_custom_definitions",
+      async () => {
+        const context = await this.googleAnalyticsContext(
+          workspaceId,
+          connectionId,
+          accountId,
+        );
+        return context.adapter.listCustomDimensionsMetrics(
+          context.credentials,
+          context.account.externalAccountId,
+        );
+      },
+    );
+  }
+
   private async withReadFailure<T>(
     workspaceId: string,
     connectionId: string,
@@ -1138,6 +1291,43 @@ export class ProviderService {
     };
   }
 
+  private async googleAnalyticsContext(
+    workspaceId: string,
+    connectionId: string,
+    accountId: string,
+  ) {
+    const context = await this.connectionReadCredentials(
+      workspaceId,
+      connectionId,
+    );
+    if (context.connection.provider !== "GOOGLE_ANALYTICS")
+      throw new ProviderError(
+        "invalid_account",
+        "Google Analytics property belongs to another provider.",
+      );
+    const fresh = await this.refreshForRead(context);
+    const account = await this.database.client.providerAccount.findFirst({
+      where: {
+        id: accountId,
+        connectionId,
+        workspaceId,
+        provider: "GOOGLE_ANALYTICS" as never,
+        enabled: true,
+      },
+    });
+    if (!account)
+      throw new NotFoundException(
+        "Selected Google Analytics property was not found.",
+      );
+    const adapter = fresh.adapter as unknown as GoogleAnalyticsReadAdapter;
+    if (typeof adapter.runReport !== "function")
+      throw new ProviderError(
+        "provider_not_configured",
+        "Google Analytics read is not configured.",
+      );
+    return { ...fresh, account, adapter };
+  }
+
   private async connectionReadCredentials(
     workspaceId: string,
     connectionId: string,
@@ -1324,6 +1514,7 @@ export class ProviderService {
       provider: account.provider as ProviderId,
       externalAccountId: account.externalAccountId,
       displayName: account.displayName,
+      accountName: stringMetadata(account.metadata, "accountName") ?? null,
       currency: account.currency,
       timezone: account.timezone,
       status: account.status,
@@ -1375,6 +1566,11 @@ export class ProviderService {
       this.config.providerGoogleSearchConsoleRedirectUri
     )
       return this.config.providerGoogleSearchConsoleRedirectUri;
+    if (
+      provider === "GOOGLE_ANALYTICS" &&
+      this.config.providerGoogleAnalyticsRedirectUri
+    )
+      return this.config.providerGoogleAnalyticsRedirectUri;
     if (provider === "META_ADS" && this.config.providerMetaRedirectUri)
       return this.config.providerMetaRedirectUri;
     if (provider === "TIKTOK_ADS" && this.config.providerTikTokRedirectUri)
