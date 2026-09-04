@@ -27,6 +27,16 @@ type SupportRequestResponse = {
   telegramMessageId?: string;
 };
 
+type FeedbackState = "idle" | "sending" | "validation" | "error";
+
+function createIdempotencyKey(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(
+    "",
+  );
+}
+
 function hasConfirmedTelegramDelivery(
   value: unknown,
 ): value is Required<SupportRequestResponse> {
@@ -43,7 +53,7 @@ function hasConfirmedTelegramDelivery(
 
 export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
   const language = useLanguage();
-  const [state, setState] = useState<"idle" | "sending" | "error">("idle");
+  const [state, setState] = useState<FeedbackState>("idle");
   const [successOpen, setSuccessOpen] = useState(false);
   const idempotencyKey = useRef<string | undefined>(undefined);
   const successDialogRef = useRef<HTMLDialogElement>(null);
@@ -68,6 +78,7 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
         sent: "Спасибо, сообщение отправлено",
         sentHint: "Мы получили вашу заявку и вернёмся с ответом.",
         successAction: "Хорошо",
+        validation: "Введите не менее 3 символов.",
         error: "Не удалось отправить сообщение",
         errorHint: "Попробуйте ещё раз через несколько минут.",
       }
@@ -90,6 +101,7 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
         sent: "Thank you, your message has been sent",
         sentHint: "We received your request and will get back to you.",
         successAction: "Okay",
+        validation: "Enter at least 3 characters.",
         error: "Could not send the message",
         errorHint: "Please try again in a few minutes.",
       };
@@ -100,10 +112,15 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const message = String(form.get("message") ?? "").trim();
-    if (!message) return;
+    if (message.length < 3) {
+      setState("validation");
+      const messageField = formElement.elements.namedItem("message");
+      if (messageField instanceof HTMLTextAreaElement) messageField.focus();
+      return;
+    }
     setState("sending");
     try {
-      idempotencyKey.current ??= crypto.randomUUID();
+      idempotencyKey.current ??= createIdempotencyKey();
       const response = await fetch(
         `${API}/api/v1/workspaces/${workspaceId}/support-requests`,
         {
@@ -171,6 +188,13 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
             required
             minLength={3}
             maxLength={4000}
+            aria-invalid={state === "validation" ? true : undefined}
+            aria-describedby={
+              state === "validation" ? "feedback-message-error" : undefined
+            }
+            onInput={() => {
+              if (state === "validation" || state === "error") setState("idle");
+            }}
           />
         </label>
         <div className="feedback-block__actions">
@@ -181,10 +205,20 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
           >
             {state === "sending" ? copy.sending : copy.submit}
           </button>
-          {state === "error" && (
-            <p className="feedback-block__error" role="alert">
-              <strong>{copy.error}</strong>
-              <span>{copy.errorHint}</span>
+          {(state === "validation" || state === "error") && (
+            <p
+              className="feedback-block__error"
+              id="feedback-message-error"
+              role="alert"
+            >
+              {state === "validation" ? (
+                <strong>{copy.validation}</strong>
+              ) : (
+                <>
+                  <strong>{copy.error}</strong>
+                  <span>{copy.errorHint}</span>
+                </>
+              )}
             </p>
           )}
         </div>

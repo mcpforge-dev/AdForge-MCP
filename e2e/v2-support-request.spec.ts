@@ -98,3 +98,31 @@ test("feedback success is withheld without an explicit Telegram delivery confirm
   ).toBeHidden();
   await expect(feedback.getByRole("alert")).toBeVisible();
 });
+
+test("feedback validates a short message before calling the API", async ({
+  page,
+}) => {
+  await installMockApi(page);
+  await login(page);
+  let supportRequests = 0;
+  await page.route("**/api/v1/workspaces/*/support-requests", async (route) => {
+    supportRequests += 1;
+    await route.abort();
+  });
+
+  const feedback = page.locator(".feedback-block");
+  const message = feedback.locator('textarea[name="message"]');
+  await message.fill("Я");
+  await feedback.locator(".feedback-block__form button[type=submit]").click();
+
+  await expect(feedback.getByRole("alert")).toContainText(
+    "Введите не менее 3 символов.",
+  );
+  await expect(message).toBeFocused();
+  await expect(message).toHaveAttribute("aria-invalid", "true");
+  expect(supportRequests).toBe(0);
+
+  await message.fill("Всё работает");
+  await expect(feedback.getByRole("alert")).toBeHidden();
+  await expect(message).not.toHaveAttribute("aria-invalid", "true");
+});
