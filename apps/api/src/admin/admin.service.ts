@@ -9,6 +9,8 @@ import {
 } from "@nestjs/common";
 import { loadConfig, type AppConfig } from "@holymedia/config";
 import {
+  FULL_ACCESS_LIFETIME_GRANT,
+  FULL_ACCESS_LIFETIME_PLAN_KEY,
   TARIFF_PLANS,
   TARIFF_TRIAL_DAYS,
   tariffPlanByKey,
@@ -506,7 +508,15 @@ export class AdminService {
     if (!plan?.active) throw new BadRequestException("Plan is not available.");
     const company = await this.database.client.workspace.findUnique({
       where: { id },
-      select: { id: true },
+      select: {
+        id: true,
+        subscriptions: {
+          where: { status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] } },
+          orderBy: { createdAt: "desc" },
+          take: 1,
+          select: { plan: { select: { key: true } } },
+        },
+      },
     });
     if (!company) throw new NotFoundException("Company not found.");
     const now = new Date();
@@ -545,6 +555,8 @@ export class AdminService {
       {
         plan: plan.key,
         mode,
+        previousAccess: company.subscriptions[0]?.plan.key ?? "none",
+        newAccess: plan.key,
         ...(mode === "TRIAL" ? { trialDays: TARIFF_TRIAL_DAYS } : {}),
       },
       id,
@@ -552,6 +564,122 @@ export class AdminService {
       plan.id,
     );
     return { plan: { key: plan.key, name: plan.name }, mode, trialEndsAt };
+  }
+
+  /**
+   * A narrow, system-admin-only grant for the historical full-access
+   * entitlement. The route is protected by AdminAuthenticationGuard and never
+   * exposes this preset through public billing.
+   */
+  public async assignFullLifetimeAccess(id: string, request: RequestWithAuth) {
+    const [company, plan] = await Promise.all([
+      this.database.client.workspace.findUnique({
+        where: { id },
+        select: {
+          id: true,
+          accessStatus: true,
+          subscriptions: {
+            where: { status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] } },
+            orderBy: { createdAt: "desc" },
+            take: 1,
+            select: { plan: { select: { key: true } } },
+          },
+        },
+      }),
+      this.database.client.plan.findUnique({
+        where: { key: FULL_ACCESS_LIFETIME_PLAN_KEY },
+        select: { id: true, key: true },
+      }),
+    ]);
+    if (!company) throw new NotFoundException("Company not found.");
+    if (!plan)
+      throw new BadRequestException("Full access preset is unavailable.");
+
+    const now = new Date();
+    await this.database.client.$transaction(async (transaction) => {
+      await transaction.workspace.update({
+        where: { id },
+        data: { accessStatus: "ACTIVE" },
+      });
+      await transaction.workspaceSubscription.updateMany({
+        where: {
+          workspaceId: id,
+          status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] },
+        },
+        data: { status: "CANCELED", canceledAt: now },
+      });
+      await transaction.workspaceSubscription.create({
+        data: {
+          workspaceId: id,
+          planId: plan.id,
+          status: "ACTIVE",
+          startsAt: now,
+          currentPeriodStart: now,
+          // The column is required by the existing billing schema. The actual
+          // access contract is the explicit non-expiring grant below, not this
+          // technical bookkeeping field.
+          currentPeriodEnd: new Date("9999-12-31T00:00:00.000Z"),
+          metadata: {
+            source: "admin_full_access",
+            accessGrant: FULL_ACCESS_LIFETIME_GRANT,
+            paymentRequired: false,
+          },
+        },
+      });
+    });
+    await this.record(
+      "admin_full_access_assigned",
+      request,
+      true,
+      {
+        previousAccess: company.subscriptions[0]?.plan.key ?? "none",
+        newAccess: FULL_ACCESS_LIFETIME_PLAN_KEY,
+        previousCompanyStatus: company.accessStatus,
+        newCompanyStatus: "ACTIVE",
+        accessGrant: FULL_ACCESS_LIFETIME_GRANT,
+      },
+      id,
+      "workspace_access",
+      id,
+    );
+    return {
+      access: "full_lifetime",
+      plan: { key: plan.key },
+      expiresAt: null,
+    };
+  }
+
+  public async removeFullLifetimeAccess(id: string, request: RequestWithAuth) {
+    const subscription =
+      await this.database.client.workspaceSubscription.findFirst({
+        where: {
+          workspaceId: id,
+          status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] },
+          plan: { key: FULL_ACCESS_LIFETIME_PLAN_KEY },
+        },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, plan: { select: { key: true } } },
+      });
+    if (!subscription)
+      throw new NotFoundException("Full lifetime access was not found.");
+    const canceledAt = new Date();
+    await this.database.client.workspaceSubscription.update({
+      where: { id: subscription.id },
+      data: { status: "CANCELED", canceledAt },
+    });
+    await this.record(
+      "admin_full_access_removed",
+      request,
+      true,
+      {
+        previousAccess: FULL_ACCESS_LIFETIME_PLAN_KEY,
+        newAccess: "none",
+      },
+      id,
+      "workspace_access",
+      id,
+    );
+    return { access: "none", canceledAt };
   }
 
   public async extendTrial(

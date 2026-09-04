@@ -2,6 +2,7 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   Inject,
   Param,
@@ -109,6 +110,24 @@ export class AdminController {
     @Req() request: RequestWithAuth,
   ) {
     return this.admin.setPlan(id, input, request);
+  }
+
+  @UseGuards(AdminAuthenticationGuard)
+  @Post("companies/:id/access/full-lifetime")
+  public assignFullLifetimeAccess(
+    @Param("id") id: string,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.admin.assignFullLifetimeAccess(id, request);
+  }
+
+  @UseGuards(AdminAuthenticationGuard)
+  @Delete("companies/:id/access/full-lifetime")
+  public removeFullLifetimeAccess(
+    @Param("id") id: string,
+    @Req() request: RequestWithAuth,
+  ) {
+    return this.admin.removeFullLifetimeAccess(id, request);
   }
 
   @UseGuards(AdminAuthenticationGuard)

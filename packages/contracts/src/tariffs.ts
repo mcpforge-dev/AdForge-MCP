@@ -18,6 +18,14 @@ export type TariffPlan = {
 
 export const TARIFF_TRIAL_DAYS = 14;
 
+/**
+ * Internal-only V2 access grant. This is intentionally not part of
+ * TARIFF_PLANS: it must never be offered by public pricing or self-service
+ * billing. It is assigned only by the protected system-admin flow.
+ */
+export const FULL_ACCESS_LIFETIME_PLAN_KEY = "legacy_internal";
+export const FULL_ACCESS_LIFETIME_GRANT = "FULL_NON_EXPIRING";
+
 export const TARIFF_PLANS: readonly TariffPlan[] = [
   {
     code: "site",
@@ -285,9 +293,12 @@ const TARIFF_SERVICE_LEVEL_LABELS: Record<
 };
 
 const LIFETIME_PRESENTATION: TariffPresentation = {
-  plan: { ru: "Бессрочный доступ", en: "Lifetime access" },
+  plan: { ru: "Полный доступ", en: "Full access" },
   serviceLevel: null,
-  full: { ru: "Бессрочный доступ", en: "Lifetime access" },
+  full: {
+    ru: "Полный доступ / Бессрочно",
+    en: "Full access / Lifetime",
+  },
   kind: "lifetime",
 };
 
@@ -302,7 +313,7 @@ export function tariffPresentation(
   key: string | null | undefined,
   options?: { lifetimeAccess?: boolean },
 ): TariffPresentation {
-  if (options?.lifetimeAccess || key === "legacy_internal")
+  if (options?.lifetimeAccess || key === FULL_ACCESS_LIFETIME_PLAN_KEY)
     return LIFETIME_PRESENTATION;
   if (!key) return UNKNOWN_PRESENTATION;
 

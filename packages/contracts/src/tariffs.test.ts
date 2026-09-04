@@ -31,7 +31,8 @@ describe("tariffPresentation", () => {
   it("presents legacy internal access as lifetime access", () => {
     expect(tariffPresentation("legacy_internal")).toMatchObject({
       kind: "lifetime",
-      full: { ru: "Бессрочный доступ", en: "Lifetime access" },
+      plan: { ru: "Полный доступ", en: "Full access" },
+      full: { ru: "Полный доступ / Бессрочно", en: "Full access / Lifetime" },
     });
   });
 

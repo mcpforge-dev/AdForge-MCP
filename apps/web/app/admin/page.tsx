@@ -2,7 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
-import { tariffPresentation } from "@holymedia/contracts";
+import {
+  FULL_ACCESS_LIFETIME_PLAN_KEY,
+  tariffPresentation,
+} from "@holymedia/contracts";
 import { BrandLockup } from "../components/brand-lockup";
 import { ThemeSwitcher } from "../components/theme-switcher";
 import { ProjectSelect } from "../components/project-select";
@@ -74,6 +77,9 @@ const eventLabels: Record<string, string> = {
   admin_login_success: "Вход в админ-панель",
   admin_login_failed: "Неудачная попытка входа в админ-панель",
   admin_logout: "Выход из админ-панели",
+  admin_plan_assigned: "Назначен коммерческий тариф",
+  admin_full_access_assigned: "Назначен полный бессрочный доступ",
+  admin_full_access_removed: "Снят полный бессрочный доступ",
   company_profile_updated: "Обновлён профиль компании",
   company_access_updated: "Изменён доступ компании",
   user_access_updated: "Изменён доступ пользователя",
@@ -215,7 +221,7 @@ export default function AdminPage() {
 
   async function mutate(
     path: string,
-    method: "POST" | "PATCH" | "PUT",
+    method: "POST" | "PATCH" | "PUT" | "DELETE",
     body: Json,
     success?: () => void,
   ) {
@@ -421,6 +427,25 @@ export default function AdminPage() {
                   `/companies/${id}/plan`,
                   "PUT",
                   { planKey, mode },
+                  () => void openCompany(id),
+                ),
+            })
+          }
+          onFullLifetimeAccess={(id, action) =>
+            setConfirmation({
+              title:
+                action === "assign"
+                  ? "Назначить полный доступ / бессрочно?"
+                  : "Снять полный бессрочный доступ?",
+              body:
+                action === "assign"
+                  ? "Вы действительно хотите предоставить этой компании полный бессрочный доступ ко всем функциям HolyMedia MCP? Оплата и срок действия не создаются."
+                  : "Бессрочный доступ будет снят. После этого можно назначить обычный коммерческий тариф или trial.",
+              action: () =>
+                mutate(
+                  `/companies/${id}/access/full-lifetime`,
+                  action === "assign" ? "POST" : "DELETE",
+                  {},
                   () => void openCompany(id),
                 ),
             })
@@ -1158,6 +1183,7 @@ function CompanyDrawer({
   onClose,
   onAccess,
   onPlan,
+  onFullLifetimeAccess,
   onEntitlement,
   onInvitation,
 }: {
@@ -1165,6 +1191,7 @@ function CompanyDrawer({
   onClose: () => void;
   onAccess: (id: string, status: "PENDING" | "ACTIVE" | "SUSPENDED") => void;
   onPlan: (id: string, planKey: string, mode: "TRIAL" | "ACTIVE") => void;
+  onFullLifetimeAccess: (id: string, action: "assign" | "remove") => void;
   onEntitlement: (
     id: string,
     featureKey: string,
@@ -1177,6 +1204,8 @@ function CompanyDrawer({
     ? (company.subscriptions as Json[])
     : [];
   const activePlan = subscriptions[0]?.plan as Json | undefined;
+  const fullLifetimeAccess =
+    value(activePlan ?? {}, "key") === FULL_ACCESS_LIFETIME_PLAN_KEY;
   const invitations = Array.isArray(company.invitations)
     ? (company.invitations as Json[])
     : [];
@@ -1289,8 +1318,31 @@ function CompanyDrawer({
           <h3>Тариф и доступные возможности</h3>
           <p className="muted">
             Текущий тариф:{" "}
-            {activePlan ? value(activePlan, "name") : "не назначен"}
+            {fullLifetimeAccess
+              ? "Полный доступ / бессрочно"
+              : activePlan
+                ? value(activePlan, "name")
+                : "не назначен"}
           </p>
+          <div className="admin-inline">
+            {fullLifetimeAccess ? (
+              <button
+                type="button"
+                className="text-button"
+                onClick={() => onFullLifetimeAccess(id, "remove")}
+              >
+                Снять полный бессрочный доступ
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="secondary-button"
+                onClick={() => onFullLifetimeAccess(id, "assign")}
+              >
+                Назначить полный доступ / бессрочно
+              </button>
+            )}
+          </div>
           <div className="admin-inline">
             <ProjectSelect
               ariaLabel="Тариф компании"

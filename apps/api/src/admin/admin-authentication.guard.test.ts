@@ -21,7 +21,23 @@ describe("AdminAuthenticationGuard", () => {
           user: { kind: "human", userId: "owner-user", sessionId: "session" },
         }),
       ),
-    ).rejects.toThrow("Admin authentication required.");
+    ).rejects.toMatchObject({ status: 403 });
+  });
+
+  it("returns forbidden for a signed-in customer calling an admin endpoint directly", async () => {
+    const service = {
+      extractSessionToken: () => undefined,
+      validateSession: async () => false,
+    };
+    const guard = new AdminAuthenticationGuard(service as never);
+
+    await expect(
+      guard.canActivate(
+        context({
+          user: { kind: "human", userId: "owner-user", sessionId: "session" },
+        }),
+      ),
+    ).rejects.toMatchObject({ status: 403 });
   });
 
   it("accepts only a validated independent admin session", async () => {

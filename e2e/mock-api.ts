@@ -330,6 +330,14 @@ export async function installMockApi(
         company: { id: workspace.id, accessStatus: body.status },
       });
     }
+    if (
+      path === `/api/v1/admin/companies/${workspace.id}/access/full-lifetime` &&
+      ["POST", "DELETE"].includes(request.method())
+    ) {
+      return json(route, {
+        access: request.method() === "POST" ? "full_lifetime" : "none",
+      });
+    }
     if (path === "/api/v1/admin/users")
       return json(route, {
         users: [

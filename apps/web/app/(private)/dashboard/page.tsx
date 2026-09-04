@@ -3,7 +3,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { tariffPresentation } from "@holymedia/contracts";
+import {
+  FULL_ACCESS_LIFETIME_GRANT,
+  tariffPresentation,
+} from "@holymedia/contracts";
 import { BrandLockup } from "../../components/brand-lockup";
 import { SiteFooter } from "../../components/site-footer";
 import {
@@ -599,7 +602,8 @@ export default function DashboardPage() {
           pptx: "Презентация",
         };
   const dashboardTariff = tariffPresentation(subscription?.plan?.key, {
-    lifetimeAccess: subscription?.metadata?.accessGrant === "FULL_NON_EXPIRING",
+    lifetimeAccess:
+      subscription?.metadata?.accessGrant === FULL_ACCESS_LIFETIME_GRANT,
   });
   const reportFormatLabel =
     reportFormat === "pptx" ? reportCardCopy.pptx : reportCardCopy.docx;

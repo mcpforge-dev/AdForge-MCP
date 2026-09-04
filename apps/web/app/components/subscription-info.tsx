@@ -1,6 +1,11 @@
 "use client";
 
-import { tariffPresentation, tariffServiceLevel } from "@holymedia/contracts";
+import {
+  FULL_ACCESS_LIFETIME_GRANT,
+  FULL_ACCESS_LIFETIME_PLAN_KEY,
+  tariffPresentation,
+  tariffServiceLevel,
+} from "@holymedia/contracts";
 import { useLanguage } from "./language-switcher";
 
 export type SubscriptionInfoValue = {
@@ -29,8 +34,8 @@ function getPresentation(
 ) {
   const key = subscription?.plan?.key;
   const fullAccess =
-    key === "legacy_internal" ||
-    subscription?.metadata?.accessGrant === "FULL_NON_EXPIRING";
+    key === FULL_ACCESS_LIFETIME_PLAN_KEY ||
+    subscription?.metadata?.accessGrant === FULL_ACCESS_LIFETIME_GRANT;
   const plan = tariffPresentation(key, { lifetimeAccess: fullAccess });
   const level = tariffServiceLevel(key ?? "");
   const status = subscription?.status;
@@ -48,7 +53,7 @@ function getPresentation(
     mode: fullAccess
       ? ru
         ? "Бессрочно"
-        : "Permanent"
+        : "Lifetime"
       : level === "HOLYMEDIA_SUPPORT"
         ? ru
           ? "Расширенная поддержка"
@@ -126,7 +131,7 @@ export function SubscriptionInfo({
           <>
             <div>
               <dt>{ru ? "Доступ" : "Access"}</dt>
-              <dd>{ru ? "Бессрочно" : "Permanent"}</dd>
+              <dd>{ru ? "Бессрочно" : "Lifetime"}</dd>
             </div>
             <div>
               <dt>{ru ? "Оплата" : "Payment"}</dt>

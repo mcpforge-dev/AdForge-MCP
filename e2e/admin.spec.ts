@@ -103,6 +103,37 @@ test.describe("owner admin console", () => {
     await expect(drawer).toBeHidden();
   });
 
+  test("keeps full lifetime access inside the protected admin company flow", async ({
+    page,
+  }) => {
+    const adminPassword = randomUUID();
+    await installMockApi(page, { adminPassword });
+    await page.goto("/admin");
+    await openLogin(page);
+    await page.locator('input[name="login"]').fill("Admin");
+    await page.locator('input[name="password"]').fill(adminPassword);
+    await page.getByRole("button", { name: "Войти" }).click();
+    await page.getByRole("button", { name: "На проверке" }).click();
+    await page.getByRole("button", { name: "Открыть" }).click();
+
+    const drawer = page.getByRole("dialog", { name: "HolyMedia" });
+    await drawer
+      .getByRole("button", { name: "Назначить полный доступ / бессрочно" })
+      .click();
+    await expect(
+      page.getByRole("dialog", {
+        name: "Назначить полный доступ / бессрочно?",
+      }),
+    ).toContainText("полный бессрочный доступ");
+    const response = page.waitForResponse(
+      (item) =>
+        item.url().endsWith("/access/full-lifetime") &&
+        item.request().method() === "POST",
+    );
+    await page.getByRole("button", { name: "Подтвердить" }).click();
+    await expect((await response).status()).toBe(200);
+  });
+
   test("has no serious accessibility regressions", async ({ page }) => {
     const adminPassword = randomUUID();
     await installMockApi(page, { adminPassword });
