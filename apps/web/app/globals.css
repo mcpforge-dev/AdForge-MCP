@@ -612,6 +612,9 @@ pre {
   cursor: not-allowed;
   opacity: 0.45;
 }
+.primary-button:disabled {
+  opacity: 0.9;
+}
 .btn--primary,
 .primary-button {
   background: var(--accent);

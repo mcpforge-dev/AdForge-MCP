@@ -2072,16 +2072,26 @@ export default function DashboardPage() {
                                               disabled={actionPending}
                                               onClick={() =>
                                                 setConfirm({
-                                                  title: `Разрешить подтверждённую запись для «${displayName}»?`,
+                                                  title:
+                                                    language === "en"
+                                                      ? `Allow confirmed write access for “${displayName}”?`
+                                                      : `Разрешить подтверждённую запись для «${displayName}»?`,
                                                   description:
-                                                    "Значение ключа не изменится. Сервер разрешит только allowlisted Meta-операцию после отдельного подтверждения.",
-                                                  confirmLabel: "Разрешить",
+                                                    language === "en"
+                                                      ? "The key value will not change. The server will allow only the allowlisted Meta operation after separate confirmation."
+                                                      : "Значение ключа не изменится. Сервер разрешит только allowlisted Meta-операцию после отдельного подтверждения.",
+                                                  confirmLabel:
+                                                    language === "en"
+                                                      ? "Allow"
+                                                      : "Разрешить",
                                                   run: () =>
                                                     grantConfirmedWrite(token),
                                                 })
                                               }
                                             >
-                                              Разрешить запись
+                                              {language === "en"
+                                                ? "Allow write access"
+                                                : "Разрешить запись"}
                                             </button>
                                           )}
                                         {!isExpired && (

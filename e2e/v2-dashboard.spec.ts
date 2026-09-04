@@ -199,7 +199,7 @@ test.describe("restored HolyMedia client UX", () => {
     const tariff = page
       .locator(".stat-card--link")
       .filter({ hasText: "Тариф" });
-    await expect(tariff).toContainText("Не выбран");
+    await expect(tariff).toContainText("Не определён");
     await tariff.click();
     await expect(
       page.getByRole("heading", { name: "Тарифы HolyMedia MCP" }),
@@ -222,7 +222,7 @@ test.describe("restored HolyMedia client UX", () => {
     await metaCard.getByRole("button", { name: "Посмотреть кабинеты" }).click();
     const selector = page.getByRole("dialog", { name: "Выберите кабинеты" });
     const close = selector.getByRole("button", {
-      name: "Закрыть выбор кабинетов",
+      name: "Закрыть выбор: кабинеты",
     });
     const bulkActions = selector.locator(".bulk-actions");
     await expect(close).toBeVisible();
@@ -938,7 +938,7 @@ test.describe("restored HolyMedia client UX", () => {
   }) => {
     await installMockApi(page);
     await login(page);
-    await page.goto("/dashboard?section=mcp");
+    await page.goto("/dashboard/ai-client");
 
     const tokenList = page.locator(".token-list");
     await expect(
@@ -1126,64 +1126,25 @@ test.describe("restored HolyMedia client UX", () => {
     expect(failures, failures.join("\n")).toEqual([]);
   });
 
-  test("runs the V3 website audit brief and shows evidence-based results", async ({
+  test("keeps the temporarily disabled website audit fail-closed", async ({
     page,
-  }, testInfo) => {
+  }) => {
     await installMockApi(page);
     const failures = collectClientFailures(page);
     await login(page);
-    await page
-      .getByRole("button", { name: "Анализ сайта", exact: true })
-      .click();
+    const navigationItem = page.getByRole("button", {
+      name: /Анализ сайта/,
+    });
+    await expect(navigationItem).toBeDisabled();
+    await expect(navigationItem.locator("small")).toHaveText("Скоро");
+
+    await page.goto("/dashboard/analysis");
     await expect(
-      page.getByRole("heading", { name: "Анализ сайта" }),
+      page.getByRole("heading", { name: "Анализ сайта скоро вернётся" }),
     ).toBeVisible();
-    await expect(page.getByText("Шаг 1. Сайт", { exact: true })).toBeVisible();
-    await page.getByLabel("URL сайта").fill("https://example.com");
-    await page.getByRole("button", { name: "Далее" }).click();
-    await page
-      .getByRole("textbox", { name: "Целевая аудитория" })
-      .fill("Владельцы малого бизнеса");
-    await page
-      .getByLabel("Главная цель сайта")
-      .selectOption({ label: "Заявки" });
-    await page.getByLabel("Главное целевое действие").fill("Оставить заявку");
-    await page.getByRole("button", { name: "Проверить данные" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Проверьте данные перед запуском" }),
-    ).toBeVisible();
-    await expect(page.getByText("Владельцы малого бизнеса")).toBeVisible();
     await expect(
       page.getByRole("button", { name: "Запустить аудит" }),
-    ).toBeVisible();
-    expect(await new AxeBuilder({ page }).analyze()).toEqual(
-      expect.objectContaining({ violations: [] }),
-    );
-    await page.getByRole("button", { name: "Запустить аудит" }).click();
-    await expect(
-      page.getByRole("heading", { name: "Что исправить в первую очередь" }),
-    ).toBeVisible();
-    await expect(
-      page
-        .getByRole("heading", { name: "CTA теряется на первом экране" })
-        .first(),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Показать проблемы на экране" }),
-    ).toBeVisible();
-    await page
-      .getByRole("button", { name: "Показать проблемы на экране" })
-      .click();
-    await expect(page.getByText("1 — Hero")).toBeVisible();
-    const dimensions = await page.evaluate(() => ({
-      viewport: document.documentElement.clientWidth,
-      scroll: document.documentElement.scrollWidth,
-    }));
-    expect(dimensions.scroll).toBeLessThanOrEqual(dimensions.viewport + 1);
-    await page.screenshot({
-      path: testInfo.outputPath("site-audit-v3.png"),
-      fullPage: true,
-    });
+    ).toHaveCount(0);
     expect(failures, failures.join("\n")).toEqual([]);
   });
 });
