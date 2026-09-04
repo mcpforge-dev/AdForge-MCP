@@ -3202,7 +3202,9 @@ export default function DashboardPage() {
                     autoFocus
                     value={accountSearch}
                     onChange={(event) => setAccountSearch(event.target.value)}
-                    placeholder={language === "en" ? "Name or ID" : "Название или ID"}
+                    placeholder={
+                      language === "en" ? "Name or ID" : "Название или ID"
+                    }
                   />
                 </label>
                 <p className="account-selector__hint">
@@ -3244,7 +3246,9 @@ export default function DashboardPage() {
                             )}
                         </span>
                         {inactive && (
-                          <em>{language === "en" ? "Inactive" : "Неактивен"}</em>
+                          <em>
+                            {language === "en" ? "Inactive" : "Неактивен"}
+                          </em>
                         )}
                       </label>
                     );
