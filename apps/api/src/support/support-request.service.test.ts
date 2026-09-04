@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { loadConfig } from "@holymedia/config";
 import { describe, expect, it } from "vitest";
 import { RateLimitExceededError } from "../infrastructure/redis-rate-limit.service.js";
 import { SupportRequestService } from "./support-request.service.js";
@@ -71,7 +72,10 @@ describe("SupportRequestService", () => {
       category: "SUGGESTION",
       planKey: "ai_marketing",
       telegramDeliveryStatus: "NOT_CONFIGURED",
-      sourceRoute: "http://localhost:3000/dashboard/reports",
+      sourceRoute: new URL(
+        "/dashboard/reports",
+        loadConfig().publicBaseUrl,
+      ).toString(),
     });
     expect(auditEvents[0]).toMatchObject({
       targetType: "support_request",
