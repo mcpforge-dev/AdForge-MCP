@@ -191,8 +191,7 @@ describe("v2 configuration", () => {
       AD_MCP_GOOGLE_OAUTH_CLIENT_ID: "google-client",
       AD_MCP_GOOGLE_OAUTH_CLIENT_SECRET: "google-secret",
       AD_MCP_GOOGLE_OAUTH_REDIRECT_PATH: "/oauth/google/callback",
-      AD_MCP_GOOGLE_ANALYTICS_REDIRECT_PATH:
-        "/api/v1/oauth/GOOGLE_ANALYTICS/callback",
+      AD_MCP_GOOGLE_ANALYTICS_REDIRECT_PATH: "/oauth/google-analytics/callback",
     });
 
     expect(config.providerGoogleClientId).toBe("google-client");
@@ -201,7 +200,7 @@ describe("v2 configuration", () => {
     );
     expect(config.providerGoogleAnalyticsClientId).toBe("google-client");
     expect(config.providerGoogleAnalyticsRedirectUri).toBe(
-      "https://mcp.holymedia.kz/api/v1/oauth/GOOGLE_ANALYTICS/callback",
+      "https://mcp.holymedia.kz/oauth/google-analytics/callback",
     );
     expect(config.providerGoogleAnalyticsRedirectUri).not.toBe(
       config.providerGoogleRedirectUri,
