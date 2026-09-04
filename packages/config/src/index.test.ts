@@ -34,6 +34,19 @@ describe("v2 configuration", () => {
 
     expect(config.configStrict).toBe(false);
     expect(config.environment).toBe("test");
+    expect(config.siteAuditProductEnabled).toBe(false);
+  });
+
+  it("keeps Site Audit creation disabled unless explicitly enabled", () => {
+    expect(loadConfig({ NODE_ENV: "test" }).siteAuditProductEnabled).toBe(
+      false,
+    );
+    expect(
+      loadConfig({
+        NODE_ENV: "test",
+        SITE_AUDIT_PRODUCT_ENABLED: "true",
+      }).siteAuditProductEnabled,
+    ).toBe(true);
   });
 
   it("keeps Telegram support delivery disabled until both protected values exist", () => {

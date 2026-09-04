@@ -15,22 +15,26 @@ const checks = [
   {
     path: "/oauth/google/callback?error=access_denied",
     statuses: [302],
-    location: "/dashboard?section=connections&oauth=error&provider=google",
+    location:
+      "/dashboard/connections?oauth=error&provider=google&oauth_reason=authorization_denied",
   },
   {
     path: "/oauth/meta/callback?error=access_denied",
     statuses: [302],
-    location: "/dashboard?section=connections&oauth=error&provider=meta",
+    location:
+      "/dashboard/connections?oauth=error&provider=meta&oauth_reason=authorization_denied",
   },
   {
     path: "/oauth/yandex/callback?error=access_denied",
     statuses: [302],
-    location: "/dashboard?section=connections&oauth=error&provider=yandex",
+    location:
+      "/dashboard/connections?oauth=error&provider=yandex&oauth_reason=authorization_denied",
   },
   {
     path: "/oauth/tiktok/callback?error=access_denied",
     statuses: [302],
-    location: "/dashboard?section=connections&oauth=error&provider=tiktok",
+    location:
+      "/dashboard/connections?oauth=error&provider=tiktok&oauth_reason=authorization_denied",
   },
   { path: "/api/meta/skills/collect-report", statuses: [401] },
   { path: "/api/mcp-token", statuses: [401] },

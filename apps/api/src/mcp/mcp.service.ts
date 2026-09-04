@@ -644,6 +644,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         return this.providers.metaBusinesses(
           principal.workspaceId,
           account.connectionId,
@@ -654,6 +655,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         const businesses = await this.providers.metaBusinesses(
           principal.workspaceId,
           account.connectionId,
@@ -668,6 +670,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         return this.providers.metaBusinessAdAccounts(
           principal.workspaceId,
           account.connectionId,
@@ -679,6 +682,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         return this.providers.metaBusinessPages(
           principal.workspaceId,
           account.connectionId,
@@ -690,6 +694,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         return this.providers.metaPages(
           principal.workspaceId,
           account.connectionId,
@@ -700,6 +705,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         const pages = await this.providers.metaPages(
           principal.workspaceId,
           account.connectionId,
@@ -712,6 +718,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         return this.providers.metaPagePosts(
           principal.workspaceId,
           account.connectionId,
@@ -724,6 +731,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         const posts = await this.providers.metaPagePosts(
           principal.workspaceId,
           account.connectionId,
@@ -740,6 +748,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         const posts = await this.providers.metaPagePosts(
           principal.workspaceId,
           account.connectionId,
@@ -764,6 +773,7 @@ export class McpService {
           ...args,
           provider: "meta_ads",
         });
+        this.ensureConnectionWideReadAllowed(principal);
         return this.providers.metaInstagram(
           principal.workspaceId,
           account.connectionId,
@@ -771,14 +781,19 @@ export class McpService {
         );
       }
       case "get_search_console_report": {
+        const siteUrl = await this.searchConsoleSite(
+          principal,
+          args.site_url || args.siteUrl,
+        );
         const report = await this.providers.searchConsoleReport(
           principal.workspaceId,
-          text(args.site_url || args.siteUrl) || "__all",
+          siteUrl,
           Number(args.days) || 28,
         );
         return report;
       }
       case "list_search_console_properties": {
+        this.ensureConnectionWideReadAllowed(principal);
         const report = await this.providers.searchConsoleReport(
           principal.workspaceId,
           "__all",
@@ -1773,6 +1788,34 @@ export class McpService {
       );
     }
     return account;
+  }
+
+  private ensureConnectionWideReadAllowed(
+    principal: ServiceTokenPrincipal,
+  ): void {
+    if (principal.accountIds.length) {
+      throw new ForbiddenException(
+        "Connection-wide assets are not available to an account-restricted service token.",
+      );
+    }
+  }
+
+  private async searchConsoleSite(
+    principal: ServiceTokenPrincipal,
+    rawSiteUrl: unknown,
+  ): Promise<string> {
+    const requested = text(rawSiteUrl) || "__all";
+    if (!principal.accountIds.length) return requested;
+    if (requested === "__all") {
+      throw new ForbiddenException(
+        "A specific Search Console property is required for an account-restricted service token.",
+      );
+    }
+    const account = await this.account(principal, {
+      provider: "google_search_console",
+      account_id: requested,
+    });
+    return account.externalAccountId;
   }
 }
 

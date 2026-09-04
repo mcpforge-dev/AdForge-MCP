@@ -87,7 +87,9 @@ describe("support Telegram delivery", () => {
     expect(payload.text).toContain(
       "&lt;b&gt;only&lt;/b&gt; &amp; keep it safe.",
     );
-    expect(payload.text).toContain("Бессрочный доступ / Lifetime access");
+    expect(payload.text).toContain(
+      "Полный доступ / Бессрочно / Full access / Lifetime",
+    );
     expect(payload.text).not.toContain("legacy_internal");
     expect(payload.text).toContain(
       "https://mcp.holymedia.kz/dashboard/reports",

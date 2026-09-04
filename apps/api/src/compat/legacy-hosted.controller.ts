@@ -1,6 +1,7 @@
 import {
   BadRequestException,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
   NotFoundException,
@@ -90,6 +91,12 @@ export class LegacyHostedController {
     const providerId = providerMap[provider];
     if (!providerId) throw new BadRequestException("Unsupported provider.");
     const workspace = await this.workspace(principal);
+    if (
+      workspace.accessStatus !== "ACTIVE" ||
+      !["OWNER", "ADMIN"].includes(workspace.role)
+    ) {
+      throw new ForbiddenException("Permission denied.");
+    }
     return this.providers.startOAuth(
       workspace.id,
       providerId,

@@ -2,7 +2,25 @@ import { describe, expect, it, vi } from "vitest";
 import { SiteAuditService } from "./site-audit.service.js";
 
 describe("SiteAuditService tenant boundary", () => {
+  it("blocks direct audit creation while the product is disabled", async () => {
+    const previous = process.env.SITE_AUDIT_PRODUCT_ENABLED;
+    delete process.env.SITE_AUDIT_PRODUCT_ENABLED;
+    const create = vi.fn();
+    const service = new SiteAuditService(
+      { client: { siteAudit: { create } } } as never,
+      {} as never,
+    );
+    await expect(
+      service.create("workspace-a", "user-a", { url: "https://example.com" }),
+    ).rejects.toThrow("Анализ сайта временно недоступен.");
+    expect(create).not.toHaveBeenCalled();
+    if (previous === undefined) delete process.env.SITE_AUDIT_PRODUCT_ENABLED;
+    else process.env.SITE_AUDIT_PRODUCT_ENABLED = previous;
+  });
+
   it("rejects an internal URL before it can create a workspace audit", async () => {
+    const previous = process.env.SITE_AUDIT_PRODUCT_ENABLED;
+    process.env.SITE_AUDIT_PRODUCT_ENABLED = "true";
     const create = vi.fn();
     const service = new SiteAuditService(
       { client: { siteAudit: { create } } } as never,
@@ -14,6 +32,8 @@ describe("SiteAuditService tenant boundary", () => {
       }),
     ).rejects.toThrow();
     expect(create).not.toHaveBeenCalled();
+    if (previous === undefined) delete process.env.SITE_AUDIT_PRODUCT_ENABLED;
+    else process.env.SITE_AUDIT_PRODUCT_ENABLED = previous;
   });
 
   it("scopes private screenshots and reports to the requested workspace", async () => {

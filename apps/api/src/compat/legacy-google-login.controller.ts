@@ -15,7 +15,7 @@ import {
   GOOGLE_LOGIN_STATE_COOKIE,
   GoogleLoginService,
 } from "../auth/google-login.service.js";
-import { CookieService } from "../auth/cookie.service.js";
+import { cookieReply, CookieService } from "../auth/cookie.service.js";
 import type { RequestWithAuth } from "../auth/auth.types.js";
 
 /** V1 Google Login paths retained for the in-place V2 cutover. */
@@ -41,7 +41,7 @@ export class LegacyGoogleLoginController {
         ? `/oauth/authorize/continue?transaction=${encodeURIComponent(oauthTransaction)}`
         : next,
     );
-    reply.setCookie(GOOGLE_LOGIN_STATE_COOKIE, result.state, {
+    cookieReply(reply).setCookie(GOOGLE_LOGIN_STATE_COOKIE, result.state, {
       ...this.cookieOptions(),
       httpOnly: true,
       maxAge: this.google.stateTtlSeconds(),
@@ -73,7 +73,10 @@ export class LegacyGoogleLoginController {
     const profile = await this.google.exchangeCode(code);
     const result = await this.auth.loginWithGoogle(profile, request);
     this.cookies.setSession(reply, result.sessionToken);
-    reply.clearCookie(GOOGLE_LOGIN_STATE_COOKIE, this.cookieOptions());
+    cookieReply(reply).clearCookie(
+      GOOGLE_LOGIN_STATE_COOKIE,
+      this.cookieOptions(),
+    );
     return {
       url: result.onboardingRequired ? "/onboarding" : stateResult.nextPath,
       statusCode: 302,

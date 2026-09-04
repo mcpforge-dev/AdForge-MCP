@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Inject,
   NotFoundException,
@@ -89,6 +90,12 @@ export class LegacyMcpTokenController {
   private async workspaceId(principal: HumanPrincipal): Promise<string> {
     const workspace = (await this.workspaces.listForUser(principal))[0];
     if (!workspace) throw new NotFoundException("Workspace not found.");
+    if (
+      workspace.accessStatus !== "ACTIVE" ||
+      !["OWNER", "ADMIN"].includes(workspace.role)
+    ) {
+      throw new ForbiddenException("Permission denied.");
+    }
     return workspace.id;
   }
 }

@@ -1,4 +1,3 @@
-import { lookup } from "node:dns/promises";
 import {
   BadRequestException,
   Inject,
@@ -17,11 +16,11 @@ import {
   TextRun,
   WidthType,
 } from "docx";
+import { safeGet } from "@holymedia/site-audit";
+import { loadConfig } from "@holymedia/config";
 import { DatabaseService } from "../infrastructure/database.service.js";
 
 const MAX_BYTES = 1_500_000;
-const MAX_REDIRECTS = 3;
-const TIMEOUT_MS = 15_000;
 
 export type SiteAnalysisInput = {
   url: string;
@@ -46,40 +45,40 @@ export class SiteAnalysisService {
     input: SiteAnalysisInput | string,
     context?: { workspaceId: string; userId: string },
   ) {
+    if (!loadConfig().siteAuditProductEnabled) {
+      throw new BadRequestException("Анализ сайта временно недоступен.");
+    }
     const brief: SiteAnalysisInput =
       typeof input === "string" ? { url: input } : input;
-    let url = await this.validateUrl(brief.url);
-    let response: Response | undefined;
-    for (let redirects = 0; redirects <= MAX_REDIRECTS; redirects += 1) {
-      response = await fetch(url, {
-        redirect: "manual",
-        signal: AbortSignal.timeout(TIMEOUT_MS),
-        headers: { accept: "text/html,application/xhtml+xml" },
-      });
-      if (![301, 302, 303, 307, 308].includes(response.status)) break;
-      const location = response.headers.get("location");
-      if (!location || redirects === MAX_REDIRECTS)
-        throw new BadRequestException("Слишком много перенаправлений.");
-      url = await this.validateUrl(new URL(location, url).toString());
-    }
-    if (!response)
-      throw new BadRequestException("Не удалось получить страницу.");
-    const contentType = response.headers.get("content-type") ?? "";
+    const response = await safeGet(brief.url, {
+      accept: "text/html,application/xhtml+xml",
+      maxBytes: MAX_BYTES,
+      maxRedirects: 3,
+      timeoutMs: 15_000,
+      userAgent: "HolyMediaSiteAnalysis/2.0 (+https://mcp.holymedia.kz)",
+    }).catch(() => {
+      throw new BadRequestException(
+        "Не удалось безопасно получить публичную страницу.",
+      );
+    });
+    const url = response.url;
+    const contentType = header(response.headers, "content-type") ?? "";
     if (!contentType.includes("text/html"))
       throw new BadRequestException("URL не вернул HTML-страницу.");
-    const bytes = new Uint8Array(await response.arrayBuffer());
-    if (bytes.byteLength > MAX_BYTES)
-      throw new BadRequestException(
-        "Страница превышает допустимый размер анализа.",
-      );
-    const html = new TextDecoder().decode(bytes);
+    const html = response.body.toString("utf8");
+    const headers = new Headers();
+    for (const [name, value] of Object.entries(response.headers)) {
+      if (Array.isArray(value))
+        value.forEach((item) => headers.append(name, item));
+      else if (value !== undefined) headers.set(name, String(value));
+    }
     const result = buildAnalysis({
       html,
       url,
-      status: response.status,
+      status: response.statusCode,
       contentType,
       brief,
-      headers: response.headers,
+      headers,
     });
     if (context && this.database) {
       await this.database.client.siteAnalysisRecord.create({
@@ -209,44 +208,6 @@ export class SiteAnalysisService {
       ],
     });
     return Packer.toBuffer(document);
-  }
-
-  private async validateUrl(rawUrl: string): Promise<string> {
-    let url: URL;
-    try {
-      url = new URL(rawUrl);
-    } catch {
-      throw new BadRequestException("Некорректный URL.");
-    }
-    if (
-      !["http:", "https:"].includes(url.protocol) ||
-      url.username ||
-      url.password
-    )
-      throw new BadRequestException("Разрешены только публичные HTTP(S) URL.");
-    const host = url.hostname.toLowerCase();
-    if (
-      host === "localhost" ||
-      host.endsWith(".localhost") ||
-      host.endsWith(".local") ||
-      host === "metadata.google.internal"
-    )
-      throw new BadRequestException("Внутренний адрес недоступен для анализа.");
-    let addresses;
-    try {
-      addresses = await lookup(host, { all: true, verbatim: true });
-    } catch {
-      throw new BadRequestException("Не удалось проверить адрес сайта.");
-    }
-    if (
-      !addresses.length ||
-      addresses.some((entry) => isPrivateAddress(entry.address))
-    )
-      throw new BadRequestException(
-        "URL указывает на закрытый или внутренний адрес.",
-      );
-    url.hash = "";
-    return url.toString();
   }
 }
 
@@ -513,30 +474,10 @@ function decodeHtml(value: string): string {
     .replace(/&gt;/g, ">");
 }
 
-function isPrivateAddress(value: string): boolean {
-  const normalized = value.toLowerCase();
-  if (
-    normalized === "::1" ||
-    normalized.startsWith("fe80:") ||
-    normalized.startsWith("fc") ||
-    normalized.startsWith("fd")
-  )
-    return true;
-  const parts = normalized.split(".").map(Number);
-  if (
-    parts.length !== 4 ||
-    parts.some((part) => !Number.isInteger(part) || part < 0 || part > 255)
-  )
-    return false;
-  const a = parts[0];
-  const b = parts[1];
-  if (a === undefined || b === undefined) return false;
-  return (
-    a === 10 ||
-    a === 127 ||
-    a === 0 ||
-    (a === 172 && b >= 16 && b <= 31) ||
-    (a === 192 && b === 168) ||
-    (a === 169 && b === 254)
-  );
+function header(
+  headers: Record<string, string | string[] | undefined>,
+  name: string,
+): string | null {
+  const value = headers[name];
+  return Array.isArray(value) ? (value[0] ?? null) : (value ?? null);
 }

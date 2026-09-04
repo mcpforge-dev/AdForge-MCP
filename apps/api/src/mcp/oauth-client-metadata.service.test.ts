@@ -1,9 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
+  OAuthClientMetadataService,
   isClientMetadataUrl,
   parseClientMetadata,
   registrationMetadata,
 } from "./oauth-client-metadata.service.js";
+
+const safeGetMock = vi.hoisted(() => vi.fn());
+
+vi.mock("@holymedia/site-audit", () => ({ safeGet: safeGetMock }));
 
 describe("OAuth client metadata documents", () => {
   const clientId = "https://client.example.test/.well-known/oauth-client.json";
@@ -134,5 +139,47 @@ describe("OAuth client metadata documents", () => {
       grant_types: ["authorization_code", "refresh_token"],
       response_types: ["code"],
     });
+  });
+});
+
+describe("OAuth client metadata network boundary", () => {
+  it("uses the shared DNS-pinned HTTPS-only fetcher", async () => {
+    const clientId = "https://client.example.test/.well-known/client.json";
+    safeGetMock.mockResolvedValueOnce({
+      url: clientId,
+      statusCode: 200,
+      headers: { "content-type": "application/json", etag: '"v1"' },
+      body: Buffer.from(
+        JSON.stringify({
+          client_id: clientId,
+          client_name: "Public client",
+          redirect_uris: ["https://client.example.test/callback"],
+          grant_types: ["authorization_code"],
+          response_types: ["code"],
+          token_endpoint_auth_method: "none",
+        }),
+      ),
+    });
+    const upsert = vi.fn().mockResolvedValue({ id: "client-1" });
+    const service = new OAuthClientMetadataService({
+      client: {
+        oAuthPublicClient: {
+          findFirst: vi.fn().mockResolvedValue(null),
+          upsert,
+        },
+      },
+    } as never);
+
+    await service.resolve(clientId);
+
+    expect(safeGetMock).toHaveBeenCalledWith(
+      clientId,
+      expect.objectContaining({
+        requireHttps: true,
+        maxBytes: 64 * 1024,
+        maxRedirects: 3,
+      }),
+    );
+    expect(upsert).toHaveBeenCalledOnce();
   });
 });

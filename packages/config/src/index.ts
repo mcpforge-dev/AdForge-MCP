@@ -79,6 +79,7 @@ const rawConfigSchema = z.object({
   V2_META_APP_REVIEW_RENAME_CAMPAIGN_ID: z.string().default(""),
   V2_META_APP_REVIEW_RENAME_EXPECTED_NAME: z.string().default(""),
   V2_META_APP_REVIEW_RENAME_TARGET_NAME: z.string().default(""),
+  SITE_AUDIT_PRODUCT_ENABLED: booleanFromEnv.default(false),
   PROVIDER_TIKTOK_CLIENT_ID: z.string().optional(),
   PROVIDER_TIKTOK_CLIENT_SECRET: z.string().optional(),
   PROVIDER_TIKTOK_REDIRECT_URI: z.string().url().optional(),
@@ -202,6 +203,7 @@ export type AppConfig = {
   metaAppReviewRenameCampaignId: string;
   metaAppReviewRenameExpectedName: string;
   metaAppReviewRenameTargetName: string;
+  siteAuditProductEnabled: boolean;
   providerTikTokClientId: string | undefined;
   providerTikTokClientSecret: string | undefined;
   providerTikTokRedirectUri: string | undefined;
@@ -454,6 +456,7 @@ export function loadConfig(source: NodeJS.ProcessEnv = process.env): AppConfig {
       value.V2_META_APP_REVIEW_RENAME_EXPECTED_NAME.trim(),
     metaAppReviewRenameTargetName:
       value.V2_META_APP_REVIEW_RENAME_TARGET_NAME.trim(),
+    siteAuditProductEnabled: value.SITE_AUDIT_PRODUCT_ENABLED,
     providerTikTokClientId: value.PROVIDER_TIKTOK_CLIENT_ID,
     providerTikTokClientSecret: value.PROVIDER_TIKTOK_CLIENT_SECRET,
     providerTikTokRedirectUri: value.PROVIDER_TIKTOK_REDIRECT_URI,

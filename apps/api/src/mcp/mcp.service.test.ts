@@ -75,6 +75,12 @@ function serviceWithAccounts(accounts: Array<Record<string, unknown>>) {
       customDimensions: [],
       customMetrics: [],
     })),
+    searchConsoleReport: vi.fn(
+      async (_workspaceId: string, siteUrl: string) => ({
+        siteUrl,
+        rows: [],
+      }),
+    ),
   } as never;
   const reports = {
     performance: vi.fn(async (_workspaceId: string, input: unknown) => ({
@@ -129,6 +135,13 @@ describe("MCP V1-compatible policy", () => {
     enabled: true,
     connectionId: "connection-ga4",
   };
+  const metaAccount = {
+    ...account,
+    id: "internal-meta-account",
+    provider: "META_ADS",
+    externalAccountId: "act_123456789",
+    connectionId: "connection-meta",
+  };
 
   it("exposes a stable read tool surface", () => {
     const service = serviceWithAccounts([account]);
@@ -154,6 +167,102 @@ describe("MCP V1-compatible policy", () => {
     expect(names).toContain("commit_meta_app_review_preview");
     expect(names).toContain("get_meta_page");
     expect(names).toContain("update_targeting_preview");
+  });
+
+  it.each([
+    "list_meta_businesses",
+    "get_meta_business",
+    "list_business_ad_accounts",
+    "list_business_pages",
+    "list_meta_pages",
+    "get_meta_page",
+    "list_page_posts",
+    "get_page_post",
+    "get_page_post_engagement",
+    "get_page_instagram_account",
+  ])(
+    "blocks connection-wide Meta asset tool %s for an account-restricted token",
+    async (tool) => {
+      const service = serviceWithAccounts([metaAccount]);
+      await expect(
+        service.call(
+          {
+            kind: "service",
+            workspaceId: "workspace-a",
+            tokenId: "token-a",
+            serviceIdentityId: "identity-a",
+            scopes: ["adforge:mcp:read"],
+            accountIds: [metaAccount.id],
+          },
+          tool,
+          {
+            provider: "meta_ads",
+            account_id: metaAccount.externalAccountId,
+            business_id: "business-1",
+            page_id: "page-1",
+            post_id: "post-1",
+          },
+        ),
+      ).rejects.toThrow(
+        "Connection-wide assets are not available to an account-restricted service token.",
+      );
+    },
+  );
+
+  it("blocks Search Console connection-wide reads for an account-restricted token", async () => {
+    const gscAccount = {
+      ...account,
+      id: "internal-gsc-property",
+      provider: "GOOGLE_SEARCH_CONSOLE",
+      externalAccountId: "https://example.com/",
+      connectionId: "connection-gsc",
+    };
+    const service = serviceWithAccounts([gscAccount]);
+    const principal = {
+      kind: "service" as const,
+      workspaceId: "workspace-a",
+      tokenId: "token-a",
+      serviceIdentityId: "identity-a",
+      scopes: ["adforge:mcp:read"],
+      accountIds: [gscAccount.id],
+    };
+
+    await expect(
+      service.call(principal, "list_search_console_properties", {}),
+    ).rejects.toThrow(
+      "Connection-wide assets are not available to an account-restricted service token.",
+    );
+    await expect(
+      service.call(principal, "get_search_console_report", {
+        site_url: "https://foreign.example/",
+      }),
+    ).rejects.toThrow("Account is not available to this service token.");
+  });
+
+  it("allows the exact Search Console property assigned to a restricted token", async () => {
+    const gscAccount = {
+      ...account,
+      id: "internal-gsc-property",
+      provider: "GOOGLE_SEARCH_CONSOLE",
+      externalAccountId: "https://example.com/",
+      connectionId: "connection-gsc",
+    };
+    const service = serviceWithAccounts([gscAccount]);
+
+    await expect(
+      service.call(
+        {
+          kind: "service",
+          workspaceId: "workspace-a",
+          tokenId: "token-a",
+          serviceIdentityId: "identity-a",
+          scopes: ["adforge:mcp:read"],
+          accountIds: [gscAccount.id],
+        },
+        "get_search_console_report",
+        { site_url: gscAccount.externalAccountId },
+      ),
+    ).resolves.toMatchObject({ siteUrl: gscAccount.externalAccountId });
   });
 
   it("exposes the client-facing report skill in the operator catalog", async () => {

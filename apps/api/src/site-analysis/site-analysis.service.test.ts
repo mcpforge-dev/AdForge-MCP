@@ -1,15 +1,37 @@
 import { describe, expect, it, vi } from "vitest";
 import { buildAnalysis, SiteAnalysisService } from "./site-analysis.service.js";
 
+const safeGetMock = vi.hoisted(() => vi.fn());
+const configState = vi.hoisted(() => ({ siteAuditProductEnabled: true }));
+
+vi.mock("@holymedia/site-audit", () => ({ safeGet: safeGetMock }));
+vi.mock("@holymedia/config", () => ({ loadConfig: () => configState }));
+
 describe("site analysis SSRF boundary", () => {
-  it("rejects internal and non-HTTP targets before fetching", async () => {
+  it("delegates URL validation and bounded fetching to the hardened fetcher", async () => {
+    configState.siteAuditProductEnabled = true;
+    safeGetMock.mockRejectedValue(new Error("blocked"));
     const service = new SiteAnalysisService();
-    await expect(service.analyze("http://127.0.0.1/admin")).rejects.toThrow();
+    await expect(service.analyze("https://example.com/")).rejects.toThrow();
+    expect(safeGetMock).toHaveBeenCalledTimes(1);
+    expect(safeGetMock).toHaveBeenCalledWith(
+      "https://example.com/",
+      expect.objectContaining({
+        maxBytes: 1_500_000,
+        maxRedirects: 3,
+        timeoutMs: 15_000,
+      }),
+    );
+  });
+
+  it("blocks legacy analysis creation while the product is disabled", async () => {
+    configState.siteAuditProductEnabled = false;
+    safeGetMock.mockClear();
     await expect(
-      service.analyze("http://localhost:4000/ready"),
-    ).rejects.toThrow();
-    await expect(service.analyze("file:///etc/passwd")).rejects.toThrow();
-    expect(vi.isMockFunction(fetch)).toBe(false);
+      new SiteAnalysisService().analyze("https://example.com"),
+    ).rejects.toThrow("Анализ сайта временно недоступен.");
+    expect(safeGetMock).not.toHaveBeenCalled();
+    configState.siteAuditProductEnabled = true;
   });
 });
 

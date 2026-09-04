@@ -1,4 +1,9 @@
-import { Inject, Injectable, NotFoundException } from "@nestjs/common";
+import {
+  Inject,
+  Injectable,
+  NotFoundException,
+  ServiceUnavailableException,
+} from "@nestjs/common";
 import { Queue } from "bullmq";
 import { normalizePublicUrl } from "@holymedia/site-audit";
 import { loadConfig } from "@holymedia/config";
@@ -33,6 +38,12 @@ export class SiteAuditService {
     userId: string,
     input: CreateSiteAuditInput,
   ) {
+    const config = loadConfig();
+    if (!config.siteAuditProductEnabled) {
+      throw new ServiceUnavailableException(
+        "Анализ сайта временно недоступен.",
+      );
+    }
     const normalizedUrl = await normalizePublicUrl(input.url);
     const audit = await this.database.client.siteAudit.create({
       data: {
@@ -55,7 +66,6 @@ export class SiteAuditService {
       },
       include: { brief: true },
     });
-    const config = loadConfig();
     const queue = new Queue(SITE_AUDIT_QUEUE, {
       connection: redisConnection(config.redisUrl),
     });

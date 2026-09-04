@@ -193,27 +193,49 @@ type SafeResponse = {
   body: Buffer;
 };
 
+export type SafeGetOptions = {
+  accept?: string;
+  maxBytes?: number;
+  maxRedirects?: number;
+  timeoutMs?: number;
+  requireHttps?: boolean;
+  ifNoneMatch?: string;
+  userAgent?: string;
+};
+
 /** GET-only fetch with pinned, pre-validated DNS and revalidation on every redirect. */
 export async function safeGet(
   rawUrl: string,
-  options: { accept?: string; maxBytes?: number } = {},
+  options: SafeGetOptions = {},
 ): Promise<SafeResponse> {
   let current = await normalizePublicUrl(rawUrl);
-  for (let redirects = 0; redirects <= SAFE_REDIRECTS; redirects += 1) {
-    const response = await safeGetOne(current, options);
+  assertRequiredProtocol(current, options);
+  const maxRedirects = Math.min(
+    SAFE_REDIRECTS,
+    Math.max(0, options.maxRedirects ?? SAFE_REDIRECTS),
+  );
+  const { ifNoneMatch, ...requestOptions } = options;
+  for (let redirects = 0; redirects <= maxRedirects; redirects += 1) {
+    const response = await safeGetOne(current, {
+      ...requestOptions,
+      // An origin-specific validator must not be forwarded to a redirect
+      // target, especially when the redirect crosses origins.
+      ...(redirects === 0 && ifNoneMatch !== undefined ? { ifNoneMatch } : {}),
+    });
     if (![301, 302, 303, 307, 308].includes(response.statusCode))
       return response;
     const location = response.headers.location;
-    if (!location || Array.isArray(location) || redirects === SAFE_REDIRECTS)
+    if (!location || Array.isArray(location) || redirects === maxRedirects)
       throw new PublicUrlError("Сайт вернул слишком много перенаправлений.");
     current = await normalizePublicUrl(new URL(location, current).toString());
+    assertRequiredProtocol(current, options);
   }
   throw new PublicUrlError("Не удалось получить публичную страницу.");
 }
 
 async function safeGetOne(
   urlText: string,
-  options: { accept?: string; maxBytes?: number },
+  options: SafeGetOptions,
 ): Promise<SafeResponse> {
   const url = new URL(urlText);
   const addresses = await resolvePublicHost(url.hostname);
@@ -233,12 +255,17 @@ async function safeGetOne(
       url,
       {
         method: "GET",
-        timeout: REQUEST_TIMEOUT_MS,
+        timeout: options.timeoutMs ?? REQUEST_TIMEOUT_MS,
         headers: {
           accept:
             options.accept ??
             "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.1",
-          "user-agent": "HolyMediaSiteAudit/3.0 (+https://mcp.holymedia.kz)",
+          "user-agent":
+            options.userAgent ??
+            "HolyMediaSiteAudit/3.0 (+https://mcp.holymedia.kz)",
+          ...(options.ifNoneMatch
+            ? { "if-none-match": options.ifNoneMatch }
+            : {}),
         },
         lookup: (_host, lookupOptions, callback) => {
           // Node 24 can request DNS records with `all: true`. Return the same
@@ -296,6 +323,12 @@ async function safeGetOne(
     );
     request.end();
   });
+}
+
+function assertRequiredProtocol(url: string, options: SafeGetOptions) {
+  if (options.requireHttps && new URL(url).protocol !== "https:") {
+    throw new PublicUrlError("Для этого внешнего ресурса требуется HTTPS.");
+  }
 }
 
 function describeRequestError(error: NodeJS.ErrnoException) {
