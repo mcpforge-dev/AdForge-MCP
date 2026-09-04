@@ -245,7 +245,10 @@ export class AdminService {
           memberships: {
             where: { role: "OWNER" },
             take: 1,
-            select: { user: { select: { name: true, email: true } } },
+            select: {
+              businessTitle: true,
+              user: { select: { name: true, email: true } },
+            },
           },
           subscriptions: {
             where: { status: { in: ["TRIALING", "ACTIVE", "PAST_DUE"] } },
@@ -285,6 +288,7 @@ export class AdminService {
           orderBy: { createdAt: "asc" },
           select: {
             role: true,
+            businessTitle: true,
             createdAt: true,
             user: {
               select: {
@@ -427,6 +431,7 @@ export class AdminService {
           memberships: {
             select: {
               role: true,
+              businessTitle: true,
               workspace: {
                 select: { id: true, name: true, accessStatus: true },
               },

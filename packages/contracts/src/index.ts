@@ -144,3 +144,4 @@ export type ProviderHealthView = {
 };
 
 export * from "./tariffs.js";
+export * from "./member-titles.js";

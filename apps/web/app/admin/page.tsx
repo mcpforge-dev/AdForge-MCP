@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { FormEvent } from "react";
 import {
+  businessMemberTitleLabel,
   FULL_ACCESS_LIFETIME_PLAN_KEY,
   tariffPresentation,
 } from "@holymedia/contracts";
@@ -134,6 +135,13 @@ function humanStatus(status: string) {
 
 function humanRole(role: string) {
   return roleLabels[role] ?? role;
+}
+
+function humanMembershipRole(item: Json) {
+  return (
+    businessMemberTitleLabel(value(item, "businessTitle")) ??
+    humanRole(value(item, "role"))
+  );
 }
 
 function humanProvider(provider: string) {
@@ -781,7 +789,7 @@ function Users({
                       return (
                         <small key={String(workspace.id)}>
                           {value(workspace, "name")} ·{" "}
-                          {humanRole(value(item, "role"))}
+                          {humanMembershipRole(item)}
                         </small>
                       );
                     })
@@ -1310,7 +1318,7 @@ function CompanyDrawer({
             const user = item.user as Json;
             return [
               value(user, "name"),
-              `${value(user, "email")} · ${humanRole(value(item, "role"))} · ${humanStatus(value(user, "status"))}`,
+              `${value(user, "email")} · ${humanMembershipRole(item)} · ${humanStatus(value(user, "status"))}`,
             ];
           })}
         />

@@ -235,6 +235,7 @@ model WorkspaceMembership {
   workspaceId String        @map("workspace_id") @db.Uuid
   userId      String        @map("user_id") @db.Uuid
   role        WorkspaceRole @default(MEMBER)
+  businessTitle String?     @map("business_title") @db.VarChar(64)
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
   workspace   Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)

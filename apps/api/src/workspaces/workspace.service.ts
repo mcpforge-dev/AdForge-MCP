@@ -58,6 +58,7 @@ export type WorkspaceView = {
 export type WorkspaceMember = {
   userId: string;
   role: "OWNER" | "ADMIN" | "MEMBER" | "VIEWER";
+  businessTitle: string | null;
   createdAt: Date;
   user: {
     id: string;
@@ -269,6 +270,7 @@ export class WorkspaceService {
       select: {
         userId: true,
         role: true,
+        businessTitle: true,
         createdAt: true,
         user: {
           select: { id: true, name: true, email: true, emailVerifiedAt: true },

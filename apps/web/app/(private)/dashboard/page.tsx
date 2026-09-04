@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { ChangeEvent, FormEvent } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import {
+  businessMemberTitleLabel,
   FULL_ACCESS_LIFETIME_GRANT,
   tariffPresentation,
 } from "@holymedia/contracts";
@@ -4080,6 +4081,7 @@ type CompanyProfile = {
 type TeamMember = {
   userId: string;
   role: string;
+  businessTitle: string | null;
   user: { name: string; email: string };
 };
 type TeamInvitation = {
@@ -4096,6 +4098,7 @@ function CompanyTeam({
   workspace: Workspace;
   canManage: boolean;
 }) {
+  const language = useLanguage();
   const [company, setCompany] = useState<CompanyProfile | null>(null);
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [invitations, setInvitations] = useState<TeamInvitation[]>([]);
@@ -4257,8 +4260,12 @@ function CompanyTeam({
                   <strong>{member.user.name}</strong>
                   <small>
                     {member.user.email}
-                    {member.role !== "OWNER" &&
-                      ` · ${memberRoleLabel(member.role)}`}
+                    {` · ${
+                      businessMemberTitleLabel(
+                        member.businessTitle,
+                        language,
+                      ) ?? memberRoleLabel(member.role)
+                    }`}
                   </small>
                 </span>
                 {canManage && member.role !== "OWNER" && (
