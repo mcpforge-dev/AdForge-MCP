@@ -56,4 +56,88 @@ describe("service token security primitives", () => {
       },
     });
   });
+
+  it("allows write scope only for one explicitly restricted account", async () => {
+    const update = vi.fn().mockResolvedValue({
+      id: "token-1",
+      tokenPrefix: "hmst_safe",
+      name: "PPC controlled write",
+      scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+      accountIds: ["meta-account-1"],
+      createdAt: new Date("2026-01-01T00:00:00.000Z"),
+      expiresAt: null,
+      revokedAt: null,
+      lastUsedAt: null,
+    });
+    const audit = { record: vi.fn() };
+    const service = new ServiceTokenService(
+      {
+        client: {
+          serviceToken: {
+            findFirst: vi.fn().mockResolvedValue({
+              id: "token-1",
+              accountIds: ["meta-account-1"],
+              serviceIdentity: { id: "identity-1" },
+            }),
+            update,
+          },
+        },
+      } as never,
+      audit as never,
+    );
+
+    await expect(
+      service.updateScopes(
+        "workspace-1",
+        "token-1",
+        { scopes: ["adforge:mcp:write"] },
+        { userId: "admin-1" } as never,
+        {} as never,
+      ),
+    ).resolves.toMatchObject({
+      scopes: ["adforge:mcp:read", "adforge:mcp:write"],
+      accountIds: ["meta-account-1"],
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "token-1" },
+      data: { scopes: ["adforge:mcp:read", "adforge:mcp:write"] },
+    });
+    expect(audit.record).toHaveBeenCalledWith(
+      expect.objectContaining({
+        eventType: "service_token_scopes_updated",
+        workspaceId: "workspace-1",
+        targetId: "token-1",
+      }),
+    );
+  });
+
+  it("refuses write scope for an unrestricted credential", async () => {
+    const update = vi.fn();
+    const service = new ServiceTokenService(
+      {
+        client: {
+          serviceToken: {
+            findFirst: vi.fn().mockResolvedValue({
+              id: "token-1",
+              accountIds: [],
+              serviceIdentity: { id: "identity-1" },
+            }),
+            update,
+          },
+        },
+      } as never,
+      { record: vi.fn() } as never,
+    );
+
+    await expect(
+      service.updateScopes(
+        "workspace-1",
+        "token-1",
+        { scopes: ["adforge:mcp:read", "adforge:mcp:write"] },
+        { userId: "admin-1" } as never,
+        {} as never,
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+    expect(update).not.toHaveBeenCalled();
+  });
 });
