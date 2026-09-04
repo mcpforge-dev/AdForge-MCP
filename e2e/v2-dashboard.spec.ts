@@ -269,7 +269,7 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(connect).toBeEnabled();
   });
 
-  test("shows Google Analytics last and lets an owner select GA4 properties", async ({
+  test("shows Google Search Console and lets an owner select GA4 properties", async ({
     page,
   }) => {
     await installMockApi(page);
@@ -282,6 +282,15 @@ test.describe("restored HolyMedia client UX", () => {
     await expect(
       cards.last().getByRole("heading", { name: "Google Analytics" }),
     ).toBeVisible();
+    const searchConsoleCard = cards.filter({
+      hasText: "Google Search Console",
+    });
+    await expect(searchConsoleCard).toBeVisible();
+    await expect(
+      searchConsoleCard.getByRole("button", {
+        name: /Google Search Console/,
+      }),
+    ).toBeEnabled();
     const analyticsCard = cards.filter({ hasText: "Google Analytics" });
     await analyticsCard
       .getByRole("button", { name: "Посмотреть ресурсы" })

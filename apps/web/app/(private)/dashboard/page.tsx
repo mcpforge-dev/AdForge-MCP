@@ -631,8 +631,10 @@ export default function DashboardPage() {
         );
       })
     : [];
-  const selectorUsesProperties =
-    selectorConnection?.provider === "GOOGLE_ANALYTICS";
+  const selectorUsesProperties = [
+    "GOOGLE_ANALYTICS",
+    "GOOGLE_SEARCH_CONSOLE",
+  ].includes(selectorConnection?.provider ?? "");
   const selectorLabel = selectorUsesProperties
     ? language === "en"
       ? "properties"
@@ -910,8 +912,7 @@ export default function DashboardPage() {
   }
 
   async function startProvider(provider: string) {
-    if (!active || provider === "GOOGLE_SEARCH_CONSOLE" || oauthPendingProvider)
-      return;
+    if (!active || oauthPendingProvider) return;
     setOauthPendingProvider(provider);
     try {
       const response = await fetch(
@@ -1434,6 +1435,7 @@ export default function DashboardPage() {
     "META_ADS",
     "YANDEX_DIRECT",
     "TIKTOK_ADS",
+    "GOOGLE_SEARCH_CONSOLE",
     "GOOGLE_ANALYTICS",
   ];
 
@@ -1667,8 +1669,9 @@ export default function DashboardPage() {
                     ? "Analyze website traffic, sources, pages, events and key actions through AI."
                     : copyText.description;
                 const providerConfigured =
-                  providerId !== "GOOGLE_ANALYTICS" ||
-                  definition?.status.toLowerCase() === "available";
+                  !["GOOGLE_ANALYTICS", "GOOGLE_SEARCH_CONSOLE"].includes(
+                    providerId,
+                  ) || definition?.status.toLowerCase() === "available";
                 const status = connectionStatus(connection?.status ?? "");
                 const selected = new Set(
                   connection ? (drafts[connection.id] ?? []) : [],
