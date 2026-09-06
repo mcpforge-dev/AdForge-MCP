@@ -27,7 +27,8 @@ type SupportRequestResponse = {
   telegramMessageId?: string;
 };
 
-type FeedbackState = "idle" | "sending" | "validation" | "error";
+type FeedbackState =
+  "idle" | "sending" | "validation" | "error" | "pending" | "conflict";
 
 function createIdempotencyKey(): string {
   if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
@@ -56,6 +57,8 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
   const [state, setState] = useState<FeedbackState>("idle");
   const [successOpen, setSuccessOpen] = useState(false);
   const idempotencyKey = useRef<string | undefined>(undefined);
+  const submittedPayload = useRef<string | undefined>(undefined);
+  const submitting = useRef(false);
   const successDialogRef = useRef<HTMLDialogElement>(null);
   const ru = language === "ru";
   const copy = ru
@@ -108,7 +111,7 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (state === "sending") return;
+    if (submitting.current) return;
     const formElement = event.currentTarget;
     const form = new FormData(formElement);
     const message = String(form.get("message") ?? "").trim();
@@ -119,7 +122,19 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
       return;
     }
     setState("sending");
+    submitting.current = true;
     try {
+      const payload = {
+        category: String(form.get("category") ?? "SUGGESTION"),
+        message: message.replace(/\r\n?/g, "\n"),
+        sourceRoute: currentRoute(),
+        locale: language,
+      };
+      const identity = JSON.stringify([workspaceId, payload]);
+      if (submittedPayload.current !== identity) {
+        idempotencyKey.current = undefined;
+        submittedPayload.current = identity;
+      }
       idempotencyKey.current ??= createIdempotencyKey();
       const response = await fetch(
         `${API}/api/v1/workspaces/${workspaceId}/support-requests`,
@@ -131,23 +146,32 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
             "x-csrf-token": await csrf(),
           },
           body: JSON.stringify({
-            category: String(form.get("category") ?? "SUGGESTION"),
-            message,
-            sourceRoute: currentRoute(),
-            locale: language,
+            ...payload,
             idempotencyKey: idempotencyKey.current,
           }),
         },
       );
       const result: unknown = await response.json().catch(() => null);
-      if (!response.ok || !hasConfirmedTelegramDelivery(result))
-        throw new Error("support_request");
+      if (response.status === 202) {
+        setState("pending");
+        return;
+      }
+      if (response.status === 409) {
+        setState("conflict");
+        return;
+      }
+      if (!response.ok || !hasConfirmedTelegramDelivery(result)) {
+        setState("error");
+        return;
+      }
       formElement.reset();
       idempotencyKey.current = undefined;
       setState("idle");
       setSuccessOpen(true);
     } catch {
-      setState("error");
+      setState("pending");
+    } finally {
+      submitting.current = false;
     }
   }
 
@@ -205,7 +229,7 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
           >
             {state === "sending" ? copy.sending : copy.submit}
           </button>
-          {(state === "validation" || state === "error") && (
+          {["validation", "error", "pending", "conflict"].includes(state) && (
             <p
               className="feedback-block__error"
               id="feedback-message-error"
@@ -213,6 +237,25 @@ export function FeedbackBlock({ workspaceId }: { workspaceId: string }) {
             >
               {state === "validation" ? (
                 <strong>{copy.validation}</strong>
+              ) : state === "pending" ? (
+                <>
+                  <strong>
+                    {ru
+                      ? "Подтверждение доставки пока не получено"
+                      : "Delivery confirmation is pending"}
+                  </strong>
+                  <span>
+                    {ru
+                      ? "Повторите запрос без изменения текста, чтобы проверить доставку. Повторная отправка при неизвестном результате заблокирована."
+                      : "Retry without editing to check delivery. Resending an uncertain delivery is blocked."}
+                  </span>
+                </>
+              ) : state === "conflict" ? (
+                <strong>
+                  {ru
+                    ? "Этот запрос связан с другим сообщением. Измените текст для новой заявки."
+                    : "This request belongs to another message. Edit the text to submit a new request."}
+                </strong>
               ) : (
                 <>
                   <strong>{copy.error}</strong>

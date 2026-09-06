@@ -5,6 +5,46 @@ import { installMockApi } from "./mock-api";
 const email = process.env.V2_E2E_EMAIL ?? "phase-b-legacy-user@example.test";
 const password = process.env.V2_E2E_PASSWORD ?? "Phase-B-legacy-password-123!";
 
+test("feedback retains identity on uncertainty and changes it only for edited content", async ({
+  page,
+}) => {
+  await installMockApi(page);
+  await login(page);
+  const keys: string[] = [];
+  await page.route("**/api/v1/workspaces/*/support-requests", async (route) => {
+    keys.push(route.request().postDataJSON().idempotencyKey);
+    await route.fulfill({
+      status: 202,
+      contentType: "application/json",
+      body: JSON.stringify({
+        telegramDelivered: false,
+        deliveryStatus: "pending",
+      }),
+      headers: {
+        "access-control-allow-origin": "http://localhost:3000",
+        "access-control-allow-credentials": "true",
+      },
+    });
+  });
+  const feedback = page.locator(".feedback-block");
+  const message = feedback.locator("textarea");
+  const submit = feedback.locator(".feedback-block__form button[type=submit]");
+  await message.fill("Check uncertain delivery");
+  await submit.click();
+  await expect(feedback.getByRole("alert")).toContainText(
+    "Подтверждение доставки пока не получено",
+  );
+  await submit.click();
+  await expect.poll(() => keys.length).toBe(2);
+  expect(keys[0]).toBe(keys[1]);
+  await expect(submit).toBeEnabled();
+  await message.fill("A different support request");
+  await submit.click();
+  await expect.poll(() => keys.length).toBe(3);
+  expect(keys[2]).not.toBe(keys[1]);
+  await expect(page.getByRole("dialog")).toBeHidden();
+});
+
 async function login(page: import("@playwright/test").Page) {
   await page.goto("/auth");
   await page.locator('input[name="email"]').fill(email);

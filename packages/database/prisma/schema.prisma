@@ -89,6 +89,7 @@ enum TelegramDeliveryStatus {
   SENT
   FAILED
   NOT_CONFIGURED
+  UNCERTAIN
 }
 
 enum TariffRequestStatus {

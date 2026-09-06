@@ -1,10 +1,12 @@
 import {
   BadRequestException,
+  ConflictException,
   ForbiddenException,
   Inject,
   Injectable,
   ServiceUnavailableException,
 } from "@nestjs/common";
+import { createHash } from "node:crypto";
 import { Queue, QueueEvents } from "bullmq";
 import { loadConfig } from "@holymedia/config";
 import { createLogger } from "@holymedia/observability";
@@ -23,6 +25,8 @@ type TelegramDeliveryConfirmation = {
   delivered: true;
   telegramMessageId: string;
 };
+
+export class SupportDeliveryPending extends Error {}
 
 @Injectable()
 export class SupportRequestService {
@@ -61,17 +65,25 @@ export class SupportRequestService {
           createdAt: true,
           telegramDeliveryStatus: true,
           telegramMessageId: true,
+          category: true,
+          message: true,
+          sourceRoute: true,
+          locale: true,
         },
       });
       if (existing) {
-        const delivery =
-          existing.telegramDeliveryStatus === "SENT" &&
-          existing.telegramMessageId
-            ? {
-                delivered: true as const,
-                telegramMessageId: existing.telegramMessageId,
-              }
-            : await this.enqueueAndConfirm(existing.id, workspaceId);
+        assertSamePayload(existing, {
+          category: input.category,
+          message,
+          sourceRoute,
+          locale: input.locale ?? null,
+        });
+        const delivery = existing.telegramMessageId
+          ? {
+              delivered: true as const,
+              telegramMessageId: existing.telegramMessageId,
+            }
+          : await this.enqueueAndConfirm(existing.id, workspaceId);
         return {
           request: {
             ...existing,
@@ -103,33 +115,63 @@ export class SupportRequestService {
     const deliveryStatus: DeliveryStatus = this.telegramConfigured()
       ? "PENDING"
       : "NOT_CONFIGURED";
-    const created = await this.database.client.supportRequest.create({
-      data: {
-        workspaceId,
-        userId,
-        category: input.category,
-        message,
-        sourceRoute,
-        locale: input.locale ?? null,
-        idempotencyKey: input.idempotencyKey ?? null,
-        telegramDeliveryStatus: deliveryStatus,
-        planKey: workspace.subscriptions[0]?.plan.key ?? null,
-        companyAccessStatus: workspace.accessStatus ?? null,
-      },
-      select: { id: true, status: true, createdAt: true },
-    });
-    await this.audit.record({
-      eventType: "support_request_created",
-      actorUserId: userId,
-      workspaceId,
-      targetType: "support_request",
-      targetId: created.id,
-      ...(request.requestId ? { requestId: request.requestId } : {}),
-      metadata: {
-        category: input.category,
-        sourceRoute,
-      },
-    });
+    let newlyCreated = true;
+    const created = await this.database.client.supportRequest
+      .create({
+        data: {
+          workspaceId,
+          userId,
+          category: input.category,
+          message,
+          sourceRoute,
+          locale: input.locale ?? null,
+          idempotencyKey: input.idempotencyKey ?? null,
+          telegramDeliveryStatus: deliveryStatus,
+          planKey: workspace.subscriptions[0]?.plan.key ?? null,
+          companyAccessStatus: workspace.accessStatus ?? null,
+        },
+        select: { id: true, status: true, createdAt: true },
+      })
+      .catch(async (error: unknown) => {
+        // Handle only the key constraint race, never unrelated Prisma failures.
+        if (!input.idempotencyKey || !isIdempotencyConflict(error)) throw error;
+        const winner = await this.database.client.supportRequest.findFirst({
+          where: { workspaceId, userId, idempotencyKey: input.idempotencyKey },
+        });
+        if (!winner) throw error;
+        assertSamePayload(winner, {
+          category: input.category,
+          message,
+          sourceRoute,
+          locale: input.locale ?? null,
+        });
+        newlyCreated = false;
+        return {
+          id: winner.id,
+          status: winner.status,
+          createdAt: winner.createdAt,
+        };
+      });
+    if (newlyCreated)
+      await this.audit
+        .record({
+          eventType: "support_request_created",
+          actorUserId: userId,
+          workspaceId,
+          targetType: "support_request",
+          targetId: created.id,
+          ...(request.requestId ? { requestId: request.requestId } : {}),
+          metadata: {
+            category: input.category,
+            sourceRoute,
+          },
+        })
+        .catch(() =>
+          this.logger.error(
+            { supportRequestId: created.id },
+            "support creation audit insert failed",
+          ),
+        );
 
     const delivery =
       deliveryStatus === "PENDING"
@@ -145,7 +187,7 @@ export class SupportRequestService {
         telegramDeliveryStatus: "SENT",
         telegramMessageId: delivery.telegramMessageId,
       },
-      created: true,
+      created: newlyCreated,
       telegramDelivered: true,
       telegramMessageId: delivery.telegramMessageId,
     };
@@ -166,6 +208,18 @@ export class SupportRequestService {
     id: string,
     workspaceId: string,
   ): Promise<TelegramDeliveryConfirmation> {
+    const readConfirmation = async () => {
+      const row = await this.database.client.supportRequest.findFirst({
+        where: { id, workspaceId },
+        select: { telegramMessageId: true, telegramDeliveryStatus: true },
+      });
+      return row;
+    };
+    const before = await readConfirmation();
+    if (before?.telegramMessageId)
+      return { delivered: true, telegramMessageId: before.telegramMessageId };
+    if (before?.telegramDeliveryStatus === "UNCERTAIN")
+      throw new SupportDeliveryPending();
     const queue = new Queue(SUPPORT_TELEGRAM_QUEUE, {
       connection: redisConnection(this.config.redisUrl),
     });
@@ -191,13 +245,14 @@ export class SupportRequestService {
         throw new Error("Telegram delivery unconfirmed.");
       return result;
     } catch (error) {
-      await this.database.client.supportRequest.update({
-        where: { id },
-        data: {
-          telegramDeliveryStatus: "FAILED",
-          telegramLastErrorCode: "DELIVERY_UNCONFIRMED",
-        },
-      });
+      // A wait failure is not a delivery failure. Only the sender owns state
+      // transitions; re-read after timeout to observe a concurrent success.
+      const current = await readConfirmation();
+      if (current?.telegramMessageId)
+        return {
+          delivered: true,
+          telegramMessageId: current.telegramMessageId,
+        };
       this.logger.error(
         {
           supportRequestId: id,
@@ -206,7 +261,9 @@ export class SupportRequestService {
         },
         "support Telegram delivery was not confirmed",
       );
-      throw new ServiceUnavailableException("Support notification failed.");
+      if (current?.telegramDeliveryStatus === "FAILED")
+        throw new ServiceUnavailableException("Support notification failed.");
+      throw new SupportDeliveryPending();
     } finally {
       await events.close().catch(() => undefined);
       await queue.close().catch(() => undefined);
@@ -218,6 +275,56 @@ export class SupportRequestService {
       this.config.telegramSupportBotToken && this.config.telegramSupportChatId,
     );
   }
+}
+
+type SupportPayload = {
+  category: string;
+  message: string;
+  sourceRoute: string | null;
+  locale: string | null;
+};
+
+function fingerprint(payload: SupportPayload): string {
+  return createHash("sha256")
+    .update(
+      JSON.stringify([
+        payload.category,
+        normalizeMessage(payload.message),
+        payload.sourceRoute,
+        payload.locale,
+      ]),
+    )
+    .digest("hex");
+}
+
+function assertSamePayload(
+  stored: SupportPayload,
+  requested: SupportPayload,
+): void {
+  // workspace/user are bound by the lookup and database unique constraint.
+  // Hash persisted fields instead of inventing fingerprints for old rows.
+  if (fingerprint(stored) !== fingerprint(requested))
+    throw new ConflictException(
+      "This request key belongs to a different message. Submit the edited message as a new request.",
+    );
+}
+
+function isIdempotencyConflict(error: unknown): boolean {
+  if (
+    !error ||
+    typeof error !== "object" ||
+    !("code" in error) ||
+    error.code !== "P2002"
+  )
+    return false;
+  const meta = "meta" in error ? error.meta : null;
+  if (!meta || typeof meta !== "object" || !("target" in meta)) return false;
+  const target = JSON.stringify(meta.target);
+  return (
+    /workspace_?id/i.test(target) &&
+    /user_?id/i.test(target) &&
+    /idempotency_?key/i.test(target)
+  );
 }
 
 function isDelivered(value: unknown): value is TelegramDeliveryConfirmation {

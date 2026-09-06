@@ -96,6 +96,13 @@ describe("SupportRequestService", () => {
         supportRequest: {
           findFirst: async () => ({
             id: "support-existing",
+            category: input().category,
+            message: input().message,
+            sourceRoute: new URL(
+              input().sourceRoute,
+              loadConfig().publicBaseUrl,
+            ).toString(),
+            locale: "ru",
             status: "NEW",
             createdAt: new Date(),
             telegramDeliveryStatus: "SENT",

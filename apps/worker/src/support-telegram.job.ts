@@ -38,24 +38,49 @@ export async function processSupportTelegram(
     },
   });
   if (!row) return { skipped: "missing" };
-  if (row.telegramDeliveryStatus === "SENT") return { skipped: "sent" };
+  // A stored message ID is delivery evidence, including historical rows whose
+  // status was incorrectly downgraded by an ancillary failure.
+  if (row.telegramMessageId)
+    return { delivered: true, telegramMessageId: row.telegramMessageId };
+  if (["SENT", "SENDING", "UNCERTAIN"].includes(row.telegramDeliveryStatus))
+    return { delivered: false, status: "uncertain" };
   if (!config.telegramSupportBotToken || !config.telegramSupportChatId) {
-    await database.client.supportRequest.update({
-      where: { id: row.id },
+    await database.client.supportRequest.updateMany({
+      where: {
+        id: row.id,
+        telegramMessageId: null,
+        telegramDeliveryStatus: { in: ["PENDING", "FAILED", "NOT_CONFIGURED"] },
+      },
       data: { telegramDeliveryStatus: "NOT_CONFIGURED" },
     });
     return { skipped: "not_configured" };
   }
 
-  await database.client.supportRequest.update({
-    where: { id: row.id },
+  // Per-request atomic claim. Never reclaim SENDING automatically: a crashed
+  // process may have sent the HTTP request before it could persist the outcome.
+  const claim = await database.client.supportRequest.updateMany({
+    where: {
+      id: row.id,
+      workspaceId: row.workspaceId,
+      telegramMessageId: null,
+      telegramDeliveryStatus: { in: ["PENDING", "FAILED", "NOT_CONFIGURED"] },
+    },
     data: {
       telegramDeliveryStatus: "SENDING",
       telegramDeliveryAttempts: { increment: 1 },
       telegramLastErrorCode: null,
     },
   });
+  if (claim.count !== 1) {
+    const current = await database.client.supportRequest.findFirst({
+      where: { id: row.id, workspaceId: row.workspaceId },
+    });
+    return current?.telegramMessageId
+      ? { delivered: true, telegramMessageId: current.telegramMessageId }
+      : { delivered: false, status: "uncertain" };
+  }
 
+  let confirmedMessageId: string | undefined;
   try {
     const response = await fetch(
       `https://api.telegram.org/bot${config.telegramSupportBotToken}/sendMessage`,
@@ -85,13 +110,19 @@ export async function processSupportTelegram(
       ok?: boolean;
       result?: { message_id?: number };
     } | null;
-    if (!response.ok || !body?.ok)
-      throw new TelegramDeliveryError(response.status);
-    const messageId = body.result?.message_id;
-    if (!isTelegramMessageId(messageId))
-      throw new TelegramDeliveryError(response.status, "MISSING_MESSAGE_ID");
-    await database.client.supportRequest.update({
-      where: { id: row.id },
+    // Only a parsed explicit refusal is known not to have delivered. Invalid
+    // JSON, HTTP proxy errors and timeouts have an unknown external outcome.
+    if (body?.ok === false) throw new TelegramDeliveryError(response.status);
+    const messageId = body?.result?.message_id;
+    if (!body?.ok || !isTelegramMessageId(messageId))
+      throw new Error("Unconfirmed Telegram response");
+    confirmedMessageId = messageId.toString();
+    await database.client.supportRequest.updateMany({
+      where: {
+        id: row.id,
+        telegramDeliveryStatus: "SENDING",
+        telegramMessageId: null,
+      },
       data: {
         telegramDeliveryStatus: "SENT",
         telegramMessageId: messageId.toString(),
@@ -99,33 +130,71 @@ export async function processSupportTelegram(
         telegramLastErrorCode: null,
       },
     });
-    await database.client.auditEvent.create({
-      data: {
-        actorType: "SERVICE",
-        eventType: "support_telegram_delivered",
-        workspaceId: row.workspaceId,
-        targetType: "support_request",
-        targetId: row.id,
-      },
-    });
+    await database.client.auditEvent
+      .create({
+        data: {
+          actorType: "SERVICE",
+          eventType: "support_telegram_delivered",
+          workspaceId: row.workspaceId,
+          targetType: "support_request",
+          targetId: row.id,
+        },
+      })
+      .catch(() =>
+        logger.error(
+          { supportRequestId: row.id },
+          "support delivery audit insert failed",
+        ),
+      );
     return { delivered: true, telegramMessageId: messageId.toString() };
   } catch (error) {
+    if (confirmedMessageId) {
+      // Do not retry the external send when persistence is temporarily down.
+      // BullMQ retains this confirmation; SENDING also prevents re-delivery.
+      logger.error(
+        { supportRequestId: row.id },
+        "support confirmed delivery persistence failed",
+      );
+      return { delivered: true, telegramMessageId: confirmedMessageId };
+    }
     const code = telegramErrorCode(error);
-    await database.client.supportRequest.update({
-      where: { id: row.id },
-      data: { telegramDeliveryStatus: "FAILED", telegramLastErrorCode: code },
-    });
-    await database.client.auditEvent.create({
-      data: {
-        actorType: "SERVICE",
-        eventType: "support_telegram_delivery_failed",
-        success: false,
-        workspaceId: row.workspaceId,
-        targetType: "support_request",
-        targetId: row.id,
-        metadata: { code },
-      },
-    });
+    const knownFailure = error instanceof TelegramDeliveryError;
+    await database.client.supportRequest
+      .updateMany({
+        where: {
+          id: row.id,
+          telegramDeliveryStatus: "SENDING",
+          telegramMessageId: null,
+        },
+        data: {
+          telegramDeliveryStatus: knownFailure ? "FAILED" : "UNCERTAIN",
+          telegramLastErrorCode: code,
+        },
+      })
+      .catch(() =>
+        logger.error(
+          { supportRequestId: row.id },
+          "support delivery outcome persistence failed",
+        ),
+      );
+    await database.client.auditEvent
+      .create({
+        data: {
+          actorType: "SERVICE",
+          eventType: "support_telegram_delivery_failed",
+          success: false,
+          workspaceId: row.workspaceId,
+          targetType: "support_request",
+          targetId: row.id,
+          metadata: { code },
+        },
+      })
+      .catch(() =>
+        logger.error(
+          { supportRequestId: row.id },
+          "support delivery failure audit insert failed",
+        ),
+      );
     logger.warn(
       {
         supportRequestId: row.id,
@@ -134,7 +203,8 @@ export async function processSupportTelegram(
       },
       "support Telegram delivery failed",
     );
-    throw error;
+    if (knownFailure) throw error;
+    return { delivered: false, status: "uncertain" };
   }
 }
 
